@@ -1080,10 +1080,16 @@
     <div class="landing-sub">Weekly execution for Roberto's Dubai: events, standards, finance, and the decisions that keep Scala moving with intent.</div>
     <div class="landing-divider"></div>
     <div class="module-grid">
+      <div class="module-card" onclick="enterApp('leaders')">
+        <div class="module-tag">Live</div>
+        <div class="module-name">Leaders</div>
+        <div class="module-desc">One action list by person across every event.</div>
+        <div class="module-badge">Open</div>
+      </div>
       <div class="module-card" onclick="enterApp('events')">
         <div class="module-tag">Live</div>
         <div class="module-name">Events</div>
-        <div class="module-desc">The Listening Bar and Jazz Tuesdays.</div>
+        <div class="module-desc">Listening Bar, Jazz Tuesdays, Comedy Night, and Cigar Night.</div>
         <div class="module-badge">Open</div>
       </div>
       <div class="module-card coming-soon">
@@ -1348,7 +1354,11 @@ function enterApp(module){
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   try{ localStorage.setItem('rl_inapp','1'); }catch(e){}
-  switchTab(state.currentTab || 'dashboard');
+  if(module==='leaders') switchTab('dashboard');
+  else if(module==='events'){
+    const firstEvent = state.events.slice().sort(eventSort)[0];
+    switchTab(firstEvent ? eventTab(firstEvent) : 'dashboard');
+  } else switchTab(state.currentTab || 'dashboard');
 }
 function showLanding(){
   document.getElementById('landing').style.display = 'grid';
