@@ -801,12 +801,13 @@
 
   /* add task bar */
   .add-task-bar {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(120px, 150px) minmax(130px, 150px) minmax(130px, 150px) auto;
     gap: 8px;
-    padding: 12px 20px;
+    padding: 14px 20px;
     background: var(--surface2);
     border-top: 1px solid var(--border);
-    flex-wrap: wrap;
+    align-items: center;
   }
   .add-task-bar input, .add-task-bar select {
     background: var(--surface);
@@ -816,13 +817,14 @@
     font-size: 12px;
     padding: 7px 12px;
     outline: none;
-    flex: 1;
+    width: 100%;
     min-width: 120px;
   }
   .add-task-bar input:focus, .add-task-bar select:focus {
     border-color: var(--vino-dim);
   }
   .add-task-bar select option { background: var(--surface); }
+  .add-task-bar .btn { min-height: 32px; white-space: nowrap; }
 
   /* finance track */
   .finance-row {
@@ -1003,6 +1005,7 @@
     .countdown-days { font-size:24px; }
     .countdown-row { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
+    .add-task-bar { grid-template-columns: 1fr; }
     .task-row { grid-template-columns: 1fr; gap: 6px; }
     .task-row-header { display: none; }
     .finance-row { grid-template-columns: 1fr 1fr; }
@@ -1562,21 +1565,27 @@ document.addEventListener('click', ()=>{
 });
 
 function renderAddTaskBar(track, weekId, eventId, forcedStage=null){
-  const key = forcedStage || track;
+  const key = track;
+  const label = forcedStage ? `Add to ${STAGES[forcedStage].label}` : 'Type a task and press Enter';
   return `
   <div class="add-task-bar">
-    <input type="text" placeholder="Type a task and press Enter" id="new-task-${key}" onkeydown="if(event.key==='Enter') addTask('${key}','${weekId}','${eventId}')" style="flex:2;min-width:180px">
-    <select id="new-assign-${key}" style="flex:1;max-width:150px">
+    <input type="text" placeholder="${label}" id="new-task-${key}" onkeydown="if(event.key==='Enter') addTask('${key}','${weekId}','${eventId}')">
+    <select id="new-assign-${key}">
       <option value="">Who?</option>
       ${TEAM.map(m=>`<option value="${m}">${m}</option>`).join('')}
     </select>
-    <select id="new-status-${key}" style="flex:1;max-width:140px">
+    <select id="new-priority-${key}">
+      <option value="important" selected>Important</option>
+      <option value="non_negotiable">Non-negotiable</option>
+      <option value="enhancement">Enhancement</option>
+    </select>
+    <select id="new-status-${key}">
       <option value="not_started" selected>Not Started</option>
       <option value="in_progress">In Progress</option>
       <option value="done">Done</option>
       <option value="blocked">Blocked</option>
     </select>
-    <button class="btn btn-gold btn-sm" onclick="addTask('${key}','${weekId}','${eventId}')">Add</button>
+    <button class="btn btn-gold btn-sm" onclick="addTask('${key}','${weekId}','${eventId}')">Add Task</button>
   </div>`;
 }
 
@@ -1783,8 +1792,7 @@ async function addTask(track, weekId, eventId){
   const title = titleEl?.value?.trim();
   if(!title){ toast('Please enter a task name',true); return; }
   const stage = stageEl?.value || (track.startsWith('stage_') ? track.replace('stage_','') : inferStage({track, title}));
-  const trackByStage = { plan:'guest_revenue', promote:'marketing', prepare:'technical', execute:'service', review:'documents' };
-  const dbTrack = track.startsWith('stage_') ? (trackByStage[stage] || 'champion') : track;
+  const dbTrack = track.startsWith('stage_') ? 'champion' : track;
 
   const wk = Object.values(state.weeks).flat().find(w=>w.id===weekId);
   const due = dateEl?.value || (wk ? isoDateFromOffset(wk.week_date, DUE_BY_TRACK[dbTrack] ?? -1) : null);
