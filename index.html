@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -43,7 +43,7 @@
     min-height: 100vh;
   }
 
-  /* â”€â”€ LANDING â”€â”€ */
+  /* -- LANDING -- */
   #landing {
     min-height: 100vh;
     display: grid;
@@ -140,7 +140,7 @@
     overflow: hidden;
   }
   .module-card::after {
-    content:'â†’';
+    content:'->';
     position:absolute;
     right:0;
     top:22px;
@@ -185,10 +185,10 @@
     padding: 3px 8px;
   }
 
-  /* â”€â”€ APP SHELL â”€â”€ */
+  /* -- APP SHELL -- */
   #app { display:none; min-height:100vh; }
 
-  /* â”€â”€ TOP NAR â”€â”€ */
+  /* -- TOP NAR -- */
   .topbar {
     background: var(--vino);
     border-bottom: 1px solid var(--vino-dark);
@@ -242,10 +242,10 @@
   .nav-tab:hover { color: #FFFFFF; }
   .nav-tab.active { color: var(--gold-light); border-bottom-color: var(--gold-light); }
 
-  /* â”€â”€ MAIN CONTENT â”€â”€ */
+  /* -- MAIN CONTENT -- */
   .main { padding: 28px 24px; max-width: 1200px; margin: 0 auto; }
 
-  /* â”€â”€ DASHBOARD â”€â”€ */
+  /* -- DASHBOARD -- */
   .dashboard-header {
     display: flex;
     justify-content: space-between;
@@ -516,7 +516,7 @@
   .task-card.s-done { border-left-color: var(--green); }
   .task-card.s-done .task-card-title { color: var(--text-light); }
   .task-card.s-blocked, .task-card.blocked { border-left-color: var(--red); background: rgba(192,57,43,0.03); }
-  .task-card.overdue .task-card-title::after { content:' Â· OVERDUE'; color:var(--red); font-size:9px; letter-spacing:0.12em; font-weight:600; vertical-align:1px; }
+  .task-card.overdue .task-card-title::after { content:' | OVERDUE'; color:var(--red); font-size:9px; letter-spacing:0.12em; font-weight:600; vertical-align:1px; }
   .task-check { width:30px; height:30px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface); cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; color:transparent; transition:all .15s; padding:0; }
   .task-check:hover { border-color:var(--green); color:rgba(45,122,79,0.45); }
   .task-check.done { background:var(--green); border-color:var(--green); color:#fff; }
@@ -558,7 +558,7 @@
     background: var(--surface2);
   }
 
-  /* â”€â”€ EVENT MODULE â”€â”€ */
+  /* -- EVENT MODULE -- */
   .event-header {
     background: var(--vino);
     border: 1px solid var(--vino-dark);
@@ -1105,7 +1105,7 @@
   <div class="topbar">
     <div class="topbar-left">
       <div class="topbar-logo" onclick="showLanding()">Roberto's</div>
-      <div class="topbar-sep">Â·</div>
+      <div class="topbar-sep">|</div>
       <div class="topbar-section" id="topbar-section">Events</div>
     </div>
     <div class="nav-tabs" id="nav-tabs"></div>
@@ -1118,7 +1118,7 @@
   <div class="modal" id="modal">
     <div class="modal-header">
       <div class="modal-title" id="modal-title">Edit Task</div>
-      <button class="modal-close" onclick="closeModal()">Ã—</button>
+      <button class="modal-close" onclick="closeModal()">x</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
     <div class="modal-footer" id="modal-footer"></div>
@@ -1158,13 +1158,13 @@ const DUE_BY_TRACK = {
   documents: -3
 };
 const TRACKS = {
-  marketing:     { icon:'ðŸ“£', label:'Marketing' },
-  champion:      { icon:'ðŸ†', label:'Champion' },
-  technical:     { icon:'ðŸŽ›', label:'Technical' },
-  guest_revenue: { icon:'ðŸŽ¯', label:'Guest & Revenue' },
-  service:       { icon:'ðŸ½', label:'Service' },
-  finance:       { icon:'ðŸ’°', label:'Finance' },
-  documents:     { icon:'ðŸ“', label:'Documents' }
+  marketing:     { icon:'', label:'Marketing' },
+  champion:      { icon:'', label:'Champion' },
+  technical:     { icon:'', label:'Technical' },
+  guest_revenue: { icon:'', label:'Guest & Revenue' },
+  service:       { icon:'', label:'Service' },
+  finance:       { icon:'', label:'Finance' },
+  documents:     { icon:'', label:'Documents' }
 };
 const TRACK_KEYS = Object.keys(TRACKS);
 
@@ -1180,10 +1180,10 @@ let state = {
   selectedStage: {}
 };
 
-// â”€â”€ UTILS â”€â”€
+// -- UTILS --
 function initials(name){ return name ? name.slice(0,2).toUpperCase() : '?'; }
 function fmt(n){ return 'AED '+(n||0).toLocaleString(); }
-function fmtDate(d){ if(!d) return 'â€”'; return parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+function fmtDate(d){ if(!d) return '-'; return parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
 function localISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function todayISO(){ return localISO(new Date()); }
 function parseLocalDate(dateStr){ const p=String(dateStr).slice(0,10).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -1343,7 +1343,7 @@ function currentStageForTasks(tasks){
   return 'review';
 }
 
-// â”€â”€ NAVIGATION â”€â”€
+// -- NAVIGATION --
 function enterApp(module){
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -1362,7 +1362,7 @@ function switchTab(tab){
   renderMain();
 }
 
-// â”€â”€ DATA LOADING â”€â”€
+// -- DATA LOADING --
 async function loadAll(){
   const { data: events } = await sb.from('events').select('*').order('created_at');
   state.events = (events || []).slice().sort(eventSort);
@@ -1392,7 +1392,7 @@ async function loadAll(){
   renderMain();
 }
 
-// â”€â”€ RENDER MAIN â”€â”€
+// -- RENDER MAIN --
 function renderMain(){
   const el = document.getElementById('main-content');
   if(state.events.length===0){ el.innerHTML='<div class="loading">Loading...</div>'; return; }
@@ -1401,7 +1401,7 @@ function renderMain(){
   attachEventListeners();
 }
 
-// â”€â”€ DASHBOARD â”€â”€
+// -- DASHBOARD --
 function renderDashboard(){
   let allTasks = [];
   const eventCards = [];
@@ -1562,7 +1562,7 @@ function renderLeaderTaskRow(t){
     <div class="task-actions">
       ${t.status==='not_started' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','in_progress')">Start</button>` : ''}
       ${t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','done')">Done</button>` : ''}
-      <button class="quick-action more-btn" onclick="toggleTaskMenu(event,'leader-${t.id}')" title="More actions">⋯</button>
+      <button class="quick-action more-btn" onclick="toggleTaskMenu(event,'leader-${t.id}')" title="More actions">...</button>
       <div class="task-menu" id="task-menu-leader-${t.id}">
         ${t.status!=='blocked' && t.status!=='done' ? `<button onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
         ${t.status==='blocked' ? `<button onclick="updateTaskStatus('${t.id}','in_progress')">Unblock</button>` : ''}
@@ -1579,7 +1579,7 @@ function renderEventPage(ev){
   const weeks = state.weeks[ev.id]||[];
   const wid = state.currentWeek[ev.id];
   const week = weeks.find(w=>w.id===wid);
-  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date}${w.status==='completed'?' âœ“':''}</option>`).join('');
+  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date}${w.status==='completed'?' &check;':''}</option>`).join('');
   const tasks = wid ? (state.tasks[wid]||[]) : [];
   const fin = wid ? (state.finance[wid]||[]) : [];
   const targetRev = (Number(ev.avg_spend_target)||0) * (Number(ev.capacity)||0);
@@ -1606,8 +1606,8 @@ function renderEventPage(ev){
     const stats = stageStats(tasks, stage);
     const active = selectedStage===stage ? 'active' : '';
     return `<button class="journey-step ${active} ${stats.stateName}" onclick="setStage('${ev.id}','${stage}')">
-      <span class="journey-step-label">${STAGES[stage].label}${stats.total && stats.stateName==='complete' ? ' âœ“' : ''}</span>
-      <span class="journey-step-meta">${stats.total ? `${stats.done}/${stats.total} done${stats.blocked ? ` Â· ${stats.blocked} blocked` : ''}` : 'No tasks'}</span>
+      <span class="journey-step-label">${STAGES[stage].label}${stats.total && stats.stateName==='complete' ? ' &check;' : ''}</span>
+      <span class="journey-step-meta">${stats.total ? `${stats.done}/${stats.total} done${stats.blocked ? ` | ${stats.blocked} blocked` : ''}` : 'No tasks'}</span>
     </button>`;
   }).join('');
 
@@ -1657,7 +1657,7 @@ function renderEventPage(ev){
     <button class="btn btn-gold" onclick="newWeek('${ev.id}')">+ New Week</button>
     ${wid ? `<button class="btn btn-outline btn-sm" onclick="openWeekActuals('${wid}')">Enter Results</button>` : ''}
     ${wid ? `<button class="btn btn-outline btn-sm" onclick="resetEventTasks('${ev.id}')">Reset Event</button>` : ''}
-    <button class="btn btn-outline btn-sm" onclick="openEditEvent('${ev.id}')" title="Targets & budget â€” leadership only">âš™ Targets</button>
+    <button class="btn btn-outline btn-sm" onclick="openEditEvent('${ev.id}')" title="Targets & budget - leadership only">Targets</button>
   </div>
 
   ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
@@ -1688,14 +1688,14 @@ function renderTaskRow(t){
   if(t.status==='in_progress' || t.status==='blocked') meta.push(`<span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span>`);
   return `
   <div class="task-card s-${t.status} ${over?'overdue':''}" data-task-id="${t.id}">
-    <button class="task-check ${done?'done':''}" onclick="toggleDone('${t.id}')" title="${done?'Mark as not done':'Mark as done'}">âœ“</button>
+    <button class="task-check ${done?'done':''}" onclick="toggleDone('${t.id}')" title="${done?'Mark as not done':'Mark as done'}">&check;</button>
     <div>
       <div class="task-card-title editable" onclick="openEditTask('${t.id}')">${t.title}</div>
       <div class="task-card-meta">${meta.join('')}</div>
       ${t.notes ? `<div class="task-notes-preview" style="margin-top:6px">${t.notes}</div>` : ''}
     </div>
     <div class="task-actions">
-      <button class="quick-action more-btn" onclick="toggleTaskMenu(event,'${t.id}')" title="More actions">â‹¯</button>
+      <button class="quick-action more-btn" onclick="toggleTaskMenu(event,'${t.id}')" title="More actions">...</button>
       <div class="task-menu" id="task-menu-${t.id}">
         ${t.status==='not_started' ? `<button onclick="updateTaskStatus('${t.id}','in_progress')">Start</button>` : ''}
         ${t.status!=='blocked' && t.status!=='done' ? `<button onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
@@ -1838,10 +1838,10 @@ function renderFinanceTrack(items, weekId, eventId){
         <div class="amount-cell">${fmt(f.amount)}</div>
         <div><span class="contract-pill ${f.contract_status}">${f.contract_status.replace('_',' ')}</span></div>
         <div><span class="status-pill ${f.payment_status}">${f.payment_status}</span></div>
-        <div style="font-size:11px;color:var(--text-light)">${f.approved_by||'â€”'}</div>
+        <div style="font-size:11px;color:var(--text-light)">${f.approved_by||'-'}</div>
         <div class="task-actions">
-          <button class="icon-btn" onclick="openEditFinance('${f.id}')" title="Edit">âœ</button>
-          <button class="icon-btn" onclick="deleteFinance('${f.id}')" style="color:rgba(192,57,43,0.5)" title="Delete">âœ•</button>
+          <button class="icon-btn" onclick="openEditFinance('${f.id}')" title="Edit">Edit</button>
+          <button class="icon-btn" onclick="deleteFinance('${f.id}')" style="color:rgba(192,57,43,0.5)" title="Delete">Delete</button>
         </div>
       </div>`).join('');
 
@@ -1857,7 +1857,7 @@ function renderFinanceTrack(items, weekId, eventId){
   ${weekId ? `<div style="padding:0 20px 12px"><button class="btn btn-outline btn-sm" onclick="openAddFinance('${weekId}','${eventId}')">+ Add Expense</button></div>` : ''}`;
 }
 
-// â”€â”€ TOGGLE TRACK â”€â”€
+// -- TOGGLE TRACK --
 function openWeekReport(eventId){
   const ev = state.events.find(e=>e.id===eventId);
   if(!ev) return;
@@ -1908,10 +1908,10 @@ function toggleTrack(header){
   const body = header.nextElementSibling;
   const arrow = header.querySelector('span:last-child');
   body.classList.toggle('collapsed');
-  arrow.textContent = body.classList.contains('collapsed') ? 'â–¸' : 'â–¾';
+  arrow.textContent = body.classList.contains('collapsed') ? '>' : 'v';
 }
 
-// â”€â”€ WEEK ACTIONS â”€â”€
+// -- WEEK ACTIONS --
 function selectWeek(eventId, weekId){
   state.currentWeek[eventId] = weekId;
   renderMain();
@@ -1946,7 +1946,7 @@ async function createNewWeek(eventId){
   const { data: tasks } = await sb.from('tasks').select('*').eq('week_id',data.id).order('sort_order');
   state.tasks[data.id] = tasks||[];
   state.finance[data.id] = [];
-  toast('New week created â€” '+label);
+  toast('New week created - '+label);
   renderMain();
 }
 
@@ -2011,11 +2011,11 @@ async function duplicateWeek(eventId, sourceWeekId){
   state.tasks[newWeek.id] = tasks||[];
   const { data: fin } = await sb.from('finance').select('*').eq('week_id',newWeek.id);
   state.finance[newWeek.id] = fin||[];
-  toast('Next week created â€” '+label);
+  toast('Next week created - '+label);
   renderMain();
 }
 
-// â”€â”€ SEED DEFAULT TASKS â”€â”€
+// -- SEED DEFAULT TASKS --
 async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
   const isJazz = eventName.includes('Jazz');
   const firstDate = isJazz ? '16 June 2026' : '15 June 2026';
@@ -2062,7 +2062,7 @@ async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
   await sb.from('tasks').insert(rows);
 }
 
-// â”€â”€ TASK ACTIONS â”€â”€
+// -- TASK ACTIONS --
 async function addTask(track, weekId, eventId){
   const titleEl = document.getElementById('new-task-'+track);
   const assignEl = document.getElementById('new-assign-'+track);
@@ -2120,7 +2120,7 @@ function openLeaderAddTask(){
       <div class="form-group">
         <label class="form-label">Assigned To</label>
         <select class="form-select" id="leader-task-assignee">
-          <option value="">—</option>
+          <option value="">-</option>
           ${TEAM.map(m=>`<option value="${m}" ${activeLeader===m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
@@ -2275,14 +2275,14 @@ function openEditTask(taskId){
       <div class="form-group">
         <label class="form-label">Assigned To</label>
         <select class="form-select" id="edit-assign">
-          <option value="">â€”</option>
+          <option value="">-</option>
           ${TEAM.map(m=>`<option value="${m}" ${task.assigned_to===m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Champion</label>
         <select class="form-select" id="edit-champion">
-          <option value="">â€”</option>
+          <option value="">-</option>
           ${CHAMPIONS.map(m=>`<option value="${m}" ${task.champion===m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
@@ -2353,7 +2353,7 @@ async function saveEditTask(taskId){
   closeModal(); toast('Task saved'); renderMain();
 }
 
-// â”€â”€ FINANCE ACTIONS â”€â”€
+// -- FINANCE ACTIONS --
 function openAddFinance(weekId, eventId){
   document.getElementById('modal-title').textContent = 'Add Expense';
   document.getElementById('modal-body').innerHTML = `
@@ -2397,7 +2397,7 @@ function openAddFinance(weekId, eventId){
       <div class="form-group">
         <label class="form-label">Approved By</label>
         <select class="form-select" id="fin-approved">
-          <option value="">â€”</option>
+          <option value="">-</option>
           ${CHAMPIONS.map(m=>`<option value="${m}">${m}</option>`).join('')}
         </select>
       </div>
@@ -2489,7 +2489,7 @@ function openEditFinance(finId){
       <div class="form-group">
         <label class="form-label">Approved By</label>
         <select class="form-select" id="fin-approved">
-          <option value="">â€”</option>
+          <option value="">-</option>
           ${CHAMPIONS.map(m=>`<option value="${m}" ${fin.approved_by===m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
@@ -2542,7 +2542,7 @@ async function deleteFinance(finId){
   toast('Deleted'); renderMain();
 }
 
-// â”€â”€ WEEK ACTUALS MODAL â”€â”€
+// -- WEEK ACTUALS MODAL --
 
 // EVENT TARGETS MODAL
 function openEditEvent(eventId){
@@ -2610,7 +2610,7 @@ function openWeekActuals(weekId){
   }
   if(!week) return;
 
-  document.getElementById('modal-title').textContent = 'Event Actuals â€” '+week.week_label;
+  document.getElementById('modal-title').textContent = 'Event Actuals - '+week.week_label;
   document.getElementById('modal-body').innerHTML = `
     <div class="form-row">
       <div class="form-group">
@@ -2672,7 +2672,7 @@ async function saveActuals(weekId){
   closeModal(); toast('Results saved'); renderMain();
 }
 
-// â”€â”€ MODAL â”€â”€
+// -- MODAL --
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('modal').classList.remove('wide');
@@ -2681,10 +2681,10 @@ function closeModalOnOverlay(e){
   if(e.target===document.getElementById('modal-overlay')) closeModal();
 }
 
-// â”€â”€ EVENT LISTENERS â”€â”€
+// -- EVENT LISTENERS --
 function attachEventListeners(){ /* delegated via onclick */ }
 
-// â”€â”€ INIT â”€â”€
+// -- INIT --
 (function restoreSession(){
   try{
     const owner = localStorage.getItem('rl_owner');
