@@ -1361,9 +1361,11 @@ function renderEventPage(ev){
     </button>`;
   }).join('');
 
-  const stageTasks = tasks
-    .filter(t=>getStage(t)===selectedStage)
-    .filter(t=>ownerMatches(t, state.ownerFilter || 'All'))
+  const allStageTasks = tasks.filter(t=>getStage(t)===selectedStage);
+  const stagePeople = [...new Set(allStageTasks.flatMap(t=>[t.assigned_to, t.champion]).filter(Boolean))];
+  const activeOwner = (state.ownerFilter && (state.ownerFilter==='All' || stagePeople.includes(state.ownerFilter))) ? state.ownerFilter : 'All';
+  const stageTasks = allStageTasks
+    .filter(t=>ownerMatches(t, activeOwner))
     .sort(taskSort);
   const prioritySections = Object.keys(PRIORITIES).map(priority=>{
     const items = stageTasks.filter(t=>getPriority(t)===priority);
@@ -1372,10 +1374,10 @@ function renderEventPage(ev){
       <div class="priority-heading">${PRIORITIES[priority].label}</div>
       ${items.map(t=>renderTaskRow(t)).join('')}
     </div>`;
-  }).join('') || '<div class="empty-state">No tasks in this stage for the selected owner.</div>';
+  }).join('') || '<div class="empty-state">No tasks in this stage for this view.</div>';
 
-  const ownerChips = ['All', ...TEAM].map(name=>
-    `<button class="filter-chip ${state.ownerFilter===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
+  const ownerChips = ['All', ...stagePeople].map(name=>
+    `<button class="filter-chip ${activeOwner===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
   ).join('');
 
   return `
