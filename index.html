@@ -487,7 +487,7 @@
   .attention-card.blocked { border-left-color:var(--red); }
   .attention-title { font-size:13px; color:var(--text); margin-bottom:4px; }
   .attention-meta { font-size:11px; color:var(--text-light); line-height:1.5; }
-  .journey-strip { display:grid; grid-template-columns:repeat(6, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); margin-bottom:18px; }
+  .journey-strip { display:grid; grid-template-columns:repeat(5, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); margin-bottom:18px; }
   .journey-step { background:var(--surface); border:0; cursor:pointer; padding:13px 10px; text-align:left; min-height:72px; font-family:'Inter',sans-serif; }
   .journey-step:hover { background:var(--surface2); }
   .journey-step.active { background:var(--vino); color:#fff; }
@@ -1046,11 +1046,10 @@ const PRIORITIES = {
 };
 const STAGES = {
   plan: { label:'Plan', rank:0 },
-  confirm: { label:'Confirm', rank:1 },
-  promote: { label:'Promote', rank:2 },
-  prepare: { label:'Prepare', rank:3 },
-  execute: { label:'Execute', rank:4 },
-  review: { label:'Review', rank:5 }
+  promote: { label:'Promote', rank:1 },
+  prepare: { label:'Prepare', rank:2 },
+  execute: { label:'Execute', rank:3 },
+  review: { label:'Review', rank:4 }
 };
 const STAGE_KEYS = Object.keys(STAGES);
 const DUE_BY_TRACK = {
@@ -1130,8 +1129,9 @@ function parseTaskMeta(task){
     return meta && meta.__rlh ? meta : {};
   } catch(e){ return {}; }
 }
+function normalizeStage(stage){ return stage==='confirm' ? 'prepare' : (STAGES[stage] ? stage : 'prepare'); }
 function taskDescription(priority, stage){
-  return JSON.stringify({ __rlh:true, priority: priority || 'important', stage: stage || 'prepare' });
+  return JSON.stringify({ __rlh:true, priority: priority || 'important', stage: normalizeStage(stage || 'prepare') });
 }
 function inferPriority(task){
   const title = (task?.title||'').toLowerCase();
@@ -1152,15 +1152,15 @@ function inferStage(task){
   if(title.includes('actual') || title.includes('results') || title.includes('notes')) return 'review';
   if(title.includes('sequence of service') || title.includes('service leader')) return 'execute';
   if(title.includes('social') || title.includes('website') || title.includes('invitation') || title.includes('artist image') || title.includes('audio') || title.includes('stage name')) return 'promote';
-  if(title.includes('selector') || title.includes('artist rotation') || title.includes('contract') || title.includes('permit') || title.includes('technical rider') || title.includes('fee')) return 'confirm';
+  if(title.includes('selector') || title.includes('artist rotation') || title.includes('contract') || title.includes('permit') || title.includes('technical rider') || title.includes('fee')) return 'prepare';
   if(task?.track==='marketing') return 'promote';
-  if(task?.track==='champion' || task?.track==='documents') return 'confirm';
+  if(task?.track==='champion' || task?.track==='documents') return 'prepare';
   if(task?.track==='service') return 'execute';
-  if(task?.track==='finance') return 'confirm';
+  if(task?.track==='finance') return 'prepare';
   return 'prepare';
 }
 function getStage(task){
-  return parseTaskMeta(task).stage || task.stage || inferStage(task);
+  return normalizeStage(parseTaskMeta(task).stage || task.stage || inferStage(task));
 }
 function stageLabel(stage){ return STAGES[stage]?.label || 'Prepare'; }
 function stageRank(task){ return STAGES[getStage(task)]?.rank ?? 3; }
@@ -1289,7 +1289,7 @@ function renderDashboard(){
           <div class="event-card-title">${ev.name}</div>
           <div class="event-card-date">${week?.week_label || week?.week_date || ev.day_of_week}</div>
         </div>
-        <div class="event-card-stage">Stage ${stage.rank+1} of 6: ${stage.label}</div>
+        <div class="event-card-stage">Stage ${stage.rank+1} of 5: ${stage.label}</div>
         <div class="event-card-note">${readiness.label} | ${nonOpen} non-negotiable open | ${blocked} blocked${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <button class="btn btn-gold btn-sm" onclick="switchTab('${ev.day_of_week==='Monday'?'listening':'jazz'}')">Open Journey</button>
       </div>`);
@@ -1373,7 +1373,7 @@ function renderEventPage(ev){
       <div class="event-title-block">
         <div class="event-eyebrow">Journey to event | ${ev.day_of_week}s</div>
         <h2>${ev.name}</h2>
-        <p>${week?.week_label || week?.week_date || 'Select or create a week'} | Stage ${STAGES[selectedStage].rank+1} of 6: ${STAGES[selectedStage].label}</p>
+        <p>${week?.week_label || week?.week_date || 'Select or create a week'} | Stage ${STAGES[selectedStage].rank+1} of 5: ${STAGES[selectedStage].label}</p>
       </div>
       <div class="event-kpis">
         <div class="kpi"><div class="kpi-label">Readiness</div><div class="kpi-value">${readiness.label}</div></div>
@@ -1627,9 +1627,9 @@ async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
     { track:'marketing', title:'Social media live', stage:'promote', assigned_to:'Nicole', champion:'Francesco', sort_order:6 },
     { track:'marketing', title:'Website updated', stage:'promote', assigned_to:'Nicole', champion:'Francesco', sort_order:7 },
     // Champion
-    { track:'champion', title: isJazz ? 'Confirm artist rotation (Ryan Gibbs / Salt N Pepper / Jazz Trio)' : 'Confirm vinyl selector for the week', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
-    { track:'champion', title:'Artist briefed on format and timing', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
-    { track:'champion', title:'Technical rider received and reviewed', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
+    { track:'champion', title: isJazz ? 'Confirm artist rotation (Ryan Gibbs / Salt N Pepper / Jazz Trio)' : 'Confirm vinyl selector for the week', priority:'non_negotiable', stage:'prepare', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
+    { track:'champion', title:'Artist briefed on format and timing', priority:'non_negotiable', stage:'prepare', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
+    { track:'champion', title:'Technical rider received and reviewed', priority:'non_negotiable', stage:'prepare', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
     // Technical
     { track:'technical', title:'Sound check scheduled', priority:'non_negotiable', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:1 },
     { track:'technical', title:'Equipment confirmed and tested', priority:'non_negotiable', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:2 },
@@ -1646,8 +1646,8 @@ async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
     { track:'service', title:'Casuals confirmed if required', priority:'enhancement', stage:'prepare', assigned_to:'Manuel', champion:'Francesco', sort_order:3 },
     { track:'service', title:'Sommelier briefed on pairing narrative', stage:'execute', assigned_to:'Manuel', champion:'Francesco', sort_order:4 },
     // Documents
-    { track:'documents', title:'Contract uploaded', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
-    { track:'documents', title:'Permit/visa check completed', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
+    { track:'documents', title:'Contract uploaded', priority:'non_negotiable', stage:'prepare', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
+    { track:'documents', title:'Permit/visa check completed', priority:'non_negotiable', stage:'prepare', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
   ];
 
   const rows = defaults.map(d=>({
@@ -1672,7 +1672,7 @@ async function addTask(track, weekId, eventId){
   const title = titleEl?.value?.trim();
   if(!title){ toast('Please enter a task name',true); return; }
   const stage = stageEl?.value || (track.startsWith('stage_') ? track.replace('stage_','') : inferStage({track, title}));
-  const trackByStage = { plan:'guest_revenue', confirm:'champion', promote:'marketing', prepare:'technical', execute:'service', review:'documents' };
+  const trackByStage = { plan:'guest_revenue', promote:'marketing', prepare:'technical', execute:'service', review:'documents' };
   const dbTrack = track.startsWith('stage_') ? (trackByStage[stage] || 'champion') : track;
 
   const { data, error } = await sb.from('tasks').insert({
