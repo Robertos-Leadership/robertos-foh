@@ -1340,6 +1340,17 @@ function renderEventPage(ev){
   const readiness = readinessForTasks(tasks);
   const selectedStage = state.selectedStage[ev.id] || currentStageForTasks(tasks);
   state.selectedStage[ev.id] = selectedStage;
+  const reviewPanel = selectedStage==='review' ? `
+    <div class="budget-panel">
+      <div class="section-header" style="margin-bottom:8px"><div class="section-title">Budget & Artist Costs</div></div>
+      <div class="budget-grid">
+        <div class="budget-item"><div class="budget-label">Target Revenue</div><div class="budget-value">${fmt(targetRev)}</div></div>
+        <div class="budget-item"><div class="budget-label">Artist Budget</div><div class="budget-value">${fmt(ev.entertainment_cost)}</div></div>
+        <div class="budget-item"><div class="budget-label">Committed Costs</div><div class="budget-value">${fmt(committed)}</div></div>
+        <div class="budget-item"><div class="budget-label">Cost vs Target</div><div class="budget-value">${targetRev ? Math.round(committed/targetRev*100) : 0}%</div></div>
+      </div>
+      ${renderFinanceTrack(fin, wid, ev.id)}
+    </div>` : '';
 
   const stageButtons = STAGE_KEYS.map(stage=>{
     const stats = stageStats(tasks, stage);
@@ -1409,16 +1420,7 @@ function renderEventPage(ev){
       ${prioritySections}
       ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
     </div>
-    <div class="budget-panel">
-      <div class="section-header" style="margin-bottom:8px"><div class="section-title">Budget & Artist Costs</div></div>
-      <div class="budget-grid">
-        <div class="budget-item"><div class="budget-label">Target Revenue</div><div class="budget-value">${fmt(targetRev)}</div></div>
-        <div class="budget-item"><div class="budget-label">Artist Budget</div><div class="budget-value">${fmt(ev.entertainment_cost)}</div></div>
-        <div class="budget-item"><div class="budget-label">Committed Costs</div><div class="budget-value">${fmt(committed)}</div></div>
-        <div class="budget-item"><div class="budget-label">Cost vs Target</div><div class="budget-value">${targetRev ? Math.round(committed/targetRev*100) : 0}%</div></div>
-      </div>
-      ${renderFinanceTrack(fin, wid, ev.id)}
-    </div>`}`;
+    ${reviewPanel}`}`;
 }
 
 function renderTaskRow(t){
