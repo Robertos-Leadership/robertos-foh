@@ -1084,7 +1084,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const TEAM = ['Francesco','Manuel','Alessandro','Nicole','Danilo','Alper','Katerina','Valentina'];
-const CHAMPIONS = ['Manuel','Alessandro','Francesco','Alper'];
+const CHAMPIONS = TEAM; // all team members can be champions
 const PRIORITIES = {
   non_negotiable: { label:'Non-Negotiable', rank:0 },
   important: { label:'Important', rank:1 },
