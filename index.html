@@ -504,9 +504,15 @@
   .priority-section { margin-top:18px; }
   .priority-section:first-child { margin-top:0; }
   .priority-heading { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--vino); margin-bottom:8px; }
-  .task-card { border:1px solid var(--border); background:var(--surface); padding:13px 14px; margin-bottom:8px; display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
-  .task-card.blocked { border-left:3px solid var(--red); }
-  .task-card.overdue { border-left:3px solid var(--amber); }
+  .task-card { border:1px solid var(--border); border-left:4px solid #CFC2AB; background:var(--surface); padding:13px 14px; margin-bottom:8px; display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+  .task-card.s-in_progress { border-left-color: var(--amber); }
+  .task-card.s-done { border-left-color: var(--green); }
+  .task-card.s-done .task-card-title { color: var(--text-light); }
+  .task-card.s-blocked, .task-card.blocked { border-left-color: var(--red); background: rgba(192,57,43,0.03); }
+  .task-card.overdue .task-card-title::after { content:' · OVERDUE'; color:var(--red); font-size:9px; letter-spacing:0.12em; font-weight:600; vertical-align:1px; }
+  .task-check { width:30px; height:30px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface); cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; color:transparent; transition:all .15s; padding:0; }
+  .task-check:hover { border-color:var(--green); color:rgba(45,122,79,0.45); }
+  .task-check.done { background:var(--green); border-color:var(--green); color:#fff; }
   .task-card-title { font-size:13px; color:var(--text); margin-bottom:6px; }
   .task-card-meta { display:flex; flex-wrap:wrap; gap:8px; font-size:11px; color:var(--text-light); align-items:center; }
   .budget-panel { padding:16px 18px; margin-bottom:18px; }
@@ -585,6 +591,22 @@
   .kpi { text-align: right; }
   .kpi-label { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
   .kpi-value { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--gold-light); }
+
+  /* countdown + readiness */
+  .event-countdown { background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); padding:16px 20px; margin-bottom:20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .countdown-days { font-family:'Playfair Display',serif; font-size:30px; color:var(--vino); line-height:1; white-space:nowrap; }
+  .countdown-days.tonight { color:var(--green); }
+  .countdown-progress { flex:1; min-width:200px; }
+  .countdown-progress-label { display:flex; justify-content:space-between; font-size:10px; letter-spacing:0.15em; text-transform:uppercase; color:var(--text-light); margin-bottom:6px; }
+  .progress-bar { height:10px; background:var(--surface3); border-radius:6px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-light)); border-radius:6px; transition:width .4s; }
+  .progress-fill.ready { background:linear-gradient(90deg, #2d7a4f, #3f9c68); }
+  .progress-fill.not_ready { background:linear-gradient(90deg, #c0392b, #d35445); }
+
+  /* tonight banner */
+  .tonight-banner { background:var(--vino); color:#fff; padding:16px 20px; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; box-shadow:var(--shadow); }
+  .tonight-banner .tb-title { font-family:'Playfair Display',serif; font-size:20px; color:var(--gold-light); }
+  .tonight-banner .tb-sub { font-size:11px; color:rgba(255,255,255,0.78); margin-top:3px; letter-spacing:0.04em; }
 
   /* week selector */
   .week-bar {
@@ -744,9 +766,11 @@
     color: var(--text-mid);
     cursor: pointer;
     font-family: 'Inter', sans-serif;
-    font-size: 9px;
+    font-size: 12px;
     letter-spacing: 0.08em;
-    padding: 4px 6px;
+    padding: 7px 12px;
+    min-width: 38px;
+    min-height: 32px;
     text-transform: uppercase;
   }
   .quick-action:hover { border-color: var(--vino); color: var(--vino); }
@@ -957,7 +981,12 @@
       font-size: 48px;
     }
     .journey-strip { grid-template-columns: 1fr 1fr; }
-    .task-card { grid-template-columns: 1fr; }
+    .task-card { grid-template-columns: auto 1fr auto; }
+    .nav-tabs { position:fixed; bottom:0; left:0; right:0; background:var(--vino-dark); display:flex; z-index:60; box-shadow:0 -2px 12px rgba(44,24,16,0.3); }
+    .nav-tab { flex:1; text-align:center; padding:13px 4px 16px; font-size:10px; border-bottom:none; border-top:2px solid transparent; }
+    .nav-tab.active { border-top-color: var(--gold-light); border-bottom:none; }
+    .main { padding-bottom: 96px; }
+    .countdown-days { font-size:24px; }
     .countdown-row { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .task-row { grid-template-columns: 1fr; gap: 6px; }
@@ -1085,25 +1114,22 @@ let state = {
 // ── UTILS ──
 function initials(name){ return name ? name.slice(0,2).toUpperCase() : '?'; }
 function fmt(n){ return 'AED '+(n||0).toLocaleString(); }
-function fmtDate(d){ if(!d) return '—'; const x=new Date(d); return x.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
-function isOverdue(d){ if(!d) return false; return new Date(d) < new Date() && true; }
-function isDueToday(d){
-  if(!d) return false;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const x = new Date(d); x.setHours(0,0,0,0);
-  return x.getTime() === today.getTime();
-}
+function fmtDate(d){ if(!d) return '—'; return parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+function localISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function todayISO(){ return localISO(new Date()); }
+function parseLocalDate(dateStr){ const p=String(dateStr).slice(0,10).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function isOverdue(d){ if(!d) return false; return String(d).slice(0,10) < todayISO(); }
+function isDueToday(d){ if(!d) return false; return String(d).slice(0,10) === todayISO(); }
 function isoDateFromOffset(dateStr, offsetDays){
   if(!dateStr) return null;
-  const d = new Date(dateStr);
+  const d = parseLocalDate(dateStr);
   d.setDate(d.getDate()+offsetDays);
-  return d.toISOString().split('T')[0];
+  return localISO(d);
 }
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const now = new Date(); now.setHours(0,0,0,0);
-  const target = new Date(dateStr);
-  return Math.ceil((target-now)/(1000*60*60*24));
+  return Math.round((parseLocalDate(dateStr)-now)/(1000*60*60*24));
 }
 function nextOccurrence(dayName){
   const days = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
@@ -1195,6 +1221,7 @@ function readinessForTasks(tasks){
 }
 function setOwnerFilter(owner){
   state.ownerFilter = owner;
+  try{ localStorage.setItem('rl_owner', owner); }catch(e){}
   renderMain();
 }
 function setStage(eventId, stage){
@@ -1209,7 +1236,7 @@ function stageStats(tasks, stage){
   let stateName = 'complete';
   if(blocked.length) stateName = 'blocked';
   else if(nonOpen.length || open.length) stateName = 'attention';
-  return { total: stageTasks.length, open: open.length, blocked: blocked.length, nonOpen: nonOpen.length, stateName };
+  return { total: stageTasks.length, done: stageTasks.length-open.length, open: open.length, blocked: blocked.length, nonOpen: nonOpen.length, stateName };
 }
 function currentStageForTasks(tasks){
   for(const stage of STAGE_KEYS){
@@ -1222,14 +1249,17 @@ function currentStageForTasks(tasks){
 function enterApp(module){
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  switchTab('dashboard');
+  try{ localStorage.setItem('rl_inapp','1'); }catch(e){}
+  switchTab(state.currentTab || 'dashboard');
 }
 function showLanding(){
   document.getElementById('landing').style.display = 'grid';
   document.getElementById('app').style.display = 'none';
+  try{ localStorage.removeItem('rl_inapp'); }catch(e){}
 }
 function switchTab(tab){
   state.currentTab = tab;
+  try{ localStorage.setItem('rl_tab', tab); }catch(e){}
   document.querySelectorAll('.nav-tab').forEach(t=>{
     t.classList.toggle('active', t.dataset.tab===tab);
   });
@@ -1240,17 +1270,25 @@ function switchTab(tab){
 async function loadAll(){
   const { data: events } = await sb.from('events').select('*').order('created_at');
   state.events = events || [];
+  const evIds = state.events.map(e=>e.id);
+  const allWeeks = evIds.length
+    ? (await sb.from('weeks').select('*').in('event_id', evIds).order('week_date',{ascending:false})).data || []
+    : [];
   for(const ev of state.events){
-    const { data: weeks } = await sb.from('weeks').select('*').eq('event_id',ev.id).order('week_date',{ascending:false});
-    state.weeks[ev.id] = weeks || [];
-    if(weeks && weeks.length && !state.currentWeek[ev.id]){
-      state.currentWeek[ev.id] = weeks[0].id;
+    state.weeks[ev.id] = allWeeks.filter(w=>w.event_id===ev.id);
+    if(state.weeks[ev.id].length && !state.currentWeek[ev.id]){
+      state.currentWeek[ev.id] = state.weeks[ev.id][0].id;
     }
-    for(const w of (weeks||[])){
-      const { data: tasks } = await sb.from('tasks').select('*').eq('week_id',w.id).order('sort_order');
-      state.tasks[w.id] = tasks || [];
-      const { data: fin } = await sb.from('finance').select('*').eq('week_id',w.id).order('created_at');
-      state.finance[w.id] = fin || [];
+  }
+  const wIds = allWeeks.map(w=>w.id);
+  if(wIds.length){
+    const [tRes, fRes] = await Promise.all([
+      sb.from('tasks').select('*').in('week_id', wIds).order('sort_order'),
+      sb.from('finance').select('*').in('week_id', wIds).order('created_at')
+    ]);
+    for(const w of allWeeks){
+      state.tasks[w.id] = (tRes.data||[]).filter(t=>t.week_id===w.id);
+      state.finance[w.id] = (fRes.data||[]).filter(f=>f.week_id===w.id);
     }
   }
   renderMain();
@@ -1270,6 +1308,7 @@ function renderMain(){
 function renderDashboard(){
   let allTasks = [];
   const eventCards = [];
+  const tonightEvents = [];
 
   for(const ev of state.events){
     const wid = state.currentWeek[ev.id];
@@ -1282,20 +1321,33 @@ function renderDashboard(){
     const nonOpen = tasks.filter(t=>getPriority(t)==='non_negotiable' && t.status!=='done').length;
     const blocked = tasks.filter(t=>t.status==='blocked').length;
     const nextDue = tasks.filter(t=>t.status!=='done' && t.due_date).sort((a,b)=>a.due_date.localeCompare(b.due_date))[0];
+    const dleft = week ? daysUntil(week.week_date) : null;
+    const when = dleft===0 ? 'Tonight' : dleft===1 ? 'Tomorrow' : (dleft>1 ? `In ${dleft} days` : '');
+    const doneCt = tasks.filter(t=>t.status==='done').length;
+    const cardPct = tasks.length ? Math.round(doneCt/tasks.length*100) : 0;
     allTasks = allTasks.concat(tasks.map(t=>({...t, eventName:ev.name, eventId:ev.id, weekId:wid})));
+    if(dleft===0) tonightEvents.push(ev);
     eventCards.push(`
       <div class="event-journey-card">
         <div class="event-card-top">
           <div class="event-card-title">${ev.name}</div>
-          <div class="event-card-date">${week?.week_label || week?.week_date || ev.day_of_week}</div>
+          <div class="event-card-date">${week?.week_label || week?.week_date || ev.day_of_week}${when ? ' · '+when : ''}</div>
         </div>
         <div class="event-card-stage">Stage ${stage.rank+1} of 5: ${stage.label}</div>
-        <div class="event-card-note">${readiness.label} | ${nonOpen} non-negotiable open | ${blocked} blocked${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
+        <div style="margin:8px 0 4px"><div class="progress-bar" style="height:8px"><div class="progress-fill ${readiness.status}" style="width:${cardPct}%"></div></div></div>
+        <div class="event-card-note">${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <button class="btn btn-gold btn-sm" onclick="switchTab('${ev.day_of_week==='Monday'?'listening':'jazz'}')">Open Journey</button>
       </div>`);
   }
 
+  const tonightBanner = tonightEvents.map(ev=>`
+    <div class="tonight-banner">
+      <div><div class="tb-title">Tonight: ${ev.name}</div><div class="tb-sub">Showtime. Open the Execute stage for the run-of-night checklist.</div></div>
+      <button class="btn btn-gold" onclick="openTonight('${ev.id}')">Open Execute</button>
+    </div>`).join('');
+
   const urgent = allTasks
+    .filter(t=>ownerMatches(t, state.ownerFilter))
     .filter(t=>t.status!=='done' && (t.status==='blocked' || (getPriority(t)==='non_negotiable' && isOverdue(t.due_date)) || isDueToday(t.due_date)))
     .sort(taskSort)
     .slice(0,8);
@@ -1318,12 +1370,19 @@ function renderDashboard(){
   <div class="dashboard-header">
     <div><div class="page-title">Home</div><div class="page-sub">Plan the journey to each event, one stage at a time.</div></div>
   </div>
-  <div class="section-header"><div class="section-title">Needs Attention</div></div>
+  ${tonightBanner}
+  <div class="owner-filter" style="margin-bottom:18px">${ownerChips}</div>
+  <div class="section-header"><div class="section-title">Needs Attention${state.ownerFilter!=='All' ? ' — '+state.ownerFilter : ''}</div></div>
   <div class="attention-list">${attention}</div>
   <div class="section-header"><div class="section-title">This Week</div></div>
-  <div class="home-card-grid">${eventCards.join('')}</div>
-  <div class="section-header"><div class="section-title">Show Work For</div></div>
-  <div class="owner-filter">${ownerChips}</div>`;
+  <div class="home-card-grid">${eventCards.join('')}</div>`;
+}
+
+function openTonight(eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!ev) return;
+  state.selectedStage[eventId] = 'execute';
+  switchTab(ev.day_of_week==='Monday' ? 'listening' : 'jazz');
 }
 
 // EVENT PAGE
@@ -1332,7 +1391,7 @@ function renderEventPage(ev){
   const weeks = state.weeks[ev.id]||[];
   const wid = state.currentWeek[ev.id];
   const week = weeks.find(w=>w.id===wid);
-  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date} ${w.status==='completed'?'?':''}</option>`).join('');
+  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date}${w.status==='completed'?' ✓':''}</option>`).join('');
   const tasks = wid ? (state.tasks[wid]||[]) : [];
   const fin = wid ? (state.finance[wid]||[]) : [];
   const targetRev = (Number(ev.avg_spend_target)||0) * (Number(ev.capacity)||0);
@@ -1340,6 +1399,19 @@ function renderEventPage(ev){
   const readiness = readinessForTasks(tasks);
   const selectedStage = state.selectedStage[ev.id] || currentStageForTasks(tasks);
   state.selectedStage[ev.id] = selectedStage;
+  const dleft = week ? daysUntil(week.week_date) : null;
+  const doneCount = tasks.filter(t=>t.status==='done').length;
+  const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
+  const cdLabel = dleft===null ? '' : (dleft>1 ? dleft+' days to go' : dleft===1 ? 'Tomorrow' : dleft===0 ? 'Tonight' : 'Event passed');
+  const countdown = week ? `
+  <div class="event-countdown">
+    <div class="countdown-days ${dleft===0?'tonight':''}">${cdLabel}</div>
+    <div class="countdown-progress">
+      <div class="countdown-progress-label"><span>${doneCount} of ${tasks.length} tasks done</span><span>${pct}%</span></div>
+      <div class="progress-bar"><div class="progress-fill ${readiness.status}" style="width:${pct}%"></div></div>
+    </div>
+    <span class="readiness-value ${readiness.status}" style="font-size:18px">${readiness.label}</span>
+  </div>` : '';
   const reviewPanel = selectedStage==='review' ? `
     <div class="budget-panel">
       <div class="section-header" style="margin-bottom:8px"><div class="section-title">Budget & Artist Costs</div></div>
@@ -1356,8 +1428,8 @@ function renderEventPage(ev){
     const stats = stageStats(tasks, stage);
     const active = selectedStage===stage ? 'active' : '';
     return `<button class="journey-step ${active} ${stats.stateName}" onclick="setStage('${ev.id}','${stage}')">
-      <span class="journey-step-label">${STAGES[stage].label}</span>
-      <span class="journey-step-meta">${stats.open} open | ${stats.blocked} blocked</span>
+      <span class="journey-step-label">${STAGES[stage].label}${stats.total && stats.stateName==='complete' ? ' ✓' : ''}</span>
+      <span class="journey-step-meta">${stats.total ? `${stats.done}/${stats.total} done${stats.blocked ? ` · ${stats.blocked} blocked` : ''}` : 'No tasks'}</span>
     </button>`;
   }).join('');
 
@@ -1397,15 +1469,16 @@ function renderEventPage(ev){
     </div>
   </div>
 
+  ${countdown}
+
   <div class="week-bar">
     <select class="week-select" onchange="selectWeek('${ev.id}', this.value)">
       <option value="">Select week</option>
       ${weekOptions}
     </select>
-    <button class="btn btn-gold" onclick="createNewWeek('${ev.id}')">+ Create Week</button>
-    ${wid ? `<button class="btn btn-outline" onclick="duplicateWeek('${ev.id}','${wid}')">Create Next Week</button>` : ''}
-    <button class="btn btn-outline" onclick="openEditEvent('${ev.id}')">Edit Targets / Budget</button>
+    <button class="btn btn-gold" onclick="newWeek('${ev.id}')">+ New Week</button>
     ${wid ? `<button class="btn btn-outline btn-sm" onclick="openWeekActuals('${wid}')">Enter Results</button>` : ''}
+    <button class="btn btn-outline btn-sm" onclick="openEditEvent('${ev.id}')" title="Targets & budget — leadership only">⚙ Targets</button>
   </div>
 
   ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
@@ -1428,51 +1501,38 @@ function renderEventPage(ev){
 function renderTaskRow(t){
   const over = t.status!=='done' && isOverdue(t.due_date);
   const priority = getPriority(t);
-  const blocked = t.status==='blocked';
+  const done = t.status==='done';
+  const meta = [`<span class="priority-pill ${priority}">${priorityLabel(t)}</span>`];
+  if(t.assigned_to) meta.push(`<span>${t.assigned_to}</span>`);
+  if(t.champion) meta.push(`<span>Champion: ${t.champion}</span>`);
+  if(t.due_date) meta.push(`<span class="${over?'task-date overdue':''}">Due: ${fmtDate(t.due_date)}</span>`);
+  if(t.status==='in_progress' || t.status==='blocked') meta.push(`<span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span>`);
   return `
-  <div class="task-card ${blocked?'blocked':''} ${over?'overdue':''}" data-task-id="${t.id}">
+  <div class="task-card s-${t.status} ${over?'overdue':''}" data-task-id="${t.id}">
+    <button class="task-check ${done?'done':''}" onclick="toggleDone('${t.id}')" title="${done?'Mark as not done':'Mark as done'}">✓</button>
     <div>
       <div class="task-card-title editable" onclick="openEditTask('${t.id}')">${t.title}</div>
-      <div class="task-card-meta">
-        <span class="priority-pill ${priority}">${priorityLabel(t)}</span>
-        <span>${t.assigned_to || 'Unassigned'}</span>
-        <span>Champion: ${t.champion || '-'}</span>
-        <span>Due: ${fmtDate(t.due_date)}</span>
-        <span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span>
-      </div>
+      <div class="task-card-meta">${meta.join('')}</div>
       ${t.notes ? `<div class="task-notes-preview" style="margin-top:6px">${t.notes}</div>` : ''}
     </div>
     <div class="task-actions">
-      ${t.status==='not_started' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','in_progress')">Start</button>` : ''}
-      ${t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','done')">Done</button>` : ''}
-      ${t.status!=='blocked' && t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
-      <button class="quick-action" onclick="openEditTask('${t.id}')">More</button>
+      <button class="quick-action" onclick="openEditTask('${t.id}')" title="Edit details, status, owner">⋯</button>
     </div>
   </div>`;
+}
+
+function toggleDone(taskId){
+  let task = null;
+  for(const wid in state.tasks){ task = state.tasks[wid].find(x=>x.id===taskId); if(task) break; }
+  if(!task) return;
+  updateTaskStatus(taskId, task.status==='done' ? 'not_started' : 'done');
 }
 
 function renderAddTaskBar(track, weekId, eventId, forcedStage=null){
   const key = forcedStage || track;
   return `
   <div class="add-task-bar">
-    <input type="text" placeholder="Add task..." id="new-task-${key}" onkeydown="if(event.key==='Enter') addTask('${key}','${weekId}','${eventId}')" style="flex:2;min-width:180px">
-    <select id="new-assign-${key}">
-      <option value="">Assigned to...</option>
-      ${TEAM.map(m=>`<option value="${m}">${m}</option>`).join('')}
-    </select>
-    <select id="new-champion-${key}">
-      <option value="">Champion...</option>
-      ${CHAMPIONS.map(m=>`<option value="${m}">${m}</option>`).join('')}
-    </select>
-    <select id="new-priority-${key}">
-      <option value="non_negotiable">Non-Negotiable</option>
-      <option value="important" selected>Important</option>
-      <option value="enhancement">Enhancement</option>
-    </select>
-    <select id="new-stage-${key}">
-      ${STAGE_KEYS.map(stage=>`<option value="${stage}" ${(forcedStage||inferStage({track}))===stage?'selected':''}>${STAGES[stage].label}</option>`).join('')}
-    </select>
-    <input type="date" id="new-date-${key}" style="flex:0;min-width:130px">
+    <input type="text" placeholder="Type a task and press Enter — assign details later with ⋯" id="new-task-${key}" onkeydown="if(event.key==='Enter') addTask('${key}','${weekId}','${eventId}')" style="flex:1;min-width:200px">
     <button class="btn btn-gold btn-sm" onclick="addTask('${key}','${weekId}','${eventId}')">Add</button>
   </div>`;
 }
@@ -1523,10 +1583,15 @@ function selectWeek(eventId, weekId){
   renderMain();
 }
 
+function newWeek(eventId){
+  const wid = state.currentWeek[eventId];
+  if(wid) duplicateWeek(eventId, wid); else createNewWeek(eventId);
+}
+
 async function createNewWeek(eventId){
   const ev = state.events.find(e=>e.id===eventId);
   const next = nextOccurrence(ev.day_of_week);
-  const dateStr = next.toISOString().split('T')[0];
+  const dateStr = localISO(next);
   const label = next.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
   const { data, error } = await sb.from('weeks').insert({
@@ -1557,10 +1622,8 @@ async function duplicateWeek(eventId, sourceWeekId){
   if(!sourceWeek) return;
 
   // calculate next week date
-  const sourceDate = new Date(sourceWeek.week_date);
-  const newDate = new Date(sourceDate); newDate.setDate(newDate.getDate()+7);
-  const dateStr = newDate.toISOString().split('T')[0];
-  const label = newDate.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const dateStr = isoDateFromOffset(sourceWeek.week_date, 7);
+  const label = parseLocalDate(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
   const { data: newWeek, error } = await sb.from('weeks').insert({
     event_id: eventId,
@@ -1679,12 +1742,14 @@ async function addTask(track, weekId, eventId){
   const trackByStage = { plan:'guest_revenue', promote:'marketing', prepare:'technical', execute:'service', review:'documents' };
   const dbTrack = track.startsWith('stage_') ? (trackByStage[stage] || 'champion') : track;
 
+  const wk = Object.values(state.weeks).flat().find(w=>w.id===weekId);
+  const due = dateEl?.value || (wk ? isoDateFromOffset(wk.week_date, DUE_BY_TRACK[dbTrack] ?? -1) : null);
   const { data, error } = await sb.from('tasks').insert({
     week_id: weekId, event_id: eventId, track: dbTrack,
     title, assigned_to: assignEl?.value||null,
     champion: champEl?.value||null,
     description: taskDescription(priorityEl?.value||'important', stage),
-    due_date: dateEl?.value||null,
+    due_date: due,
     status: 'not_started',
     sort_order: (state.tasks[weekId]||[]).filter(t=>t.track===dbTrack).length+1
   }).select().single();
@@ -2135,6 +2200,19 @@ function closeModalOnOverlay(e){
 function attachEventListeners(){ /* delegated via onclick */ }
 
 // ── INIT ──
+(function restoreSession(){
+  try{
+    const owner = localStorage.getItem('rl_owner');
+    if(owner) state.ownerFilter = owner;
+    if(localStorage.getItem('rl_inapp')==='1'){
+      const tab = localStorage.getItem('rl_tab') || 'dashboard';
+      state.currentTab = tab;
+      document.getElementById('landing').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+    }
+  }catch(e){}
+})();
 loadAll();
 </script>
 </body>
