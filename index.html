@@ -842,38 +842,21 @@
   }
   .add-task-bar select option { background: var(--surface); }
   .add-task-bar .btn { min-height: 32px; white-space: nowrap; }
-  .leader-add-task {
-    display:grid;
-    grid-template-columns:minmax(220px, 1.4fr) minmax(150px, 1fr) repeat(4, minmax(120px, 0.8fr)) auto;
-    gap:8px;
-    padding:14px 16px;
-    background:var(--surface);
-    border:1px solid var(--border);
-    box-shadow:var(--shadow);
-    margin-bottom:18px;
-    align-items:center;
-  }
-  .leader-add-task input, .leader-add-task select {
-    background:var(--surface2);
-    border:1px solid var(--border);
-    color:var(--text);
-    font-family:'Inter',sans-serif;
-    font-size:12px;
-    padding:8px 10px;
-    width:100%;
-    min-width:0;
-  }
-  .leader-task-list { display:flex; flex-direction:column; gap:9px; margin-bottom:24px; }
-  .leader-task-card { border:1px solid var(--border); border-left:4px solid #CFC2AB; background:var(--surface); padding:13px 14px; display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; box-shadow:var(--shadow); }
+  .leader-task-list { display:flex; flex-direction:column; gap:14px; margin-bottom:24px; }
+  .leader-event-group { background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
+  .leader-event-group-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px; border-bottom:1px solid var(--border); background:var(--surface2); }
+  .leader-event-group-title { font-size:10px; letter-spacing:0.17em; text-transform:uppercase; color:var(--vino); font-weight:600; }
+  .leader-event-group-count { font-size:11px; color:var(--text-light); }
+  .leader-task-card { border-bottom:1px solid rgba(107,31,42,0.08); border-left:4px solid #CFC2AB; background:var(--surface); padding:12px 14px; display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+  .leader-task-card:last-child { border-bottom:none; }
   .leader-task-card.s-in_progress { border-left-color:var(--amber); }
   .leader-task-card.s-done { border-left-color:var(--green); }
   .leader-task-card.s-blocked { border-left-color:var(--red); background:rgba(192,57,43,0.03); }
-  .leader-event-label { display:inline-flex; align-items:center; background:rgba(107,31,42,0.08); border:1px solid rgba(107,31,42,0.16); color:var(--vino); font-size:9px; letter-spacing:0.16em; text-transform:uppercase; padding:3px 8px; margin-bottom:7px; font-weight:600; }
-  .leader-summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin:-6px 0 18px; }
-  .leader-summary-card { background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); padding:12px 13px; cursor:pointer; }
+  .leader-summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin:-6px 0 22px; }
+  .leader-summary-card { background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); padding:14px 15px; cursor:pointer; min-height:120px; }
   .leader-summary-card:hover { border-color:var(--vino); }
   .leader-summary-name { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--vino); font-weight:600; margin-bottom:8px; }
-  .leader-summary-total { font-family:'Playfair Display',serif; font-size:24px; color:var(--text); margin-bottom:7px; }
+  .leader-summary-total { font-family:'Playfair Display',serif; font-size:28px; color:var(--text); margin-bottom:9px; }
   .leader-summary-breakdown { display:flex; flex-wrap:wrap; gap:5px; }
   .leader-actions-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:12px; }
 
@@ -1076,7 +1059,6 @@
     .countdown-row { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .add-task-bar { grid-template-columns: 1fr; }
-    .leader-add-task { grid-template-columns: 1fr; }
     .leader-task-card { grid-template-columns: 1fr; }
     .task-row { grid-template-columns: 1fr; gap: 6px; }
     .task-row-header { display: none; }
@@ -1454,7 +1436,6 @@ function renderDashboard(){
         <div class="event-card-note">${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-gold btn-sm" onclick="switchTab('${eventTab(ev)}')">Open Journey</button>
-          <button class="btn btn-outline btn-sm" onclick="resetEventTasks('${ev.id}')">Reset Event</button>
         </div>
       </div>`);
   }
@@ -1472,7 +1453,7 @@ function renderDashboard(){
     .sort(taskSort)
     .slice(0,60);
   const leaderList = leaderTasks.length
-    ? leaderTasks.map(t=>renderLeaderTaskRow(t)).join('')
+    ? renderLeaderTaskGroups(leaderTasks)
     : '<div class="empty-state" style="background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)">No pending tasks for this leader.</div>';
 
   const urgent = leaderTasks
@@ -1519,30 +1500,12 @@ function renderDashboard(){
   ${tonightBanner}
   <div class="owner-filter" style="margin-bottom:18px">${ownerChips}</div>
   <div class="leader-summary-grid">${leaderSummary}</div>
-  <div class="leader-add-task">
-    <input id="leader-task-title" placeholder="Add a task from Leaders">
-    <select id="leader-task-event">${eventOptions.join('')}</select>
-    <select id="leader-task-stage">${STAGE_KEYS.map(stage=>`<option value="${stage}">${STAGES[stage].label}</option>`).join('')}</select>
-    <select id="leader-task-assignee">
-      <option value="">Who?</option>
-      ${TEAM.map(m=>`<option value="${m}" ${activeLeader===m?'selected':''}>${m}</option>`).join('')}
-    </select>
-    <select id="leader-task-priority">
-      <option value="important" selected>Important</option>
-      <option value="non_negotiable">Non-negotiable</option>
-      <option value="enhancement">Enhancement</option>
-    </select>
-    <select id="leader-task-status">
-      <option value="not_started" selected>Not Started</option>
-      <option value="in_progress">In Progress</option>
-      <option value="blocked">Blocked</option>
-      <option value="done">Done</option>
-    </select>
-    <button class="btn btn-gold btn-sm" onclick="addLeaderTask()">Add Task</button>
-  </div>
   <div class="leader-actions-row">
     <div class="section-title">Pending Jobs${activeLeader!=='All' ? ' | '+activeLeader : ''}</div>
-    <button class="btn btn-outline btn-sm" onclick="resetLeaderTasks('${activeLeader}')">${activeLeader==='All' ? 'Reset All Leaders' : 'Reset '+activeLeader}</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gold btn-sm" onclick="openLeaderAddTask()">+ Add Task</button>
+      <button class="btn btn-outline btn-sm" onclick="openLeaderActions('${activeLeader}')">More Actions</button>
+    </div>
   </div>
   <div class="owner-filter" style="margin-bottom:12px">${priorityChips}</div>
   <div class="leader-task-list">${leaderList}</div>
@@ -1558,13 +1521,32 @@ function openTonight(eventId){
   switchTab(eventTab(ev));
 }
 
+function renderLeaderTaskGroups(tasks){
+  const groups = [];
+  for(const t of tasks){
+    let group = groups.find(g=>g.eventId===t.eventId);
+    if(!group){
+      group = { eventId:t.eventId, eventName:t.eventName, tasks:[] };
+      groups.push(group);
+    }
+    group.tasks.push(t);
+  }
+  return groups.map(group=>`
+    <div class="leader-event-group">
+      <div class="leader-event-group-head">
+        <div class="leader-event-group-title">${group.eventName}</div>
+        <div class="leader-event-group-count">${group.tasks.length} pending</div>
+      </div>
+      ${group.tasks.map(t=>renderLeaderTaskRow(t)).join('')}
+    </div>`).join('');
+}
+
 function renderLeaderTaskRow(t){
   const over = t.status!=='done' && isOverdue(t.due_date);
   const ev = state.events.find(e=>e.id===t.eventId);
   return `
   <div class="leader-task-card s-${t.status} ${over?'overdue':''}">
     <div>
-      <div class="leader-event-label">${t.eventName}</div>
       <div class="task-card-title editable" onclick="openEditTask('${t.id}')">${t.title}</div>
       <div class="task-card-meta">
         <span>${stageLabel(getStage(t))}</span>
@@ -1578,9 +1560,13 @@ function renderLeaderTaskRow(t){
     <div class="task-actions">
       ${t.status==='not_started' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','in_progress')">Start</button>` : ''}
       ${t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','done')">Done</button>` : ''}
-      ${t.status!=='blocked' && t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
-      <button class="quick-action" onclick="openEditTask('${t.id}')">Edit</button>
-      <button class="quick-action" onclick="switchTab('${eventTab(ev)}')">Open</button>
+      <button class="quick-action more-btn" onclick="toggleTaskMenu(event,'leader-${t.id}')" title="More actions">⋯</button>
+      <div class="task-menu" id="task-menu-leader-${t.id}">
+        ${t.status!=='blocked' && t.status!=='done' ? `<button onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
+        ${t.status==='blocked' ? `<button onclick="updateTaskStatus('${t.id}','in_progress')">Unblock</button>` : ''}
+        <button onclick="openEditTask('${t.id}')">Edit Details</button>
+        <button onclick="switchTab('${eventTab(ev)}')">Open Event</button>
+      </div>
     </div>
   </div>`;
 }
@@ -2109,6 +2095,58 @@ async function addTask(track, weekId, eventId){
   if(again) again.focus();
 }
 
+function openLeaderAddTask(){
+  const activeLeader = state.ownerFilter || 'All';
+  const eventOptions = state.events.map(ev=>`<option value="${ev.id}">${ev.name}</option>`).join('');
+  document.getElementById('modal-title').textContent = 'Add Task';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Task</label>
+      <input class="form-input" id="leader-task-title" placeholder="What needs to be done?">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Event</label>
+        <select class="form-select" id="leader-task-event">${eventOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Section</label>
+        <select class="form-select" id="leader-task-stage">${STAGE_KEYS.map(stage=>`<option value="${stage}">${STAGES[stage].label}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Assigned To</label>
+        <select class="form-select" id="leader-task-assignee">
+          <option value="">—</option>
+          ${TEAM.map(m=>`<option value="${m}" ${activeLeader===m?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Priority</label>
+        <select class="form-select" id="leader-task-priority">
+          <option value="important" selected>Important</option>
+          <option value="non_negotiable">Non-negotiable</option>
+          <option value="enhancement">Enhancement</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-select" id="leader-task-status">
+        <option value="not_started" selected>Not Started</option>
+        <option value="in_progress">In Progress</option>
+        <option value="blocked">Blocked</option>
+        <option value="done">Done</option>
+      </select>
+    </div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-gold" onclick="addLeaderTask()">Add Task</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('leader-task-title')?.focus(), 0);
+}
+
 async function addLeaderTask(){
   const titleEl = document.getElementById('leader-task-title');
   const eventEl = document.getElementById('leader-task-event');
@@ -2142,7 +2180,7 @@ async function addLeaderTask(){
   if(error){ toast('Error adding task',true); return; }
   if(!state.tasks[weekId]) state.tasks[weekId]=[];
   state.tasks[weekId].push(data);
-  titleEl.value = '';
+  closeModal();
   toast('Task added');
   renderMain();
 }
@@ -2155,6 +2193,22 @@ async function updateTaskStatus(taskId, status){
     if(t){ t.status=status; break; }
   }
   renderMain();
+}
+
+function openLeaderActions(owner){
+  document.getElementById('modal-title').textContent = 'Leader Actions';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="review-card" style="margin-bottom:14px">
+      <div class="review-label">Current View</div>
+      <div class="review-value" style="font-size:22px">${owner==='All' ? 'All Leaders' : owner}</div>
+      <div class="review-note">Reset returns matching tasks to Not Started. You will be asked to confirm before anything changes.</div>
+    </div>
+    <div class="form-group">
+      <button class="btn btn-outline" style="width:100%" onclick="closeModal(); resetLeaderTasks('${owner}')">${owner==='All' ? 'Reset All Leaders' : 'Reset '+owner}</button>
+    </div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-gold" onclick="closeModal()">Done</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
 }
 
 async function resetTasksByIds(taskIds, label){
