@@ -461,6 +461,60 @@
   .readiness-value.not_ready { color: var(--red); }
   .readiness-note { font-size: 11px; color: var(--text-light); margin-top: 6px; line-height: 1.5; }
 
+
+  .home-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .event-journey-card,
+  .attention-card,
+  .stage-panel,
+  .budget-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .event-journey-card { padding: 18px 20px; }
+  .event-card-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px; }
+  .event-card-title { font-family:'Playfair Display',serif; font-size:23px; color:var(--vino-dark); }
+  .event-card-date { font-size:10px; color:var(--text-light); letter-spacing:0.16em; text-transform:uppercase; white-space:nowrap; }
+  .event-card-stage { font-size:11px; color:var(--vino); letter-spacing:0.14em; text-transform:uppercase; margin-bottom:8px; }
+  .event-card-note { font-size:12px; color:var(--text-light); line-height:1.6; margin-bottom:14px; }
+  .attention-list { display:flex; flex-direction:column; gap:10px; margin-bottom:28px; }
+  .attention-card { padding:14px 16px; border-left:3px solid var(--amber); display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+  .attention-card.blocked { border-left-color:var(--red); }
+  .attention-title { font-size:13px; color:var(--text); margin-bottom:4px; }
+  .attention-meta { font-size:11px; color:var(--text-light); line-height:1.5; }
+  .journey-strip { display:grid; grid-template-columns:repeat(6, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); margin-bottom:18px; }
+  .journey-step { background:var(--surface); border:0; cursor:pointer; padding:13px 10px; text-align:left; min-height:72px; font-family:'Inter',sans-serif; }
+  .journey-step:hover { background:var(--surface2); }
+  .journey-step.active { background:var(--vino); color:#fff; }
+  .journey-step.complete { border-top:3px solid var(--green); }
+  .journey-step.attention { border-top:3px solid var(--amber); }
+  .journey-step.blocked { border-top:3px solid var(--red); }
+  .journey-step-label { display:block; font-size:11px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; }
+  .journey-step-meta { display:block; margin-top:8px; font-size:10px; color:var(--text-light); line-height:1.35; }
+  .journey-step.active .journey-step-meta { color:rgba(255,255,255,0.72); }
+  .stage-panel { padding:18px 20px; margin-bottom:18px; }
+  .stage-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; }
+  .stage-title { font-family:'Playfair Display',serif; font-size:26px; color:var(--vino-dark); }
+  .stage-sub { font-size:12px; color:var(--text-light); margin-top:4px; }
+  .priority-section { margin-top:18px; }
+  .priority-section:first-child { margin-top:0; }
+  .priority-heading { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--vino); margin-bottom:8px; }
+  .task-card { border:1px solid var(--border); background:var(--surface); padding:13px 14px; margin-bottom:8px; display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+  .task-card.blocked { border-left:3px solid var(--red); }
+  .task-card.overdue { border-left:3px solid var(--amber); }
+  .task-card-title { font-size:13px; color:var(--text); margin-bottom:6px; }
+  .task-card-meta { display:flex; flex-wrap:wrap; gap:8px; font-size:11px; color:var(--text-light); align-items:center; }
+  .budget-panel { padding:16px 18px; margin-bottom:18px; }
+  .budget-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-top:12px; }
+  .budget-item { background:var(--surface2); border:1px solid var(--border); padding:12px; }
+  .budget-label { font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-light); margin-bottom:6px; }
+  .budget-value { font-family:'Playfair Display',serif; font-size:22px; color:var(--vino); }
+
   .overdue-flag {
     display: inline-flex;
     align-items: center;
@@ -902,6 +956,8 @@
     .landing-title {
       font-size: 48px;
     }
+    .journey-strip { grid-template-columns: 1fr 1fr; }
+    .task-card { grid-template-columns: 1fr; }
     .countdown-row { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .task-row { grid-template-columns: 1fr; gap: 6px; }
@@ -953,7 +1009,7 @@
       <div class="topbar-section" id="topbar-section">Events</div>
     </div>
     <div class="nav-tabs">
-      <div class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Command Centre</div>
+      <div class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Home</div>
       <div class="nav-tab" data-tab="listening" onclick="switchTab('listening')">The Listening Bar</div>
       <div class="nav-tab" data-tab="jazz" onclick="switchTab('jazz')">Jazz Tuesdays</div>
     </div>
@@ -988,6 +1044,15 @@ const PRIORITIES = {
   important: { label:'Important', rank:1 },
   enhancement: { label:'Enhancement', rank:2 }
 };
+const STAGES = {
+  plan: { label:'Plan', rank:0 },
+  confirm: { label:'Confirm', rank:1 },
+  promote: { label:'Promote', rank:2 },
+  prepare: { label:'Prepare', rank:3 },
+  execute: { label:'Execute', rank:4 },
+  review: { label:'Review', rank:5 }
+};
+const STAGE_KEYS = Object.keys(STAGES);
 const DUE_BY_TRACK = {
   marketing: -4,
   champion: -3,
@@ -1014,7 +1079,8 @@ let state = {
   finance: {},    // weekId -> array of finance items
   currentWeek: {},// eventId -> weekId
   currentTab: 'dashboard',
-  ownerFilter: 'All'
+  ownerFilter: 'All',
+  selectedStage: {}
 };
 
 // ── UTILS ──
@@ -1064,8 +1130,8 @@ function parseTaskMeta(task){
     return meta && meta.__rlh ? meta : {};
   } catch(e){ return {}; }
 }
-function taskDescription(priority){
-  return JSON.stringify({ __rlh:true, priority: priority || 'important' });
+function taskDescription(priority, stage){
+  return JSON.stringify({ __rlh:true, priority: priority || 'important', stage: stage || 'prepare' });
 }
 function inferPriority(task){
   const title = (task?.title||'').toLowerCase();
@@ -1081,12 +1147,31 @@ function inferPriority(task){
 function getPriority(task){
   return parseTaskMeta(task).priority || task.priority || inferPriority(task);
 }
+function inferStage(task){
+  const title = (task?.title||'').toLowerCase();
+  if(title.includes('actual') || title.includes('results') || title.includes('notes')) return 'review';
+  if(title.includes('sequence of service') || title.includes('service leader')) return 'execute';
+  if(title.includes('social') || title.includes('website') || title.includes('invitation') || title.includes('artist image') || title.includes('audio') || title.includes('stage name')) return 'promote';
+  if(title.includes('selector') || title.includes('artist rotation') || title.includes('contract') || title.includes('permit') || title.includes('technical rider') || title.includes('fee')) return 'confirm';
+  if(task?.track==='marketing') return 'promote';
+  if(task?.track==='champion' || task?.track==='documents') return 'confirm';
+  if(task?.track==='service') return 'execute';
+  if(task?.track==='finance') return 'confirm';
+  return 'prepare';
+}
+function getStage(task){
+  return parseTaskMeta(task).stage || task.stage || inferStage(task);
+}
+function stageLabel(stage){ return STAGES[stage]?.label || 'Prepare'; }
+function stageRank(task){ return STAGES[getStage(task)]?.rank ?? 3; }
 function priorityLabel(task){ return PRIORITIES[getPriority(task)]?.label || 'Important'; }
 function priorityRank(task){ return PRIORITIES[getPriority(task)]?.rank ?? 1; }
 function taskSort(a,b){
   const aBlocked = a.status==='blocked' ? 0 : 1;
   const bBlocked = b.status==='blocked' ? 0 : 1;
   if(aBlocked!==bBlocked) return aBlocked-bBlocked;
+  const as = stageRank(a), bs = stageRank(b);
+  if(as!==bs) return as-bs;
   const ap = priorityRank(a), bp = priorityRank(b);
   if(ap!==bp) return ap-bp;
   const ao = isOverdue(a.due_date)?0:1;
@@ -1111,6 +1196,26 @@ function readinessForTasks(tasks){
 function setOwnerFilter(owner){
   state.ownerFilter = owner;
   renderMain();
+}
+function setStage(eventId, stage){
+  state.selectedStage[eventId] = stage;
+  renderMain();
+}
+function stageStats(tasks, stage){
+  const stageTasks = tasks.filter(t=>getStage(t)===stage);
+  const open = stageTasks.filter(t=>t.status!=='done');
+  const blocked = stageTasks.filter(t=>t.status==='blocked');
+  const nonOpen = open.filter(t=>getPriority(t)==='non_negotiable');
+  let stateName = 'complete';
+  if(blocked.length) stateName = 'blocked';
+  else if(nonOpen.length || open.length) stateName = 'attention';
+  return { total: stageTasks.length, open: open.length, blocked: blocked.length, nonOpen: nonOpen.length, stateName };
+}
+function currentStageForTasks(tasks){
+  for(const stage of STAGE_KEYS){
+    if(stageStats(tasks, stage).open > 0) return stage;
+  }
+  return 'review';
 }
 
 // ── NAVIGATION ──
@@ -1164,252 +1269,207 @@ function renderMain(){
 // ── DASHBOARD ──
 function renderDashboard(){
   let allTasks = [];
-  let committedFinance=0, targetRevenue=0;
-  const readinessCards = [];
+  const eventCards = [];
 
   for(const ev of state.events){
     const wid = state.currentWeek[ev.id];
-    if(wid){
-      const tasks = state.tasks[wid]||[];
-      const finance = state.finance[wid]||[];
-      const readiness = readinessForTasks(tasks);
-      allTasks = allTasks.concat(tasks.map(t=>({...t, eventName: ev.name, eventDay: ev.day_of_week, weekId: wid})));
-      committedFinance += finance
-        .filter(f=>f.payment_status!=='paid')
-        .reduce((sum,f)=>sum+(Number(f.amount)||0),0);
-      targetRevenue += (Number(ev.avg_spend_target)||0) * (Number(ev.capacity)||0);
-      readinessCards.push(`
-        <div class="readiness-card ${readiness.status}">
-          <div class="readiness-label">${ev.name}</div>
-          <div class="readiness-value ${readiness.status}">${readiness.label}</div>
-          <div class="readiness-note">Non-Negotiables ${readiness.nonDone}/${readiness.nonTotal} complete | ${readiness.blockedTotal} blocked</div>
-        </div>`);
-    }
+    if(!wid) continue;
+    const week = (state.weeks[ev.id]||[]).find(w=>w.id===wid);
+    const tasks = state.tasks[wid]||[];
+    const readiness = readinessForTasks(tasks);
+    const currentStage = state.selectedStage[ev.id] || currentStageForTasks(tasks);
+    const stage = STAGES[currentStage] || STAGES.prepare;
+    const nonOpen = tasks.filter(t=>getPriority(t)==='non_negotiable' && t.status!=='done').length;
+    const blocked = tasks.filter(t=>t.status==='blocked').length;
+    const nextDue = tasks.filter(t=>t.status!=='done' && t.due_date).sort((a,b)=>a.due_date.localeCompare(b.due_date))[0];
+    allTasks = allTasks.concat(tasks.map(t=>({...t, eventName:ev.name, eventId:ev.id, weekId:wid})));
+    eventCards.push(`
+      <div class="event-journey-card">
+        <div class="event-card-top">
+          <div class="event-card-title">${ev.name}</div>
+          <div class="event-card-date">${week?.week_label || week?.week_date || ev.day_of_week}</div>
+        </div>
+        <div class="event-card-stage">Stage ${stage.rank+1} of 6: ${stage.label}</div>
+        <div class="event-card-note">${readiness.label} | ${nonOpen} non-negotiable open | ${blocked} blocked${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
+        <button class="btn btn-gold btn-sm" onclick="switchTab('${ev.day_of_week==='Monday'?'listening':'jazz'}')">Open Journey</button>
+      </div>`);
   }
 
-  const owner = state.ownerFilter || 'All';
-  const visibleTasks = allTasks.filter(t=>ownerMatches(t, owner));
-  const openTasks = visibleTasks.filter(t=>t.status!=='done').sort(taskSort);
-  const nonOpen = visibleTasks.filter(t=>getPriority(t)==='non_negotiable' && t.status!=='done');
-  const blocked = visibleTasks.filter(t=>t.status==='blocked');
-  const dueToday = visibleTasks.filter(t=>t.status!=='done' && isDueToday(t.due_date));
-  const overdue = visibleTasks.filter(t=>t.status!=='done' && isOverdue(t.due_date));
-  const myTasks = owner==='All' ? openTasks.length : visibleTasks.filter(t=>t.status!=='done' && t.assigned_to===owner).length;
-  const financeRatio = targetRevenue ? Math.round(committedFinance/targetRevenue*100) : 0;
-
-  const ownerChips = ['All', ...TEAM].map(name=>
-    `<button class="filter-chip ${owner===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
-  ).join('');
-
-  const rows = openTasks.length===0
-    ? '<tr><td colspan="7"><div class="empty-state">Nothing open for this view.</div></td></tr>'
-    : openTasks.map(t=>{
-        const over = t.status!=='done' && isOverdue(t.due_date);
-        const p = getPriority(t);
-        return `<tr class="${over?'overdue':''}">
-          <td><div class="task-name">${t.title}</div></td>
-          <td><span class="priority-pill ${p}">${priorityLabel(t)}</span></td>
-          <td><span class="track-tag">${TRACKS[t.track]?.label||t.track}</span></td>
-          <td>${t.eventName}</td>
-          <td>${t.assigned_to ? `<div class="task-member"><span class="member-dot">${initials(t.assigned_to)}</span>${t.assigned_to}</div>` : '<span style="color:var(--text-light)">?</span>'}</td>
-          <td class="task-date ${over?'overdue':''}">${over?'<span class="overdue-flag">? OVERDUE</span> ':''}${fmtDate(t.due_date)}</td>
-          <td><span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span></td>
-        </tr>`;
-      }).join('');
-
-  const championTasks = allTasks
-    .filter(t=>t.status!=='done' && ['Manuel','Alessandro'].includes(t.champion))
+  const urgent = allTasks
+    .filter(t=>t.status!=='done' && (t.status==='blocked' || (getPriority(t)==='non_negotiable' && isOverdue(t.due_date)) || isDueToday(t.due_date)))
     .sort(taskSort)
     .slice(0,8);
-  const championRows = championTasks.length===0
-    ? '<tr><td colspan="6"><div class="empty-state">No open champion items for Manuel or Alessandro.</div></td></tr>'
-    : championTasks.map(t=>{
-        const p = getPriority(t);
-        return `<tr>
-          <td><div class="task-name">${t.title}</div></td>
-          <td><span class="priority-pill ${p}">${priorityLabel(t)}</span></td>
-          <td>${t.eventName}</td>
-          <td>${t.champion}</td>
-          <td>${fmtDate(t.due_date)}</td>
-          <td><span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span></td>
-        </tr>`;
-      }).join('');
+  const attention = urgent.length
+    ? urgent.map(t=>`
+      <div class="attention-card ${t.status==='blocked'?'blocked':''}">
+        <div>
+          <div class="attention-title">${t.title}</div>
+          <div class="attention-meta">${t.eventName} | ${stageLabel(getStage(t))} | ${priorityLabel(t)} | ${t.assigned_to||'Unassigned'} | ${fmtDate(t.due_date)}</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="switchTab('${t.eventName.includes('Listening')?'listening':'jazz'}')">Open</button>
+      </div>`).join('')
+    : '<div class="empty-state" style="background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)">No urgent action. Events are on track.</div>';
+
+  const ownerChips = ['All', ...TEAM].map(name=>
+    `<button class="filter-chip ${state.ownerFilter===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
+  ).join('');
 
   return `
   <div class="dashboard-header">
-    <div><div class="page-title">Command Centre</div><div class="page-sub">What needs attention now | ${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>
+    <div><div class="page-title">Home</div><div class="page-sub">Plan the journey to each event, one stage at a time.</div></div>
   </div>
-  <div class="owner-filter">${ownerChips}</div>
-  <div class="readiness-row">${readinessCards.join('')}</div>
-  <div class="stats-row">
-    <div class="stat-card"><div class="stat-label">Non-Negotiable Open</div><div class="stat-value ${nonOpen.length?'red':''}">${nonOpen.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value ${blocked.length?'red':''}">${blocked.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Due Today</div><div class="stat-value ${dueToday.length?'amber':''}">${dueToday.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-value ${overdue.length?'red':''}">${overdue.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${owner==='All'?'Open Tasks':'My Tasks'}</div><div class="stat-value">${myTasks}</div><div class="stat-note">Finance ${financeRatio}% | ${fmt(committedFinance)}</div></div>
-  </div>
-  <div class="section-header"><div class="section-title">Action List | ${owner}</div></div>
-  <table class="pipeline-table">
-    <thead><tr>
-      <th>Task</th><th>Priority</th><th>Track</th><th>Event</th><th>Owner</th><th>Due</th><th>Status</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="section-header" style="margin-top:28px"><div class="section-title">Champion Attention | Manuel / Alessandro</div></div>
-  <table class="pipeline-table">
-    <thead><tr>
-      <th>Task</th><th>Priority</th><th>Event</th><th>Champion</th><th>Due</th><th>Status</th>
-    </tr></thead>
-    <tbody>${championRows}</tbody>
-  </table>`;
+  <div class="section-header"><div class="section-title">Needs Attention</div></div>
+  <div class="attention-list">${attention}</div>
+  <div class="section-header"><div class="section-title">This Week</div></div>
+  <div class="home-card-grid">${eventCards.join('')}</div>
+  <div class="section-header"><div class="section-title">Show Work For</div></div>
+  <div class="owner-filter">${ownerChips}</div>`;
 }
 
-// ?? EVENT PAGE ??
+// EVENT PAGE
 function renderEventPage(ev){
   if(!ev) return '<div class="loading">Event not found</div>';
   const weeks = state.weeks[ev.id]||[];
   const wid = state.currentWeek[ev.id];
-
-  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date} ${w.status==='completed'?'✓':''}</option>`).join('');
-
+  const week = weeks.find(w=>w.id===wid);
+  const weekOptions = weeks.map(w=>`<option value="${w.id}" ${w.id===wid?'selected':''}>${w.week_label||w.week_date} ${w.status==='completed'?'?':''}</option>`).join('');
   const tasks = wid ? (state.tasks[wid]||[]) : [];
   const fin = wid ? (state.finance[wid]||[]) : [];
+  const targetRev = (Number(ev.avg_spend_target)||0) * (Number(ev.capacity)||0);
+  const committed = fin.reduce((s,f)=>s+(Number(f.amount)||0),0);
+  const readiness = readinessForTasks(tasks);
+  const selectedStage = state.selectedStage[ev.id] || currentStageForTasks(tasks);
+  state.selectedStage[ev.id] = selectedStage;
 
-  // build tracks
-  const tracksHTML = TRACK_KEYS.map(track=>{
-    const isFin = track==='finance';
-    const trackTasks = tasks.filter(t=>t.track===track).sort(taskSort);
-    const done = trackTasks.filter(t=>t.status==='done').length;
-    const pct = trackTasks.length ? Math.round(done/trackTasks.length*100) : 0;
-
-    let bodyHTML = '';
-    if(isFin){
-      bodyHTML = renderFinanceTrack(fin, wid, ev.id);
-    } else {
-      bodyHTML = `
-      <div class="task-row-header">
-        <span>Task</span><span>Priority</span><span>Assigned To</span><span>Champion</span><span>Due</span><span>Status</span><span></span>
-      </div>
-      ${trackTasks.length===0 ? '<div class="empty-state">No tasks yet — add one below.</div>' :
-        trackTasks.map(t=>renderTaskRow(t)).join('')}
-      ${wid ? renderAddTaskBar(track, wid, ev.id) : ''}`;
-    }
-
-    return `
-    <div class="track-block">
-      <div class="track-header" onclick="toggleTrack(this)">
-        <div class="track-header-left">
-          <span class="track-icon">${TRACKS[track].icon}</span>
-          <span class="track-title">${TRACKS[track].label}</span>
-          <span class="track-count">${isFin ? fin.length+' items' : done+'/'+trackTasks.length+' · '+pct+'%'}</span>
-        </div>
-        <span style="color:var(--text-light);font-size:12px">▾</span>
-      </div>
-      <div class="track-body">${bodyHTML}</div>
-    </div>`;
+  const stageButtons = STAGE_KEYS.map(stage=>{
+    const stats = stageStats(tasks, stage);
+    const active = selectedStage===stage ? 'active' : '';
+    return `<button class="journey-step ${active} ${stats.stateName}" onclick="setStage('${ev.id}','${stage}')">
+      <span class="journey-step-label">${STAGES[stage].label}</span>
+      <span class="journey-step-meta">${stats.open} open | ${stats.blocked} blocked</span>
+    </button>`;
   }).join('');
 
-  const targetRev = ev.avg_spend_target * ev.capacity;
-  const readiness = readinessForTasks(tasks);
+  const stageTasks = tasks
+    .filter(t=>getStage(t)===selectedStage)
+    .filter(t=>ownerMatches(t, state.ownerFilter || 'All'))
+    .sort(taskSort);
+  const prioritySections = Object.keys(PRIORITIES).map(priority=>{
+    const items = stageTasks.filter(t=>getPriority(t)===priority);
+    if(!items.length) return '';
+    return `<div class="priority-section">
+      <div class="priority-heading">${PRIORITIES[priority].label}</div>
+      ${items.map(t=>renderTaskRow(t)).join('')}
+    </div>`;
+  }).join('') || '<div class="empty-state">No tasks in this stage for the selected owner.</div>';
+
+  const ownerChips = ['All', ...TEAM].map(name=>
+    `<button class="filter-chip ${state.ownerFilter===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
+  ).join('');
 
   return `
   <div class="event-header">
     <div class="event-header-top">
       <div class="event-title-block">
-        <div class="event-eyebrow">Scala at Roberto's · ${ev.day_of_week}s</div>
+        <div class="event-eyebrow">Journey to event | ${ev.day_of_week}s</div>
         <h2>${ev.name}</h2>
-        <p>${ev.description||''}</p>
+        <p>${week?.week_label || week?.week_date || 'Select or create a week'} | Stage ${STAGES[selectedStage].rank+1} of 6: ${STAGES[selectedStage].label}</p>
       </div>
       <div class="event-kpis">
+        <div class="kpi"><div class="kpi-label">Readiness</div><div class="kpi-value">${readiness.label}</div></div>
         <div class="kpi"><div class="kpi-label">Target Covers</div><div class="kpi-value">${ev.capacity}</div></div>
-        <div class="kpi"><div class="kpi-label">Avg Spend</div><div class="kpi-value">AED ${ev.avg_spend_target}</div></div>
         <div class="kpi"><div class="kpi-label">Target Revenue</div><div class="kpi-value">${fmt(targetRev)}</div></div>
-        <div class="kpi"><div class="kpi-label">Entertainment</div><div class="kpi-value">AED ${ev.entertainment_cost?.toLocaleString()}</div></div>
+        <div class="kpi"><div class="kpi-label">Artist Budget</div><div class="kpi-value">${fmt(ev.entertainment_cost)}</div></div>
       </div>
-    </div>
-  </div>
-
-  <div class="readiness-row">
-    <div class="readiness-card ${readiness.status}">
-      <div class="readiness-label">Event Readiness</div>
-      <div class="readiness-value ${readiness.status}">${readiness.label}</div>
-      <div class="readiness-note">Non-Negotiables ${readiness.nonDone}/${readiness.nonTotal} complete | ${readiness.blockedTotal} blocked</div>
-    </div>
-    <div class="readiness-card">
-      <div class="readiness-label">Next Brief</div>
-      <div class="readiness-value">${fmt(targetRev)}</div>
-      <div class="readiness-note">${ev.capacity} covers | AED ${ev.avg_spend_target} average spend | AED ${ev.entertainment_cost?.toLocaleString()} entertainment</div>
     </div>
   </div>
 
   <div class="week-bar">
     <select class="week-select" onchange="selectWeek('${ev.id}', this.value)">
-      <option value="">— Select week —</option>
+      <option value="">Select week</option>
       ${weekOptions}
     </select>
     <button class="btn btn-gold" onclick="createNewWeek('${ev.id}')">+ Create Week</button>
-    ${wid ? `<button class="btn btn-outline" onclick="duplicateWeek('${ev.id}','${wid}')">⊕ Create Next Week</button>` : ''}
+    ${wid ? `<button class="btn btn-outline" onclick="duplicateWeek('${ev.id}','${wid}')">Create Next Week</button>` : ''}
+    <button class="btn btn-outline" onclick="openEditEvent('${ev.id}')">Edit Targets / Budget</button>
     ${wid ? `<button class="btn btn-outline btn-sm" onclick="openWeekActuals('${wid}')">Enter Results</button>` : ''}
   </div>
 
-  ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a new week to get started.</div>' :
-    `<div class="tracks-grid">${tracksHTML}</div>`}`;
+  ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
+    <div class="journey-strip">${stageButtons}</div>
+    <div class="owner-filter">${ownerChips}</div>
+    <div class="stage-panel">
+      <div class="stage-heading">
+        <div>
+          <div class="stage-title">${STAGES[selectedStage].label}</div>
+          <div class="stage-sub">Focus only on this stage. Finish non-negotiables first, then important, then enhancements.</div>
+        </div>
+        <span class="readiness-value ${readiness.status}" style="font-size:20px">${readiness.label}</span>
+      </div>
+      ${prioritySections}
+      ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
+    </div>
+    <div class="budget-panel">
+      <div class="section-header" style="margin-bottom:8px"><div class="section-title">Budget & Artist Costs</div></div>
+      <div class="budget-grid">
+        <div class="budget-item"><div class="budget-label">Target Revenue</div><div class="budget-value">${fmt(targetRev)}</div></div>
+        <div class="budget-item"><div class="budget-label">Artist Budget</div><div class="budget-value">${fmt(ev.entertainment_cost)}</div></div>
+        <div class="budget-item"><div class="budget-label">Committed Costs</div><div class="budget-value">${fmt(committed)}</div></div>
+        <div class="budget-item"><div class="budget-label">Cost vs Target</div><div class="budget-value">${targetRev ? Math.round(committed/targetRev*100) : 0}%</div></div>
+      </div>
+      ${renderFinanceTrack(fin, wid, ev.id)}
+    </div>`}`;
 }
 
 function renderTaskRow(t){
   const over = t.status!=='done' && isOverdue(t.due_date);
   const priority = getPriority(t);
+  const blocked = t.status==='blocked';
   return `
-  <div class="task-row ${over?'overdue':''}" data-task-id="${t.id}">
-    <div class="task-title-cell">
-      <div class="task-name editable" onclick="openEditTask('${t.id}')">${t.title}</div>
-      ${t.notes ? `<div class="task-notes-preview">${t.notes}</div>` : ''}
-    </div>
-    <div><span class="priority-pill ${priority}">${priorityLabel(t)}</span></div>
-    <div class="task-member">
-      ${t.assigned_to ? `<span class="member-dot">${initials(t.assigned_to)}</span>${t.assigned_to}` : '<span style="color:var(--text-light);font-size:11px">Unassigned</span>'}
-    </div>
-    <div class="task-member">
-      ${t.champion ? `<span class="member-dot" style="border-color:var(--vino)">${initials(t.champion)}</span>${t.champion}` : '—'}
-    </div>
-    <div class="task-date ${over?'overdue':''}">${over?'⚠ ':''}${fmtDate(t.due_date)}</div>
+  <div class="task-card ${blocked?'blocked':''} ${over?'overdue':''}" data-task-id="${t.id}">
     <div>
-      <select class="status-select" data-task-id="${t.id}" onchange="updateTaskStatus('${t.id}',this.value)">
-        <option value="not_started" ${t.status==='not_started'?'selected':''}>Not Started</option>
-        <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
-        <option value="done" ${t.status==='done'?'selected':''}>Done</option>
-        <option value="blocked" ${t.status==='blocked'?'selected':''}>Blocked</option>
-      </select>
+      <div class="task-card-title editable" onclick="openEditTask('${t.id}')">${t.title}</div>
+      <div class="task-card-meta">
+        <span class="priority-pill ${priority}">${priorityLabel(t)}</span>
+        <span>${t.assigned_to || 'Unassigned'}</span>
+        <span>Champion: ${t.champion || '-'}</span>
+        <span>Due: ${fmtDate(t.due_date)}</span>
+        <span class="status-pill ${t.status}">${t.status.replace('_',' ')}</span>
+      </div>
+      ${t.notes ? `<div class="task-notes-preview" style="margin-top:6px">${t.notes}</div>` : ''}
     </div>
     <div class="task-actions">
       ${t.status==='not_started' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','in_progress')">Start</button>` : ''}
       ${t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','done')">Done</button>` : ''}
       ${t.status!=='blocked' && t.status!=='done' ? `<button class="quick-action" onclick="updateTaskStatus('${t.id}','blocked')">Block</button>` : ''}
-      <button class="icon-btn" onclick="openEditTask('${t.id}')" title="Edit">?</button>
-      <button class="icon-btn" onclick="deleteTask('${t.id}')" title="Delete" style="color:rgba(192,57,43,0.5)">?</button>
+      <button class="quick-action" onclick="openEditTask('${t.id}')">More</button>
     </div>
   </div>`;
 }
 
-function renderAddTaskBar(track, weekId, eventId){
+function renderAddTaskBar(track, weekId, eventId, forcedStage=null){
+  const key = forcedStage || track;
   return `
   <div class="add-task-bar">
-    <input type="text" placeholder="Add task..." id="new-task-${track}" onkeydown="if(event.key==='Enter') addTask('${track}','${weekId}','${eventId}')" style="flex:2;min-width:180px">
-    <select id="new-assign-${track}">
+    <input type="text" placeholder="Add task..." id="new-task-${key}" onkeydown="if(event.key==='Enter') addTask('${key}','${weekId}','${eventId}')" style="flex:2;min-width:180px">
+    <select id="new-assign-${key}">
       <option value="">Assigned to...</option>
       ${TEAM.map(m=>`<option value="${m}">${m}</option>`).join('')}
     </select>
-    <select id="new-champion-${track}">
+    <select id="new-champion-${key}">
       <option value="">Champion...</option>
       ${CHAMPIONS.map(m=>`<option value="${m}">${m}</option>`).join('')}
     </select>
-    <select id="new-priority-${track}">
+    <select id="new-priority-${key}">
       <option value="non_negotiable">Non-Negotiable</option>
       <option value="important" selected>Important</option>
       <option value="enhancement">Enhancement</option>
     </select>
-    <input type="date" id="new-date-${track}" style="flex:0;min-width:130px">
-    <button class="btn btn-gold btn-sm" onclick="addTask('${track}','${weekId}','${eventId}')">Add</button>
+    <select id="new-stage-${key}">
+      ${STAGE_KEYS.map(stage=>`<option value="${stage}" ${(forcedStage||inferStage({track}))===stage?'selected':''}>${STAGES[stage].label}</option>`).join('')}
+    </select>
+    <input type="date" id="new-date-${key}" style="flex:0;min-width:130px">
+    <button class="btn btn-gold btn-sm" onclick="addTask('${key}','${weekId}','${eventId}')">Add</button>
   </div>`;
 }
 
@@ -1514,7 +1574,7 @@ async function duplicateWeek(eventId, sourceWeekId){
       event_id: eventId,
       track: t.track,
       title: t.title,
-      description: taskDescription(getPriority(t)),
+      description: taskDescription(getPriority(t), getStage(t)),
       assigned_to: t.assigned_to,
       champion: t.champion,
       status: 'not_started',
@@ -1559,35 +1619,35 @@ async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
   const isJazz = eventName.includes('Jazz');
   const defaults = [
     // Marketing
-    { track:'marketing', title:'Confirm launch date and time with Nicole', priority:'non_negotiable', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
-    { track:'marketing', title:'Send artist stage name to Nicole', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
-    { track:'marketing', title:'Send hi-res artist image via WeTransfer to Nicole', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
-    { track:'marketing', title:'Send audio/reference music links to Nicole', assigned_to:'Manuel', champion:'Alessandro', sort_order:4 },
-    { track:'marketing', title:'Confirm 3 business days lead time met', assigned_to:'Nicole', champion:'Francesco', sort_order:5 },
-    { track:'marketing', title:'Social media live', assigned_to:'Nicole', champion:'Francesco', sort_order:6 },
-    { track:'marketing', title:'Website updated', assigned_to:'Nicole', champion:'Francesco', sort_order:7 },
+    { track:'marketing', title:'Confirm launch date and time with Nicole', priority:'non_negotiable', stage:'plan', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
+    { track:'marketing', title:'Send artist stage name to Nicole', stage:'promote', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
+    { track:'marketing', title:'Send hi-res artist image via WeTransfer to Nicole', stage:'promote', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
+    { track:'marketing', title:'Send audio/reference music links to Nicole', stage:'promote', assigned_to:'Manuel', champion:'Alessandro', sort_order:4 },
+    { track:'marketing', title:'Confirm 3 business days lead time met', stage:'promote', assigned_to:'Nicole', champion:'Francesco', sort_order:5 },
+    { track:'marketing', title:'Social media live', stage:'promote', assigned_to:'Nicole', champion:'Francesco', sort_order:6 },
+    { track:'marketing', title:'Website updated', stage:'promote', assigned_to:'Nicole', champion:'Francesco', sort_order:7 },
     // Champion
-    { track:'champion', title: isJazz ? 'Confirm artist rotation (Ryan Gibbs / Salt N Pepper / Jazz Trio)' : 'Confirm vinyl selector for the week', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
-    { track:'champion', title:'Artist briefed on format and timing', priority:'non_negotiable', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
-    { track:'champion', title:'Technical rider received and reviewed', priority:'non_negotiable', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
+    { track:'champion', title: isJazz ? 'Confirm artist rotation (Ryan Gibbs / Salt N Pepper / Jazz Trio)' : 'Confirm vinyl selector for the week', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
+    { track:'champion', title:'Artist briefed on format and timing', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
+    { track:'champion', title:'Technical rider received and reviewed', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:3 },
     // Technical
-    { track:'technical', title:'Sound check scheduled', priority:'non_negotiable', assigned_to:'Danilo', champion:'Manuel', sort_order:1 },
-    { track:'technical', title:'Equipment confirmed and tested', priority:'non_negotiable', assigned_to:'Danilo', champion:'Manuel', sort_order:2 },
-    { track:'technical', title:'Stage setup briefed', assigned_to:'Danilo', champion:'Manuel', sort_order:3 },
-    { track:'technical', title:'Lighting briefed for atmosphere', assigned_to:'Danilo', champion:'Manuel', sort_order:4 },
+    { track:'technical', title:'Sound check scheduled', priority:'non_negotiable', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:1 },
+    { track:'technical', title:'Equipment confirmed and tested', priority:'non_negotiable', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:2 },
+    { track:'technical', title:'Stage setup briefed', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:3 },
+    { track:'technical', title:'Lighting briefed for atmosphere', stage:'prepare', assigned_to:'Danilo', champion:'Manuel', sort_order:4 },
     // Guest & Revenue
-    { track:'guest_revenue', title:'Covers target confirmed (50 guests)', priority:'non_negotiable', assigned_to:'Alessandro', champion:'Francesco', sort_order:1 },
-    { track:'guest_revenue', title:'Invitations sent', assigned_to:'Alessandro', champion:'Francesco', sort_order:2 },
-    { track:'guest_revenue', title:'Ladies/atmosphere confirmed', priority:'enhancement', assigned_to:'Alessandro', champion:'Manuel', sort_order:3 },
-    { track:'guest_revenue', title:'Reservations tracking updated', assigned_to:'Alessandro', champion:'Francesco', sort_order:4 },
+    { track:'guest_revenue', title:'Covers target confirmed (50 guests)', priority:'non_negotiable', stage:'plan', assigned_to:'Alessandro', champion:'Francesco', sort_order:1 },
+    { track:'guest_revenue', title:'Invitations sent', stage:'promote', assigned_to:'Alessandro', champion:'Francesco', sort_order:2 },
+    { track:'guest_revenue', title:'Ladies/atmosphere confirmed', priority:'enhancement', stage:'prepare', assigned_to:'Alessandro', champion:'Manuel', sort_order:3 },
+    { track:'guest_revenue', title:'Reservations tracking updated', stage:'prepare', assigned_to:'Alessandro', champion:'Francesco', sort_order:4 },
     // Service
-    { track:'service', title:'Sequence of service briefed to team', priority:'non_negotiable', assigned_to:'Manuel', champion:'Francesco', sort_order:1 },
-    { track:'service', title:'Service leader assigned for the night', priority:'non_negotiable', assigned_to:'Manuel', champion:'Francesco', sort_order:2 },
-    { track:'service', title:'Casuals confirmed if required', priority:'enhancement', assigned_to:'Manuel', champion:'Francesco', sort_order:3 },
-    { track:'service', title:'Sommelier briefed on pairing narrative', assigned_to:'Manuel', champion:'Francesco', sort_order:4 },
+    { track:'service', title:'Sequence of service briefed to team', priority:'non_negotiable', stage:'execute', assigned_to:'Manuel', champion:'Francesco', sort_order:1 },
+    { track:'service', title:'Service leader assigned for the night', priority:'non_negotiable', stage:'execute', assigned_to:'Manuel', champion:'Francesco', sort_order:2 },
+    { track:'service', title:'Casuals confirmed if required', priority:'enhancement', stage:'prepare', assigned_to:'Manuel', champion:'Francesco', sort_order:3 },
+    { track:'service', title:'Sommelier briefed on pairing narrative', stage:'execute', assigned_to:'Manuel', champion:'Francesco', sort_order:4 },
     // Documents
-    { track:'documents', title:'Contract uploaded', priority:'non_negotiable', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
-    { track:'documents', title:'Permit/visa check completed', priority:'non_negotiable', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
+    { track:'documents', title:'Contract uploaded', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
+    { track:'documents', title:'Permit/visa check completed', priority:'non_negotiable', stage:'confirm', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
   ];
 
   const rows = defaults.map(d=>({
@@ -1596,7 +1656,7 @@ async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
     event_id: eventId,
     status:'not_started',
     due_date: isoDateFromOffset(eventDate, DUE_BY_TRACK[d.track] ?? -1),
-    description: taskDescription(d.priority || inferPriority(d))
+    description: taskDescription(d.priority || inferPriority(d), d.stage || inferStage(d))
   }));
   await sb.from('tasks').insert(rows);
 }
@@ -1608,17 +1668,21 @@ async function addTask(track, weekId, eventId){
   const champEl = document.getElementById('new-champion-'+track);
   const dateEl = document.getElementById('new-date-'+track);
   const priorityEl = document.getElementById('new-priority-'+track);
+  const stageEl = document.getElementById('new-stage-'+track);
   const title = titleEl?.value?.trim();
   if(!title){ toast('Please enter a task name',true); return; }
+  const stage = stageEl?.value || (track.startsWith('stage_') ? track.replace('stage_','') : inferStage({track, title}));
+  const trackByStage = { plan:'guest_revenue', confirm:'champion', promote:'marketing', prepare:'technical', execute:'service', review:'documents' };
+  const dbTrack = track.startsWith('stage_') ? (trackByStage[stage] || 'champion') : track;
 
   const { data, error } = await sb.from('tasks').insert({
-    week_id: weekId, event_id: eventId, track,
+    week_id: weekId, event_id: eventId, track: dbTrack,
     title, assigned_to: assignEl?.value||null,
     champion: champEl?.value||null,
-    description: taskDescription(priorityEl?.value||'important'),
+    description: taskDescription(priorityEl?.value||'important', stage),
     due_date: dateEl?.value||null,
     status: 'not_started',
-    sort_order: (state.tasks[weekId]||[]).filter(t=>t.track===track).length+1
+    sort_order: (state.tasks[weekId]||[]).filter(t=>t.track===dbTrack).length+1
   }).select().single();
 
   if(error){ toast('Error adding task',true); return; }
@@ -1703,6 +1767,12 @@ function openEditTask(taskId){
       </select>
     </div>
     <div class="form-group">
+      <label class="form-label">Journey Stage</label>
+      <select class="form-select" id="edit-stage">
+        ${STAGE_KEYS.map(stage=>`<option value="${stage}" ${getStage(task)===stage?'selected':''}>${STAGES[stage].label}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea class="form-textarea" id="edit-notes">${task.notes||''}</textarea>
     </div>
@@ -1726,7 +1796,7 @@ async function saveEditTask(taskId){
     due_date: document.getElementById('edit-date').value||null,
     status: document.getElementById('edit-status').value,
     notes: document.getElementById('edit-notes').value||null,
-    description: taskDescription(document.getElementById('edit-priority').value),
+    description: taskDescription(document.getElementById('edit-priority').value, document.getElementById('edit-stage').value),
     doc_url: document.getElementById('edit-doc').value||null,
     updated_at: new Date().toISOString()
   };
@@ -1929,6 +1999,65 @@ async function deleteFinance(finId){
 }
 
 // ── WEEK ACTUALS MODAL ──
+
+// EVENT TARGETS MODAL
+function openEditEvent(eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!ev) return;
+  document.getElementById('modal-title').textContent = 'Edit Targets / Budget';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Event Name</label>
+      <input class="form-input" id="event-name" value="${ev.name||''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="event-desc">${ev.description||''}</textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Target Covers</label>
+        <input class="form-input" id="event-capacity" type="number" value="${ev.capacity||0}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Average Spend Target (AED)</label>
+        <input class="form-input" id="event-avg" type="number" value="${ev.avg_spend_target||0}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Artist / Entertainment Budget (AED)</label>
+        <input class="form-input" id="event-entertainment" type="number" value="${ev.entertainment_cost||0}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Event Day</label>
+        <select class="form-select" id="event-day">
+          ${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=>`<option value="${d}" ${ev.day_of_week===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-gold" onclick="saveEditEvent('${eventId}')">Save Targets</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function saveEditEvent(eventId){
+  const updates = {
+    name: document.getElementById('event-name').value.trim(),
+    description: document.getElementById('event-desc').value||null,
+    capacity: parseInt(document.getElementById('event-capacity').value)||0,
+    avg_spend_target: parseFloat(document.getElementById('event-avg').value)||0,
+    entertainment_cost: parseFloat(document.getElementById('event-entertainment').value)||0,
+    day_of_week: document.getElementById('event-day').value
+  };
+  const { error } = await sb.from('events').update(updates).eq('id',eventId);
+  if(error){ toast('Error saving event targets',true); return; }
+  const idx = state.events.findIndex(e=>e.id===eventId);
+  if(idx>-1) state.events[idx] = {...state.events[idx], ...updates};
+  closeModal(); toast('Targets saved'); renderMain();
+}
+
 function openWeekActuals(weekId){
   let week = null;
   for(const eid in state.weeks){
