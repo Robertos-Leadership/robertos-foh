@@ -1910,7 +1910,7 @@ function renderEventPage(ev){
   ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
     <div class="journey-strip">${stageButtons}</div>
     <div class="owner-filter">${ownerChips}</div>
-    <div class="stage-panel">
+    ${selectedStage==='review' ? '' : `<div class="stage-panel">
       <div class="stage-heading">
         <div>
           <div class="stage-title">${STAGES[selectedStage].label}</div>
@@ -1919,8 +1919,8 @@ function renderEventPage(ev){
         <span class="readiness-value ${readiness.status}" style="font-size:20px">${readiness.label}</span>
       </div>
       ${prioritySections}
-      ${selectedStage==='review' ? '' : renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
-    </div>
+      ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
+    </div>`}
     ${reviewPanel}`}`;
 }
 
