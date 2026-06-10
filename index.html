@@ -861,6 +861,24 @@
     text-transform: uppercase;
     color: var(--text-light);
   }
+  .report-row {
+    display:grid;
+    grid-template-columns:1.4fr repeat(6, 1fr);
+    gap:10px;
+    align-items:center;
+    padding:11px 0;
+    border-bottom:1px solid var(--border);
+    font-size:11px;
+    color:var(--text-mid);
+  }
+  .report-row.header {
+    font-size:9px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--text-light);
+  }
+  .report-row strong { color:var(--text); font-weight:600; }
+  .report-note { font-size:11px; color:var(--text-light); line-height:1.5; margin-top:12px; }
   .amount-cell { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--vino); }
   .contract-pill {
     font-size: 9px;
@@ -893,6 +911,7 @@
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(44,24,16,0.2);
   }
+  .modal.wide { width: min(940px, 95vw); }
   .modal-header {
     padding: 20px 24px;
     border-bottom: 1px solid var(--border);
@@ -1510,7 +1529,7 @@ function renderEventPage(ev){
         <span class="readiness-value ${readiness.status}" style="font-size:20px">${readiness.label}</span>
       </div>
       ${prioritySections}
-      ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
+      ${selectedStage==='review' ? '' : renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
     </div>
     ${reviewPanel}`}`;
 }
@@ -1623,6 +1642,7 @@ function renderReviewPanel(ev, week, tasks, fin, weekId){
       <div class="review-actions">
         <button class="btn btn-gold btn-sm" onclick="openWeekActuals('${weekId}')">Enter Results</button>
         <button class="btn btn-outline btn-sm" onclick="openAddFinance('${weekId}','${ev.id}')">Add Expense</button>
+        <button class="btn btn-outline btn-sm" onclick="openWeekReport('${ev.id}')">Report</button>
       </div>
       <div class="review-grid">
         <div class="review-card ${revenueClass}">
@@ -1695,6 +1715,52 @@ function renderFinanceTrack(items, weekId, eventId){
 }
 
 // ── TOGGLE TRACK ──
+function openWeekReport(eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!ev) return;
+  const weeks = (state.weeks[eventId]||[]).slice().sort((a,b)=>(a.week_date||'').localeCompare(b.week_date||''));
+  const targetRev = (Number(ev.capacity)||0) * (Number(ev.avg_spend_target)||0);
+  const rows = weeks.map(w=>{
+    const tasks = state.tasks[w.id] || [];
+    const fin = state.finance[w.id] || [];
+    const covers = Number(w.covers_actual)||0;
+    const savedRevenue = Number(w.revenue_actual)||0;
+    const savedAvg = Number(w.avg_spend_actual)||0;
+    const revenue = savedRevenue || (covers && savedAvg ? covers * savedAvg : 0);
+    const avg = savedAvg || (covers && revenue ? revenue / covers : 0);
+    const expenses = fin.reduce((s,f)=>s+(Number(f.amount)||0),0);
+    const net = revenue - expenses;
+    const done = tasks.filter(t=>t.status==='done').length;
+    const pct = tasks.length ? Math.round(done/tasks.length*100) : 0;
+    return `
+      <div class="report-row">
+        <strong>${w.week_label || w.week_date}</strong>
+        <span>${covers || '-'}</span>
+        <span>${revenue ? fmt(revenue) : '-'}</span>
+        <span>${avg ? fmt(avg) : '-'}</span>
+        <span>${fmt(expenses)}</span>
+        <span>${revenue ? fmt(net) : '-'}</span>
+        <span>${done}/${tasks.length} (${pct}%)</span>
+      </div>`;
+  }).join('') || '<div class="empty-state">No weeks to compare yet.</div>';
+
+  document.getElementById('modal-title').textContent = ev.name + ' Report';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="review-grid" style="margin-top:0">
+      <div class="review-card"><div class="review-label">Target Revenue</div><div class="review-value">${fmt(targetRev)}</div></div>
+      <div class="review-card"><div class="review-label">Weeks</div><div class="review-value">${weeks.length}</div></div>
+    </div>
+    <div class="report-row header">
+      <span>Week</span><span>Covers</span><span>Revenue</span><span>Avg Spend</span><span>Expenses</span><span>Net</span><span>Tasks</span>
+    </div>
+    ${rows}
+    <div class="report-note">Use Enter Results in each Review section to add covers and revenue. Expenses are pulled from the expense list for each week.</div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-gold" onclick="closeModal()">Done</button>`;
+  document.getElementById('modal').classList.add('wide');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
 function toggleTrack(header){
   const body = header.nextElementSibling;
   const arrow = header.querySelector('span:last-child');
@@ -2327,6 +2393,7 @@ async function saveActuals(weekId){
 // ── MODAL ──
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
+  document.getElementById('modal').classList.remove('wide');
 }
 function closeModalOnOverlay(e){
   if(e.target===document.getElementById('modal-overlay')) closeModal();
