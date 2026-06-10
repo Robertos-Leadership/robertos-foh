@@ -274,7 +274,7 @@
   /* stats row */
   .stats-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
     margin-bottom: 28px;
   }
@@ -286,6 +286,7 @@
   }
   .stat-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-light); margin-bottom: 8px; }
   .stat-value { font-family: 'Playfair Display', serif; font-size: 28px; color: var(--text); }
+  .stat-note { font-size: 10px; color: var(--text-light); margin-top: 4px; line-height: 1.4; }
   .stat-value.red { color: var(--red); }
   .stat-value.amber { color: var(--amber); }
   .stat-value.green { color: var(--green); }
@@ -346,6 +347,31 @@
   .status-pill.in_progress { background: rgba(212,135,10,0.1); color: var(--amber); }
   .status-pill.done { background: rgba(45,122,79,0.1); color: var(--green); }
   .status-pill.blocked { background: rgba(192,57,43,0.1); color: var(--red); }
+
+  .status-select {
+    width: 100%;
+    min-width: 116px;
+    appearance: none;
+    background-color: var(--surface2);
+    background-image: linear-gradient(45deg, transparent 50%, var(--vino) 50%), linear-gradient(135deg, var(--vino) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    outline: none;
+    padding: 6px 26px 6px 8px;
+    text-transform: uppercase;
+  }
+  .status-select:hover { border-color: var(--border-strong); background-color: var(--surface); }
+  .status-select:focus { border-color: var(--vino); box-shadow: 0 0 0 2px rgba(107,31,42,0.08); }
+  .status-select option { background: var(--surface); color: var(--text); text-transform: none; }
 
   .overdue-flag {
     display: inline-flex;
@@ -862,6 +888,12 @@ function initials(name){ return name ? name.slice(0,2).toUpperCase() : '?'; }
 function fmt(n){ return 'AED '+(n||0).toLocaleString(); }
 function fmtDate(d){ if(!d) return '—'; const x=new Date(d); return x.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
 function isOverdue(d){ if(!d) return false; return new Date(d) < new Date() && true; }
+function isoDateFromOffset(dateStr, offsetDays){
+  if(!dateStr) return null;
+  const d = new Date(dateStr);
+  d.setDate(d.getDate()+offsetDays);
+  return d.toISOString().split('T')[0];
+}
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const now = new Date(); now.setHours(0,0,0,0);
@@ -938,20 +970,27 @@ function renderDashboard(){
   // collect all tasks across current weeks
   let allTasks = [];
   let totalTasks=0, doneTasks=0, overdueCount=0, blockedCount=0;
+  let committedFinance=0, targetRevenue=0;
 
   for(const ev of state.events){
     const wid = state.currentWeek[ev.id];
     if(wid){
       const tasks = state.tasks[wid]||[];
+      const finance = state.finance[wid]||[];
       allTasks = allTasks.concat(tasks.map(t=>({...t, eventName: ev.name, eventDay: ev.day_of_week})));
       totalTasks += tasks.length;
       doneTasks += tasks.filter(t=>t.status==='done').length;
       overdueCount += tasks.filter(t=>t.status!=='done' && isOverdue(t.due_date)).length;
       blockedCount += tasks.filter(t=>t.status==='blocked').length;
+      committedFinance += finance
+        .filter(f=>f.payment_status!=='paid')
+        .reduce((sum,f)=>sum+(Number(f.amount)||0),0);
+      targetRevenue += (Number(ev.avg_spend_target)||0) * (Number(ev.capacity)||0);
     }
   }
 
   const pct = totalTasks ? Math.round(doneTasks/totalTasks*100) : 0;
+  const financeRatio = targetRevenue ? Math.round(committedFinance/targetRevenue*100) : 0;
 
   // countdowns
   const cdCards = state.events.map(ev=>{
@@ -1008,6 +1047,7 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Complete</div><div class="stat-value green">${pct}%</div></div>
     <div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-value ${overdueCount>0?'red':''}">${overdueCount}</div></div>
     <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value ${blockedCount>0?'amber':''}">${blockedCount}</div></div>
+    <div class="stat-card"><div class="stat-label">Finance</div><div class="stat-value ${financeRatio>25?'amber':''}">${financeRatio}%</div><div class="stat-note">${fmt(committedFinance)} / ${fmt(targetRevenue)}</div></div>
   </div>
   <div class="section-header"><div class="section-title">Pipeline · Open Tasks</div></div>
   <table class="pipeline-table">
@@ -1112,7 +1152,7 @@ function renderTaskRow(t){
     </div>
     <div class="task-date ${over?'overdue':''}">${over?'⚠ ':''}${fmtDate(t.due_date)}</div>
     <div>
-      <select class="status-select" data-task-id="${t.id}" onchange="updateTaskStatus('${t.id}',this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:11px;padding:4px 8px;font-family:Inter,sans-serif;cursor:pointer;outline:none;">
+      <select class="status-select" data-task-id="${t.id}" onchange="updateTaskStatus('${t.id}',this.value)">
         <option value="not_started" ${t.status==='not_started'?'selected':''}>Not Started</option>
         <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
         <option value="done" ${t.status==='done'?'selected':''}>Done</option>
@@ -1205,7 +1245,7 @@ async function createNewWeek(eventId){
   if(error){ toast('Error creating week',true); return; }
 
   // seed default tasks
-  await seedDefaultTasks(data.id, eventId, ev.name);
+  await seedDefaultTasks(data.id, eventId, ev.name, data.week_date);
 
   if(!state.weeks[eventId]) state.weeks[eventId]=[];
   state.weeks[eventId].unshift(data);
@@ -1285,8 +1325,16 @@ async function duplicateWeek(eventId, sourceWeekId){
 }
 
 // ── SEED DEFAULT TASKS ──
-async function seedDefaultTasks(weekId, eventId, eventName){
+async function seedDefaultTasks(weekId, eventId, eventName, eventDate){
   const isJazz = eventName.includes('Jazz');
+  const dueByTrack = {
+    marketing: -4,
+    champion: -3,
+    technical: -1,
+    guest_revenue: -2,
+    service: -1,
+    documents: -3
+  };
   const defaults = [
     // Marketing
     { track:'marketing', title:'Confirm launch date and time with Nicole', assigned_to:'Manuel', champion:'Alessandro', sort_order:1 },
@@ -1320,7 +1368,13 @@ async function seedDefaultTasks(weekId, eventId, eventName){
     { track:'documents', title:'Permit/visa check completed', assigned_to:'Manuel', champion:'Alessandro', sort_order:2 },
   ];
 
-  const rows = defaults.map(d=>({ ...d, week_id: weekId, event_id: eventId, status:'not_started' }));
+  const rows = defaults.map(d=>({
+    ...d,
+    week_id: weekId,
+    event_id: eventId,
+    status:'not_started',
+    due_date: isoDateFromOffset(eventDate, dueByTrack[d.track] ?? -1)
+  }));
   await sb.from('tasks').insert(rows);
 }
 
