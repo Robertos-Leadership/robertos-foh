@@ -1131,7 +1131,7 @@ let state = {
   events: [],
   weeks: {},      // eventId -> array of weeks
   tasks: {},      // weekId -> array of tasks
-  finance: {},    // weekId -> array of finance items
+  finance: {},    // weekId -> array of expenses
   currentWeek: {},// eventId -> weekId
   currentTab: 'dashboard',
   ownerFilter: 'All',
@@ -1665,7 +1665,7 @@ function renderReviewPanel(ev, week, tasks, fin, weekId){
 function renderFinanceTrack(items, weekId, eventId){
   const total = items.reduce((s,f)=>s+(f.amount||0),0);
   const rows = items.length===0
-    ? '<div class="empty-state">No finance items yet.</div>'
+    ? '<div class="empty-state">No expenses yet.</div>'
     : items.map(f=>`
       <div class="finance-row" data-fin-id="${f.id}">
         <div>
@@ -1691,7 +1691,7 @@ function renderFinanceTrack(items, weekId, eventId){
     <div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-light)">Total Committed</div>
     <div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--vino)">${fmt(total)}</div>
   </div>
-  ${weekId ? `<div style="padding:0 20px 12px"><button class="btn btn-outline btn-sm" onclick="openAddFinance('${weekId}','${eventId}')">+ Add Finance Item</button></div>` : ''}`;
+  ${weekId ? `<div style="padding:0 20px 12px"><button class="btn btn-outline btn-sm" onclick="openAddFinance('${weekId}','${eventId}')">+ Add Expense</button></div>` : ''}`;
 }
 
 // ── TOGGLE TRACK ──
@@ -1777,7 +1777,7 @@ async function duplicateWeek(eventId, sourceWeekId){
     await sb.from('tasks').insert(newTasks);
   }
 
-  // copy finance items (reset status)
+  // copy expenses (reset status)
   const sourceFin = state.finance[sourceWeekId]||[];
   if(sourceFin.length){
     const newFin = sourceFin.map(f=>({
@@ -2007,7 +2007,7 @@ async function saveEditTask(taskId){
 
 // ── FINANCE ACTIONS ──
 function openAddFinance(weekId, eventId){
-  document.getElementById('modal-title').textContent = 'Add Finance Item';
+  document.getElementById('modal-title').textContent = 'Add Expense';
   document.getElementById('modal-body').innerHTML = `
     <div class="form-group">
       <label class="form-label">Supplier / Artist Name</label>
@@ -2065,7 +2065,7 @@ function openAddFinance(weekId, eventId){
 
   document.getElementById('modal-footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-gold" onclick="saveAddFinance('${weekId}','${eventId}')">Add Item</button>`;
+    <button class="btn btn-gold" onclick="saveAddFinance('${weekId}','${eventId}')">Add Expense</button>`;
 
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -2085,10 +2085,10 @@ async function saveAddFinance(weekId, eventId){
   };
   if(!item.supplier_name){ toast('Please enter a supplier name',true); return; }
   const { data, error } = await sb.from('finance').insert(item).select().single();
-  if(error){ toast('Error adding finance item',true); return; }
+  if(error){ toast('Error adding expense',true); return; }
   if(!state.finance[weekId]) state.finance[weekId]=[];
   state.finance[weekId].push(data);
-  closeModal(); toast('Finance item added'); renderMain();
+  closeModal(); toast('Expense added'); renderMain();
 }
 
 function openEditFinance(finId){
@@ -2099,7 +2099,7 @@ function openEditFinance(finId){
   }
   if(!fin) return;
 
-  document.getElementById('modal-title').textContent = 'Edit Finance Item';
+  document.getElementById('modal-title').textContent = 'Edit Expense';
   document.getElementById('modal-body').innerHTML = `
     <div class="form-group">
       <label class="form-label">Supplier / Artist Name</label>
@@ -2181,11 +2181,11 @@ async function saveEditFinance(finId){
     const idx = state.finance[wid].findIndex(f=>f.id===finId);
     if(idx>-1){ state.finance[wid][idx]={...state.finance[wid][idx],...updates}; break; }
   }
-  closeModal(); toast('Finance item saved'); renderMain();
+  closeModal(); toast('Expense saved'); renderMain();
 }
 
 async function deleteFinance(finId){
-  if(!confirm('Delete this finance item?')) return;
+  if(!confirm('Delete this expense?')) return;
   const { error } = await sb.from('finance').delete().eq('id',finId);
   if(error){ toast('Error deleting',true); return; }
   for(const wid in state.finance){
