@@ -43,48 +43,132 @@
   #login {
     min-height: 100vh;
     display: none;
-    align-items: center;
+    grid-template-columns: minmax(0, 0.92fr) minmax(360px, 0.78fr);
+    background: #F8F4EC;
+    position: relative;
+    overflow: hidden;
+  }
+  #login.open { display: grid; }
+  #login::before {
+    content:'';
+    position:absolute;
+    inset:0;
+    background:
+      linear-gradient(90deg, rgba(248,244,236,0.98) 0%, rgba(248,244,236,0.92) 48%, rgba(74,21,32,0.16) 100%),
+      repeating-linear-gradient(0deg, transparent, transparent 72px, rgba(107,31,42,0.045) 72px, rgba(107,31,42,0.045) 73px);
+    pointer-events:none;
+  }
+  #login::after {
+    content:'';
+    position:absolute;
+    top:0;
+    right:0;
+    width: 46%;
+    height:100%;
+    background:
+      linear-gradient(180deg, rgba(44,24,16,0.08), rgba(44,24,16,0.28)),
+      url('https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/6978863119fac3dc920f9f63_Home%20Gallery%20Image%20-%20Dubai%20-%20Scala.jpg') center/cover;
+    clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .login-content {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
     justify-content: center;
-    background: var(--bg);
-    padding: 24px;
+    padding: 64px clamp(28px, 7vw, 104px);
   }
-  #login.open { display: flex; }
-  .login-card {
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    box-shadow: var(--shadow);
-    padding: 44px 36px 36px;
-    width: 100%;
-    max-width: 380px;
-    text-align: center;
-  }
-  .login-card img {
-    display: block;
-    width: 100%;
-    max-width: 230px;
+  .login-brand {
+    width: min(300px, 68vw);
     height: auto;
-    margin: 0 auto 20px;
+    margin-bottom: 36px;
   }
   .login-kicker {
+    color: var(--vino);
     font-size: 10px;
-    letter-spacing: 0.22em;
+    font-weight: 600;
+    letter-spacing: 0.32em;
     text-transform: uppercase;
-    color: var(--gold-dim);
-    margin-bottom: 6px;
+    margin-bottom: 16px;
   }
   .login-title {
     font-family: 'Playfair Display', serif;
-    font-size: 26px;
-    color: var(--vino);
-    margin-bottom: 26px;
+    font-size: clamp(38px, 5vw, 64px);
+    font-weight: 400;
+    color: var(--vino-dark);
+    line-height: 1.02;
+    margin-bottom: 18px;
   }
-  .login-card .form-input { width: 100%; margin-bottom: 12px; text-align: left; }
-  .login-btn { width: 100%; padding: 12px; margin-top: 6px; }
+  .login-title span {
+    color: var(--vino);
+    font-style: italic;
+  }
+  .login-divider {
+    width: 72px;
+    height: 1px;
+    background: var(--gold);
+    margin: 0 0 22px;
+  }
+  .login-sub {
+    font-size: 13px;
+    color: var(--text-mid);
+    line-height: 1.8;
+    max-width: 380px;
+    margin-bottom: 38px;
+  }
+  .login-form { max-width: 360px; width: 100%; }
+  .login-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    margin-bottom: 7px;
+  }
+  .login-input {
+    width: 100%;
+    background: #FFFFFF;
+    border: 1px solid var(--border-strong);
+    padding: 13px 15px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 18px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .login-input:focus {
+    outline: none;
+    border-color: var(--vino);
+    box-shadow: 0 0 0 3px rgba(107,31,42,0.08);
+  }
+  .login-btn {
+    width: 100%;
+    background: var(--vino);
+    color: #FFFFFF;
+    border: none;
+    padding: 15px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: background 0.2s;
+  }
+  .login-btn:hover { background: var(--vino-dark); }
+  .login-btn:disabled { opacity: 0.6; cursor: default; }
   .login-error {
     color: var(--red);
     font-size: 12px;
     min-height: 18px;
-    margin-top: 12px;
+    margin-top: 14px;
+  }
+  @media (max-width: 880px) {
+    #login { grid-template-columns: 1fr; }
+    #login::after { display: none; }
+    .login-content { padding: 48px 28px; }
   }
   .topbar-signout {
     background: transparent;
@@ -1212,14 +1296,20 @@
 
 <!-- LOGIN -->
 <div id="login">
-  <div class="login-card">
-    <img src="https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/68d1e4ffcb7414691a2bf1a6_robertos_logo_burgundy_apostrophe_color.svg" alt="Roberto's">
+  <div class="login-content">
+    <img class="login-brand" src="https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/68d1e4ffcb7414691a2bf1a6_robertos_logo_burgundy_apostrophe_color.svg" alt="Roberto's">
     <div class="login-kicker">Dubai private workspace</div>
-    <div class="login-title">Leadership</div>
-    <input class="form-input" id="login-email" type="email" placeholder="Email" autocomplete="username">
-    <input class="form-input" id="login-password" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
-    <button class="btn btn-gold login-btn" id="login-btn" onclick="signIn()">Sign In</button>
-    <div class="login-error" id="login-error"></div>
+    <div class="login-title">Welcome to <span>Leadership</span></div>
+    <div class="login-divider"></div>
+    <div class="login-sub">Reserved access for Roberto's leadership team. Sign in to continue to events, finance, and weekly execution.</div>
+    <div class="login-form">
+      <label class="login-label" for="login-email">Email</label>
+      <input class="login-input" id="login-email" type="email" autocomplete="username">
+      <label class="login-label" for="login-password">Password</label>
+      <input class="login-input" id="login-password" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+      <button class="login-btn" id="login-btn" onclick="signIn()">Sign In</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
   </div>
 </div>
 
