@@ -39,7 +39,71 @@
 
   * { margin:0; padding:0; box-sizing:border-box; }
 
-  /* -- EVENT BRIEF -- */
+  /* -- LOGIN -- */
+  #login {
+    min-height: 100vh;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: 24px;
+  }
+  #login.open { display: flex; }
+  .login-card {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow);
+    padding: 44px 36px 36px;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+  }
+  .login-card img { height: 44px; margin-bottom: 18px; }
+  .login-kicker {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+    margin-bottom: 6px;
+  }
+  .login-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    color: var(--vino);
+    margin-bottom: 26px;
+  }
+  .login-card .form-input { width: 100%; margin-bottom: 12px; text-align: left; }
+  .login-btn { width: 100%; padding: 12px; margin-top: 6px; }
+  .login-error {
+    color: var(--red);
+    font-size: 12px;
+    min-height: 18px;
+    margin-top: 12px;
+  }
+  .topbar-signout {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.75);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    cursor: pointer;
+    margin-left: 14px;
+    transition: all 0.2s;
+  }
+  .topbar-signout:hover { border-color: #fff; color: #fff; }
+  .landing-signout {
+    margin-top: 34px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    cursor: pointer;
+  }
+  .landing-signout:hover { color: var(--vino); }
+
+  /* -- EVENT OVERVIEW -- */
   .overview-card {
     background: var(--vino);
     border: 1px solid var(--vino-dark);
@@ -115,7 +179,7 @@
   /* -- LANDING -- */
   #landing {
     min-height: 100vh;
-    display: grid;
+    display: none;
     grid-template-columns: minmax(0, 0.92fr) minmax(360px, 0.78fr);
     background: #F8F4EC;
     position: relative;
@@ -1140,6 +1204,19 @@
 </head>
 <body>
 
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card">
+    <img src="https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/68d1e4ffcb7414691a2bf1a6_robertos_logo_burgundy_apostrophe_color.svg" alt="Roberto's">
+    <div class="login-kicker">Dubai private workspace</div>
+    <div class="login-title">Leadership</div>
+    <input class="form-input" id="login-email" type="email" placeholder="Email" autocomplete="username">
+    <input class="form-input" id="login-password" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+    <button class="btn btn-gold login-btn" id="login-btn" onclick="signIn()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
 <!-- LANDING -->
 <div id="landing">
   <div class="landing-content">
@@ -1166,6 +1243,7 @@
         <div class="module-desc">Covers, spend, and weekly performance.</div>
       </div>
     </div>
+    <div class="landing-signout" onclick="signOut()">Sign out</div>
   </div>
 </div>
 
@@ -1177,7 +1255,10 @@
       <div class="topbar-sep">|</div>
       <div class="topbar-section" id="topbar-section">Events</div>
     </div>
-    <div class="nav-tabs" id="nav-tabs"></div>
+    <div style="display:flex;align-items:center">
+      <div class="nav-tabs" id="nav-tabs"></div>
+      <button class="topbar-signout" onclick="signOut()">Sign out</button>
+    </div>
   </div>
   <div class="main" id="main-content"></div>
 </div>
@@ -2646,6 +2727,7 @@ async function deleteFinance(finId){
 // EVENT TARGETS MODAL
 function timeOptions(selected){
   const opts = ['<option value="">Select time</option>'];
+  // 12:00 PM through 3:00 AM in 30-minute steps
   for(let m=12*60; m<=27*60; m+=30){
     const h24 = Math.floor(m/60)%24;
     const min = m%60;
@@ -2662,7 +2744,7 @@ function openEditOverview(eventId){
   if(!ev) return;
   const wid = state.currentWeek[ev.id];
   const week = (state.weeks[ev.id]||[]).find(w=>w.id===wid);
-  document.getElementById('modal-title').textContent = 'Edit Event Brief';
+  document.getElementById('modal-title').textContent = 'Edit Event Overview';
   document.getElementById('modal-body').innerHTML = `
     <div class="form-row">
       <div class="form-group">
@@ -2685,7 +2767,7 @@ function openEditOverview(eventId){
     </div>` : `<div class="form-group"><label class="form-label">Artist</label><div style="font-size:12px;color:var(--text-light)">Select or create a week to set this week's artist.</div></div>`}`;
   document.getElementById('modal-footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-gold" onclick="saveEditOverview('${eventId}')">Save Brief</button>`;
+    <button class="btn btn-gold" onclick="saveEditOverview('${eventId}')">Save Overview</button>`;
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -2696,7 +2778,7 @@ async function saveEditOverview(eventId){
     fb_offer: document.getElementById('ov-fb').value.trim()||null
   };
   const { error } = await sb.from('events').update(updates).eq('id',eventId);
-  if(error){ toast('Error saving brief',true); return; }
+  if(error){ toast('Error saving overview',true); return; }
   const idx = state.events.findIndex(e=>e.id===eventId);
   if(idx>-1) state.events[idx] = {...state.events[idx], ...updates};
 
@@ -2711,7 +2793,7 @@ async function saveEditOverview(eventId){
       if(wIdx>-1) state.weeks[eventId][wIdx] = {...state.weeks[eventId][wIdx], artist};
     }
   }
-  closeModal(); toast('Brief saved'); renderMain();
+  closeModal(); toast('Overview saved'); renderMain();
 }
 
 function openEditEvent(eventId){
@@ -2853,8 +2935,16 @@ function closeModalOnOverlay(e){
 // -- EVENT LISTENERS --
 function attachEventListeners(){ /* delegated via onclick */ }
 
-// -- INIT --
-(function restoreSession(){
+// -- AUTH --
+function showLogin(){
+  document.getElementById('login').classList.add('open');
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  const err = document.getElementById('login-error');
+  if(err) err.textContent = '';
+}
+
+function restoreSession(){
   try{
     const owner = localStorage.getItem('rl_owner');
     if(owner) state.ownerFilter = owner;
@@ -2865,10 +2955,58 @@ function attachEventListeners(){ /* delegated via onclick */ }
       state.currentTab = tab;
       document.getElementById('landing').style.display = 'none';
       document.getElementById('app').style.display = 'block';
+    } else {
+      document.getElementById('landing').style.display = 'grid';
+      document.getElementById('app').style.display = 'none';
     }
-  }catch(e){}
+  }catch(e){
+    document.getElementById('landing').style.display = 'grid';
+  }
+}
+
+function startApp(){
+  document.getElementById('login').classList.remove('open');
+  restoreSession();
+  loadAll();
+}
+
+async function signIn(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  if(!email || !password){ errEl.textContent = 'Enter your email and password.'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Sign In';
+  if(error){
+    errEl.textContent = 'Wrong email or password. Please try again.';
+    return;
+  }
+  errEl.textContent = '';
+  document.getElementById('login-password').value = '';
+  startApp();
+}
+
+async function signOut(){
+  try{ await sb.auth.signOut(); }catch(e){}
+  try{ localStorage.removeItem('rl_inapp'); }catch(e){}
+  showLogin();
+}
+
+// -- INIT --
+(async function init(){
+  try{
+    const { data } = await sb.auth.getSession();
+    if(data && data.session){ startApp(); }
+    else { showLogin(); }
+    sb.auth.onAuthStateChange((event)=>{
+      if(event==='SIGNED_OUT') showLogin();
+    });
+  }catch(e){
+    showLogin();
+  }
 })();
-loadAll();
 </script>
 </body>
 </html>
