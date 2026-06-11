@@ -1331,7 +1331,7 @@
         <div class="module-desc">Covers, spend, and weekly performance.</div>
       </div>
     </div>
-    <div class="landing-signout" onclick="signOut()">Sign out</div>
+    <div class="landing-signout"><span onclick="openChangePassword()" style="cursor:pointer">Change password</span> &nbsp;&middot;&nbsp; <span onclick="signOut()" style="cursor:pointer">Sign out</span></div>
   </div>
 </div>
 
@@ -1345,6 +1345,7 @@
     </div>
     <div style="display:flex;align-items:center">
       <div class="nav-tabs" id="nav-tabs"></div>
+      <button class="topbar-signout" onclick="openChangePassword()">Password</button>
       <button class="topbar-signout" onclick="signOut()">Sign out</button>
     </div>
   </div>
@@ -3024,6 +3025,38 @@ function closeModalOnOverlay(e){
 function attachEventListeners(){ /* delegated via onclick */ }
 
 // -- AUTH --
+function openChangePassword(){
+  document.getElementById('modal-title').textContent = 'Change Password';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">New Password (min 8 characters)</label>
+      <input class="form-input" id="cp-new" type="password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Repeat New Password</label>
+      <input class="form-input" id="cp-confirm" type="password" autocomplete="new-password">
+    </div>
+    <div id="cp-error" style="color:var(--red);font-size:12px;min-height:16px"></div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-gold" id="cp-save" onclick="saveChangePassword()">Update Password</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function saveChangePassword(){
+  const p1 = document.getElementById('cp-new').value;
+  const p2 = document.getElementById('cp-confirm').value;
+  const errEl = document.getElementById('cp-error');
+  if(p1.length < 8){ errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if(p1 !== p2){ errEl.textContent = 'Passwords do not match.'; return; }
+  const btn = document.getElementById('cp-save');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  btn.disabled = false; btn.textContent = 'Update Password';
+  if(error){ errEl.textContent = 'Could not update password. Try again.'; return; }
+  closeModal(); toast('Password updated');
+}
+
 function showLogin(){
   document.getElementById('login').classList.add('open');
   document.getElementById('landing').style.display = 'none';
