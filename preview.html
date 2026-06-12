@@ -2047,10 +2047,7 @@ function renderEventPage(ev){
   }).join('');
 
   const view = (state.journeyView && state.journeyView[ev.id]) || 'full';
-  const allStageTasks = tasks.filter(t=>getStage(t)===selectedStage);
-  const scopeTasks = view==='stage' ? allStageTasks : tasks;
-  const stagePeople = [...new Set(scopeTasks.flatMap(t=>[t.assigned_to, t.champion]).filter(Boolean))];
-  const activeOwner = (state.ownerFilter && (state.ownerFilter==='All' || stagePeople.includes(state.ownerFilter))) ? state.ownerFilter : 'All';
+  const activeOwner = 'All';
   const stageTasks = allStageTasks
     .filter(t=>ownerMatches(t, activeOwner))
     .sort(taskSort);
@@ -2062,10 +2059,6 @@ function renderEventPage(ev){
       ${items.map(t=>renderTaskRow(t)).join('')}
     </div>`;
   }).join('') || '<div class="empty-state">No tasks in this stage for this view.</div>';
-
-  const ownerChips = ['All', ...stagePeople].map(name=>
-    `<button class="filter-chip ${activeOwner===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
-  ).join('');
 
   const fullJourneyView = STAGE_KEYS.map(stage=>{
     const items = tasks.filter(t=>getStage(t)===stage && ownerMatches(t, activeOwner)).sort(taskSort);
@@ -2162,7 +2155,6 @@ function renderEventPage(ev){
       <button class="week-scope-btn ${view==='full'?'active':''}" onclick="setJourneyView('${ev.id}','full')">Open Journey</button>
       <button class="week-scope-btn ${view==='pending'?'active':''}" onclick="setJourneyView('${ev.id}','pending')">Pending Journey</button>
     </div>
-    <div class="owner-filter">${ownerChips}</div>
     ${view==='pending' ? pendingJourneyView : `${fullJourneyView}${reviewPanel}`}`}`;
 }
 
