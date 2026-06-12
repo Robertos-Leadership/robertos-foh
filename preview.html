@@ -2037,28 +2037,8 @@ function renderEventPage(ev){
   </div>` : '';
   const reviewPanel = wid ? renderReviewPanel(ev, week, tasks, fin, wid) : '';
 
-  const stageButtons = STAGE_KEYS.map(stage=>{
-    const stats = stageStats(tasks, stage);
-    const active = selectedStage===stage ? 'active' : '';
-    return `<button class="journey-step ${active} ${stats.stateName}" onclick="setStage('${ev.id}','${stage}')">
-      <span class="journey-step-label">${STAGES[stage].label}${stats.total && stats.stateName==='complete' ? ' &check;' : ''}</span>
-      <span class="journey-step-meta">${stats.total ? `${stats.done}/${stats.total} done${stats.blocked ? ` | ${stats.blocked} blocked` : ''}` : 'No tasks'}</span>
-    </button>`;
-  }).join('');
-
   const view = (state.journeyView && state.journeyView[ev.id]) || 'full';
   const activeOwner = 'All';
-  const stageTasks = allStageTasks
-    .filter(t=>ownerMatches(t, activeOwner))
-    .sort(taskSort);
-  const prioritySections = Object.keys(PRIORITIES).map(priority=>{
-    const items = stageTasks.filter(t=>getPriority(t)===priority);
-    if(!items.length) return '';
-    return `<div class="priority-section">
-      <div class="priority-heading">${PRIORITIES[priority].label}</div>
-      ${items.map(t=>renderTaskRow(t)).join('')}
-    </div>`;
-  }).join('') || '<div class="empty-state">No tasks in this stage for this view.</div>';
 
   const fullJourneyView = STAGE_KEYS.map(stage=>{
     const items = tasks.filter(t=>getStage(t)===stage && ownerMatches(t, activeOwner)).sort(taskSort);
