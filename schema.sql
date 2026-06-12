@@ -87,3 +87,11 @@ alter publication supabase_realtime add table weeks;
 insert into events (name, day_of_week, description, time_start, capacity, avg_spend_target, entertainment_cost) values
 ('The Listening Bar', 'Monday', 'Vinyl only. Proper pours. Long conversations.', '20:00', 50, 250, 2500),
 ('Jazz Tuesdays', 'Tuesday', 'Live jazz. Every Tuesday. Three resident artists. One stage. Rotating weekly.', '20:20', 50, 350, 4500);
+
+-- v2 (June 2026): recurring programme controls
+alter table events add column if not exists status text default 'active'; -- active | paused
+
+-- Full weekly programme seed
+insert into events (name, day_of_week, description, time_start, capacity, avg_spend_target, entertainment_cost) values
+('Comedy Night', 'Wednesday', 'Stand-up comedy. Midweek laughter, full bar.', '21:00', 50, 0, 0),
+('Cigar Night', 'Saturday', 'Cigar lounge evening. Slow pours, premium selection.', '21:00', 50, 0, 0);

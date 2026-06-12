@@ -1716,6 +1716,30 @@ async function loadAll(){
       state.currentWeek[ev.id] = pickDefaultWeekId(state.weeks[ev.id]);
     }
   }
+  // Auto-roll: every active recurring event always has its next occurrence ready.
+  // When this week's night passes (or is completed), the next week's row is created
+  // automatically on the following load - with the full task template seeded.
+  const _today = todayISO();
+  for(const ev of state.events){
+    if((ev.status||'active')==='paused') continue;
+    const hasUpcoming = (state.weeks[ev.id]||[]).some(w=>w.week_date && String(w.week_date).slice(0,10) >= _today);
+    if(hasUpcoming) continue;
+    const next = nextOccurrence(ev.day_of_week);
+    const dateStr = localISO(next);
+    // Guard against double-creation from a parallel session
+    const dup = (await sb.from('weeks').select('id').eq('event_id',ev.id).eq('week_date',dateStr)).data||[];
+    if(dup.length){ continue; }
+    const label = next.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+    const { data, error } = await sb.from('weeks').insert({
+      event_id: ev.id, week_date: dateStr, week_label: label, status: 'upcoming'
+    }).select().single();
+    if(error || !data) continue;
+    await seedDefaultTasks(data.id, ev.id, ev.name, data.week_date);
+    state.weeks[ev.id].unshift(data);
+    state.currentWeek[ev.id] = data.id;
+    allWeeks.push(data);
+    logActivity('auto-created week', label + ' \u2014 ' + ev.name);
+  }
   const wIds = allWeeks.map(w=>w.id);
   if(wIds.length){
     const [tRes, fRes] = await Promise.all([
@@ -1750,6 +1774,20 @@ function renderDashboard(){
   const activeLeader = state.ownerFilter || 'All';
 
   for(const ev of state.events){
+    if((ev.status||'active')==='paused'){
+      eventCards.push(`
+      <div class="event-journey-card" style="opacity:.55">
+        <div class="event-card-top">
+          <div class="event-card-title">${ev.name}</div>
+          <div class="event-card-date">${ev.day_of_week} | Paused</div>
+        </div>
+        <div class="event-card-note">Paused - no new weeks will be created until resumed.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gold btn-sm" onclick="toggleEventPause('${ev.id}')">Resume</button>
+        </div>
+      </div>`);
+      continue;
+    }
     const wid = state.currentWeek[ev.id];
     if(!wid) continue;
     const week = (state.weeks[ev.id]||[]).find(w=>w.id===wid);
@@ -1778,6 +1816,7 @@ function renderDashboard(){
         <div class="event-card-note">${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-gold btn-sm" onclick="switchTab('${eventTab(ev)}')">Open Journey</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleEventPause('${ev.id}')">Pause</button>
         </div>
       </div>`);
   }
@@ -2302,6 +2341,18 @@ function selectWeek(eventId, weekId){
 function newWeek(eventId){
   const wid = state.currentWeek[eventId];
   if(wid) duplicateWeek(eventId, wid); else createNewWeek(eventId);
+}
+
+async function toggleEventPause(eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!ev) return;
+  const next = (ev.status||'active')==='paused' ? 'active' : 'paused';
+  const { error } = await sb.from('events').update({ status: next }).eq('id', eventId);
+  if(error){ toast('Could not update - add the status column in Supabase first', true); return; }
+  ev.status = next;
+  logActivity(next==='paused' ? 'paused event' : 'resumed event', ev.name);
+  toast(ev.name + (next==='paused' ? ' paused' : ' resumed'));
+  if(next==='active'){ loadAll(); } else { renderMain(); }
 }
 
 async function createNewWeek(eventId){
