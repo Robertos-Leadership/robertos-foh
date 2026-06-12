@@ -1502,7 +1502,8 @@ let state = {
   currentTab: 'dashboard',
   ownerFilter: 'All',
   leaderPriorityFilter: 'All',
-  selectedStage: {}
+  selectedStage: {},
+  journeyView: {}
 };
 
 // -- UTILS --
@@ -1636,6 +1637,11 @@ function setLeaderPriorityFilter(priority){
 }
 function setStage(eventId, stage){
   state.selectedStage[eventId] = stage;
+  renderMain();
+}
+function setJourneyView(eventId, view){
+  state.journeyView = state.journeyView || {};
+  state.journeyView[eventId] = view;
   renderMain();
 }
 function eventTab(ev){ return 'event_'+ev.id; }
@@ -2033,8 +2039,10 @@ function renderEventPage(ev){
     </button>`;
   }).join('');
 
+  const view = (state.journeyView && state.journeyView[ev.id]) || 'stage';
   const allStageTasks = tasks.filter(t=>getStage(t)===selectedStage);
-  const stagePeople = [...new Set(allStageTasks.flatMap(t=>[t.assigned_to, t.champion]).filter(Boolean))];
+  const scopeTasks = view==='stage' ? allStageTasks : tasks;
+  const stagePeople = [...new Set(scopeTasks.flatMap(t=>[t.assigned_to, t.champion]).filter(Boolean))];
   const activeOwner = (state.ownerFilter && (state.ownerFilter==='All' || stagePeople.includes(state.ownerFilter))) ? state.ownerFilter : 'All';
   const stageTasks = allStageTasks
     .filter(t=>ownerMatches(t, activeOwner))
@@ -2051,6 +2059,36 @@ function renderEventPage(ev){
   const ownerChips = ['All', ...stagePeople].map(name=>
     `<button class="filter-chip ${activeOwner===name?'active':''}" onclick="setOwnerFilter('${name}')">${name}</button>`
   ).join('');
+
+  const fullJourneyView = STAGE_KEYS.map(stage=>{
+    const items = tasks.filter(t=>getStage(t)===stage && ownerMatches(t, activeOwner)).sort(taskSort);
+    const doneN = items.filter(t=>t.status==='done').length;
+    return `<div class="stage-panel">
+      <div class="stage-heading">
+        <div><div class="stage-title">Stage ${STAGES[stage].rank+1} \u00b7 ${STAGES[stage].label}</div></div>
+        <span class="journey-step-meta">${items.length ? `${doneN}/${items.length} done` : 'No tasks'}</span>
+      </div>
+      ${items.length ? items.map(t=>renderTaskRow(t)).join('') : '<div class="empty-state">No tasks in this stage.</div>'}
+    </div>`;
+  }).join('');
+
+  const pendingTasks = tasks.filter(t=>t.status!=='done' && ownerMatches(t, activeOwner))
+    .sort((a,b)=> (stageRank(a)-stageRank(b)) || taskSort(a,b));
+  const pendingGroups = STAGE_KEYS.map(stage=>{
+    const items = pendingTasks.filter(t=>getStage(t)===stage);
+    if(!items.length) return '';
+    return `<div class="priority-heading">${STAGES[stage].label}</div>${items.map(t=>renderTaskRow(t)).join('')}`;
+  }).join('');
+  const pendingJourneyView = `<div class="stage-panel">
+    <div class="stage-heading">
+      <div>
+        <div class="stage-title">Pending Journey</div>
+        <div class="stage-sub">Every open item across all stages, in sequence. Clear this list and the night is ready.</div>
+      </div>
+      <span class="readiness-value ${readiness.status}" style="font-size:20px">${pendingTasks.length} open</span>
+    </div>
+    ${pendingTasks.length ? pendingGroups : '<div class="empty-state">Nothing pending. Perfect.</div>'}
+  </div>`;
 
   return `
   <div class="event-header">
@@ -2112,9 +2150,14 @@ function renderEventPage(ev){
   </div>
 
   ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
-    <div class="journey-strip">${stageButtons}</div>
+    <div class="week-scope" style="margin-bottom:14px">
+      <button class="week-scope-btn ${view==='stage'?'active':''}" onclick="setJourneyView('${ev.id}','stage')">By Stage</button>
+      <button class="week-scope-btn ${view==='full'?'active':''}" onclick="setJourneyView('${ev.id}','full')">Full Journey</button>
+      <button class="week-scope-btn ${view==='pending'?'active':''}" onclick="setJourneyView('${ev.id}','pending')">Pending Journey</button>
+    </div>
+    ${view==='stage' ? `<div class="journey-strip">${stageButtons}</div>` : ''}
     <div class="owner-filter">${ownerChips}</div>
-    ${selectedStage==='review' ? '' : `<div class="stage-panel">
+    ${view==='full' ? fullJourneyView : view==='pending' ? pendingJourneyView : `${selectedStage==='review' ? '' : `<div class="stage-panel">
       <div class="stage-heading">
         <div>
           <div class="stage-title">${STAGES[selectedStage].label}</div>
@@ -2125,7 +2168,7 @@ function renderEventPage(ev){
       ${prioritySections}
       ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
     </div>`}
-    ${reviewPanel}`}`;
+    ${reviewPanel}`}`}`;
 }
 
 function renderTaskRow(t){
