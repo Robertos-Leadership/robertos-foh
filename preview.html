@@ -1644,6 +1644,12 @@ function setJourneyView(eventId, view){
   state.journeyView[eventId] = view;
   renderMain();
 }
+function openJourney(eventId, view){
+  state.journeyView = state.journeyView || {};
+  state.journeyView[eventId] = view;
+  const ev = state.events.find(e=>e.id===eventId);
+  if(ev) switchTab(eventTab(ev));
+}
 function eventTab(ev){ return 'event_'+ev.id; }
 function tabEventId(tab){ return tab && tab.startsWith('event_') ? tab.slice(6) : null; }
 function eventSort(a,b){ return (DAY_ORDER.indexOf(a.day_of_week)-DAY_ORDER.indexOf(b.day_of_week)) || a.name.localeCompare(b.name); }
@@ -1848,7 +1854,8 @@ function renderDashboard(){
         <div style="margin:8px 0 4px"><div class="progress-bar" style="height:8px"><div class="progress-fill ${readiness.status}" style="width:${cardPct}%"></div></div></div>
         <div class="event-card-note"><strong>${tasks.length-doneCt} remaining</strong> | ${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-gold btn-sm" onclick="switchTab('${eventTab(ev)}')">Open Journey</button>
+          <button class="btn btn-gold btn-sm" onclick="openJourney('${ev.id}','full')">Open Journey</button>
+          <button class="btn btn-outline btn-sm" onclick="openJourney('${ev.id}','pending')">Pending Journey</button>
         </div>
       </div>`);
   }
@@ -2028,7 +2035,7 @@ function renderEventPage(ev){
     </div>
     <span class="readiness-value ${readiness.status}" style="font-size:18px">${readiness.label}</span>
   </div>` : '';
-  const reviewPanel = selectedStage==='review' ? renderReviewPanel(ev, week, tasks, fin, wid) : '';
+  const reviewPanel = wid ? renderReviewPanel(ev, week, tasks, fin, wid) : '';
 
   const stageButtons = STAGE_KEYS.map(stage=>{
     const stats = stageStats(tasks, stage);
@@ -2039,7 +2046,7 @@ function renderEventPage(ev){
     </button>`;
   }).join('');
 
-  const view = (state.journeyView && state.journeyView[ev.id]) || 'stage';
+  const view = (state.journeyView && state.journeyView[ev.id]) || 'full';
   const allStageTasks = tasks.filter(t=>getStage(t)===selectedStage);
   const scopeTasks = view==='stage' ? allStageTasks : tasks;
   const stagePeople = [...new Set(scopeTasks.flatMap(t=>[t.assigned_to, t.champion]).filter(Boolean))];
@@ -2069,6 +2076,7 @@ function renderEventPage(ev){
         <span class="journey-step-meta">${items.length ? `${doneN}/${items.length} done` : 'No tasks'}</span>
       </div>
       ${items.length ? items.map(t=>renderTaskRow(t)).join('') : '<div class="empty-state">No tasks in this stage.</div>'}
+      ${renderAddTaskBar('stage_'+stage, wid, ev.id, stage)}
     </div>`;
   }).join('');
 
@@ -2151,24 +2159,11 @@ function renderEventPage(ev){
 
   ${!wid ? '<div class="empty-state" style="padding:60px;text-align:center">No week selected. Create a week to start the journey.</div>' : `
     <div class="week-scope" style="margin-bottom:14px">
-      <button class="week-scope-btn ${view==='stage'?'active':''}" onclick="setJourneyView('${ev.id}','stage')">By Stage</button>
-      <button class="week-scope-btn ${view==='full'?'active':''}" onclick="setJourneyView('${ev.id}','full')">Full Journey</button>
+      <button class="week-scope-btn ${view==='full'?'active':''}" onclick="setJourneyView('${ev.id}','full')">Open Journey</button>
       <button class="week-scope-btn ${view==='pending'?'active':''}" onclick="setJourneyView('${ev.id}','pending')">Pending Journey</button>
     </div>
-    ${view==='stage' ? `<div class="journey-strip">${stageButtons}</div>` : ''}
     <div class="owner-filter">${ownerChips}</div>
-    ${view==='full' ? fullJourneyView : view==='pending' ? pendingJourneyView : `${selectedStage==='review' ? '' : `<div class="stage-panel">
-      <div class="stage-heading">
-        <div>
-          <div class="stage-title">${STAGES[selectedStage].label}</div>
-          <div class="stage-sub">Focus only on this stage. Finish non-negotiables first, then important, then enhancements.</div>
-        </div>
-        <span class="readiness-value ${readiness.status}" style="font-size:20px">${readiness.label}</span>
-      </div>
-      ${prioritySections}
-      ${renderAddTaskBar('stage_'+selectedStage, wid, ev.id, selectedStage)}
-    </div>`}
-    ${reviewPanel}`}`}`;
+    ${view==='pending' ? pendingJourneyView : `${fullJourneyView}${reviewPanel}`}`}`;
 }
 
 function renderTaskRow(t){
