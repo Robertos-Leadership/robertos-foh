@@ -2073,7 +2073,6 @@ function renderEventPage(ev){
       <option value="">Select week</option>
       ${weekOptions}
     </select>
-    ${wid ? `<button class="btn btn-gold" onclick="openWeekActuals('${wid}')">Enter Results</button>` : ''}
     <div class="task-actions" style="position:relative">
       <button class="btn btn-outline btn-sm more-btn" onclick="toggleTaskMenu(event,'weekbar-${ev.id}')" title="More actions">&#8943;</button>
       <div class="task-menu" id="task-menu-weekbar-${ev.id}" style="top:36px;min-width:240px">
