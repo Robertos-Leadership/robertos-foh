@@ -28,15 +28,23 @@ Deno.serve(async (_req) => {
   if (mErr) return json({ error: mErr.message }, 500);
 
   // Priority tasks due (today or overdue), open, never notified
-  const { data: tasks, error: tErr } = await supabase
+  const { data: rawTasks, error: tErr } = await supabase
     .from("tasks")
-    .select("id,title,priority,due_date,assigned_to,champion,event_id,status")
+    .select("id,title,description,due_date,assigned_to,champion,event_id,status")
     .neq("status", "done")
-    .in("priority", ["non_negotiable", "important"])
     .not("due_date", "is", null)
     .lte("due_date", dubaiToday)
     .is("due_notified_at", null);
   if (tErr) return json({ error: tErr.message }, 500);
+
+  // Priority is stored as JSON inside description: {"__rlh":true,"priority":"...","stage":"..."}
+  const getPriority = (t: any): string | null => {
+    try { return JSON.parse(t.description || "{}").priority ?? null; }
+    catch { return null; }
+  };
+  const tasks = (rawTasks ?? [])
+    .map((t: any) => ({ ...t, priority: getPriority(t) }))
+    .filter((t: any) => t.priority === "non_negotiable" || t.priority === "important");
 
   const { data: events } = await supabase.from("events").select("id,name");
   const evName = Object.fromEntries((events ?? []).map((e) => [e.id, e.name]));
