@@ -37,6 +37,16 @@ Target model:
 
 **Until auth exists, do not build new modules that hold sensitive data.** Each feature added on the open foundation is a feature that must be partly redone after auth lands. Auth is therefore the next foundational build, ahead of new features.
 
+**Current per-app status & deliberate strategy (June 2026):**
+
+- **Leadership Hub:** real Supabase Auth is built and working — `signInWithPassword`, sign out, change password, session restore via `getSession` + `onAuthStateChange`, and the app is gated behind login. This is the reference pattern for the platform. **Still missing: roles + RLS.** Anyone who can log in can currently do everything; the database is still `allow all`. The next Hub work is the roles/RLS layer (see below), not more login plumbing.
+
+- **Kitchen App:** intentionally **open** for the operational surface — the landing page and Prep List have no login wall, because the kitchen runs on 5 shared screens during service and a per-person login there is the wrong friction. Accountability for specific modules (Scheduling, Checklist) uses the existing **employee-ID passcode** model, extended module by module as it proves out. Full per-person authentication for the Kitchen App is **deliberately deferred** until the shared-screen usage model is settled — this is a decision, not an unfinished gap.
+
+- **The hard line (applies to both apps):** the "open surface + passcode for accountability actions" model is acceptable only for operational, non-sensitive data. **The moment a module touches sensitive data — payroll, HR, personal employee records, finance — that module must use real authentication with role-based RLS, not a shared passcode.** A passcode answers "who performed this action"; it does not protect "who is allowed to see this data."
+
+**Next foundational build: roles + RLS** — an `employees`/`profiles` table linking each authenticated user to a role and department, plus RLS policies that enforce it. Designed once, applied to both apps. This is the load-bearing piece; everything sensitive depends on it.
+
 ---
 
 ## 2. Database schema standards
