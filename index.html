@@ -2354,8 +2354,7 @@ function renderReviewPanel(ev, week, tasks, fin, weekId){
   const actualCovers = Number(week?.covers_actual)||0;
   const savedRevenue = Number(week?.revenue_actual)||0;
   const savedAvg = Number(week?.avg_spend_actual)||0;
-  const foodRev = Number(week?.food_revenue)||0;
-  const bevRev = Number(week?.beverage_revenue)||0;
+  const fnbRev = Number(week?.fnb_revenue)||0;
   const compRev = Number(week?.complimentary)||0;
   const actualRevenue = savedRevenue || (actualCovers && savedAvg ? actualCovers * savedAvg : 0);
   const actualAvg = savedAvg || (actualCovers && actualRevenue ? actualRevenue / actualCovers : 0);
@@ -2387,10 +2386,6 @@ function renderReviewPanel(ev, week, tasks, fin, weekId){
   const gapTxt = !actualRevenue ? '' : (revenueDelta>=0
     ? `+AED ${Math.round(revenueDelta).toLocaleString()} over`
     : `−AED ${Math.abs(Math.round(revenueDelta)).toLocaleString()} short`);
-  // revenue mix proportions (food/bev only; comp is memo)
-  const mixBase = foodRev + bevRev;
-  const fPct = mixBase ? Math.round(foodRev/mixBase*100) : 0;
-  const bPct = mixBase ? 100 - fPct : 0;
 
   return `
     <div id="review-panel" class="budget-panel">
@@ -2419,25 +2414,9 @@ function renderReviewPanel(ev, week, tasks, fin, weekId){
       <div class="rv2-stats">
         <div class="rv2-stat"><div class="l">Covers</div><div class="v">${actualCovers||'—'}<span style="font-size:11px;color:var(--text-light);font-weight:400"> / ${targetCovers} target</span></div></div>
         <div class="rv2-stat"><div class="l">Avg Spend</div><div class="v">${actualRevenue?fmt(actualAvg):'—'}<span style="font-size:11px;color:var(--text-light);font-weight:400"> / ${fmt(targetAvg)}</span></div></div>
-        <div class="rv2-stat"><div class="l">Food</div><div class="v">${foodRev?fmt(foodRev):'—'}</div></div>
-        <div class="rv2-stat"><div class="l">Beverage</div><div class="v">${bevRev?fmt(bevRev):'—'}</div></div>
+        <div class="rv2-stat"><div class="l">F&amp;B Sales</div><div class="v">${fnbRev?fmt(fnbRev):'—'}</div></div>
         <div class="rv2-stat"><div class="l">Complimentary</div><div class="v">${compRev?fmt(compRev):'—'}</div></div>
       </div>
-
-      ${mixBase ? `
-      <div class="rv2-mix-head">
-        <span class="rv2-mix-title">Revenue Mix</span>
-        <span style="font-size:11px;color:var(--text-light)">Food ${fPct}% · Beverage ${bPct}%</span>
-      </div>
-      <div class="rv2-mixbar">
-        ${foodRev?`<span class="food" style="width:${fPct}%">${fPct>=12?'Food '+fPct+'%':''}</span>`:''}
-        ${bevRev?`<span class="bev" style="width:${bPct}%">${bPct>=12?'Bev '+bPct+'%':''}</span>`:''}
-      </div>
-      <div class="rv2-mixlegend">
-        <span><i class="food"></i>Food ${fmt(foodRev)}</span>
-        <span><i class="bev"></i>Beverage ${fmt(bevRev)}</span>
-        ${compRev?`<span><i class="comp"></i>Complimentary ${fmt(compRev)} (memo, not in total)</span>`:''}
-      </div>` : ''}
 
       <div class="rv2-pl">
         <div class="rv2-pl-row"><span>Revenue · Scala + Bar</span><span class="v">${fmt(actualRevenue)}</span></div>
@@ -3378,14 +3357,9 @@ function openWeekActuals(weekId){
       <div class="fin-section">
         <div class="fin-section-head"><span>Revenue Breakdown</span><span class="hint">Net of VAT</span></div>
         <div class="fin-line">
-          <label>Food Revenue<span class="sub">Kitchen / food covers</span></label>
+          <label>F&amp;B Sales<span class="sub">Food + beverage combined</span></label>
           <div class="fin-input-wrap"><span class="cur">AED</span>
-            <input class="fin-input" id="act-food" type="number" inputmode="decimal" placeholder="0" value="${week.food_revenue||''}" oninput="recalcActuals()"></div>
-        </div>
-        <div class="fin-line">
-          <label>Beverage Revenue<span class="sub">Alcoholic + wine + non-alc</span></label>
-          <div class="fin-input-wrap"><span class="cur">AED</span>
-            <input class="fin-input" id="act-bev" type="number" inputmode="decimal" placeholder="0" value="${week.beverage_revenue||''}" oninput="recalcActuals()"></div>
+            <input class="fin-input" id="act-fnb" type="number" inputmode="decimal" placeholder="0" value="${week.fnb_revenue||''}" oninput="recalcActuals()"></div>
         </div>
         <div class="fin-line">
           <label>Complimentary<span class="sub">Comp value (memo)</span></label>
@@ -3458,29 +3432,28 @@ function recalcActuals(ev){
   const num = id => parseFloat(document.getElementById(id)?.value)||0;
   const covers = num('act-covers');
   const revenue = num('act-revenue');
-  const food = num('act-food');
-  const bev = num('act-bev');
+  const fnb = num('act-fnb');
   const avgEl = document.getElementById('act-avg');
   // auto avg spend if not manually diverged
   if(avgEl && covers && revenue) avgEl.value = (revenue / covers).toFixed(2);
 
-  // food + beverage check vs total
+  // F&B sales check vs total
   const comp = num('act-comp');
   const checkEl = document.getElementById('act-check');
   if(checkEl){
-    const sum = food + bev;
+    const sum = fnb;
     if(!revenue || !sum){
       checkEl.className = 'fin-check empty';
-      checkEl.textContent = 'Food + Beverage will reconcile against the Scala + Bar total here.';
+      checkEl.textContent = 'F&B Sales will reconcile against the Scala + Bar total here.';
     } else {
       const diff = revenue - sum;
       const pct = Math.abs(diff)/revenue*100;
       if(pct <= 1.5){
         checkEl.className = 'fin-check ok';
-        checkEl.textContent = `Food + Beverage = AED ${sum.toLocaleString()} · reconciles to total (${diff>=0?'+':''}${Math.round(diff).toLocaleString()})`;
+        checkEl.textContent = `F&B Sales = AED ${sum.toLocaleString()} · reconciles to total (${diff>=0?'+':''}${Math.round(diff).toLocaleString()})`;
       } else {
         checkEl.className = 'fin-check off';
-        checkEl.textContent = `Food + Beverage = AED ${sum.toLocaleString()} · ${diff>=0?'short by':'over by'} AED ${Math.abs(Math.round(diff)).toLocaleString()} vs total`;
+        checkEl.textContent = `F&B Sales = AED ${sum.toLocaleString()} · ${diff>=0?'short by':'over by'} AED ${Math.abs(Math.round(diff)).toLocaleString()} vs total`;
       }
     }
   }
@@ -3506,8 +3479,7 @@ async function saveActuals(weekId){
   const updates = {
     covers_actual: parseInt(document.getElementById('act-covers').value)||null,
     revenue_actual: parseFloat(document.getElementById('act-revenue').value)||null,
-    food_revenue: parseFloat(document.getElementById('act-food').value)||null,
-    beverage_revenue: parseFloat(document.getElementById('act-bev').value)||null,
+    fnb_revenue: parseFloat(document.getElementById('act-fnb').value)||null,
     complimentary: parseFloat(document.getElementById('act-comp').value)||null,
     avg_spend_actual: parseFloat(document.getElementById('act-avg').value)||null,
     status: document.getElementById('act-status').value,
