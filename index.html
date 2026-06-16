@@ -1520,8 +1520,7 @@ const STAGES = {
   plan: { label:'Plan', rank:0 },
   promote: { label:'Promote', rank:1 },
   prepare: { label:'Prepare', rank:2 },
-  execute: { label:'Execute', rank:3 },
-  review: { label:'Review', rank:4 }
+  execute: { label:'Execute', rank:3 }
 };
 const STAGE_KEYS = Object.keys(STAGES);
 const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -1601,7 +1600,11 @@ function parseTaskMeta(task){
     return meta && meta.__rlh ? meta : {};
   } catch(e){ return {}; }
 }
-function normalizeStage(stage){ return stage==='confirm' ? 'prepare' : (STAGES[stage] ? stage : 'prepare'); }
+function normalizeStage(stage){
+  if(stage==='confirm') return 'prepare';
+  if(stage==='review') return 'execute';
+  return STAGES[stage] ? stage : 'prepare';
+}
 function taskDescription(priority, stage){
   return JSON.stringify({ __rlh:true, priority: priority || 'important', stage: normalizeStage(stage || 'prepare') });
 }
@@ -1621,7 +1624,6 @@ function getPriority(task){
 }
 function inferStage(task){
   const title = (task?.title||'').toLowerCase();
-  if(title.includes('actual') || title.includes('results') || title.includes('notes')) return 'review';
   if(title.includes('sequence of service') || title.includes('service leader')) return 'execute';
   if(title.includes('launch date') || title.includes('recurrence') || title.includes('social') || title.includes('website') || title.includes('invitation') || title.includes('artist image') || title.includes('imagery') || title.includes('audio') || title.includes('music link') || title.includes('stage name')) return 'promote';
   if(title.includes('selector') || title.includes('artist rotation') || title.includes('contract') || title.includes('permit') || title.includes('technical rider') || title.includes('fee')) return 'prepare';
@@ -1751,7 +1753,7 @@ function currentStageForTasks(tasks){
   for(const stage of STAGE_KEYS){
     if(stageStats(tasks, stage).open > 0) return stage;
   }
-  return 'review';
+  return 'execute';
 }
 
 // -- NAVIGATION --
@@ -1913,7 +1915,7 @@ function renderDashboard(){
           <div class="event-card-title">${ev.name}</div>
           <div class="event-card-date">${week?.week_label || week?.week_date || ev.day_of_week}${when ? ' | '+when : ''}</div>
         </div>
-        <div class="event-card-stage">Stage ${stage.rank+1} of 5: ${stage.label}</div>
+        <div class="event-card-stage">Stage ${stage.rank+1} of 4: ${stage.label}</div>
         <div style="margin:8px 0 4px"><div class="progress-bar" style="height:8px"><div class="progress-fill ${readiness.status}" style="width:${cardPct}%"></div></div></div>
         <div class="event-card-note"><strong>${tasks.length-doneCt} remaining</strong> | ${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -2140,7 +2142,7 @@ function renderEventPage(ev){
       <div class="event-title-block">
         <div class="event-eyebrow">Journey to event | ${ev.day_of_week}s</div>
         <h2>${ev.name}</h2>
-        <p>${week?.week_label || week?.week_date || 'Select or create a week'} | Stage ${STAGES[selectedStage].rank+1} of 5: ${STAGES[selectedStage].label}</p>
+        <p>${week?.week_label || week?.week_date || 'Select or create a week'} | Stage ${STAGES[selectedStage].rank+1} of 4: ${STAGES[selectedStage].label}</p>
         <button class="btn btn-gold btn-sm" style="margin-top:12px" onclick="goToReview('${ev.id}')">Go to Review &#8595;</button>
       </div>
       <div class="event-kpis">
