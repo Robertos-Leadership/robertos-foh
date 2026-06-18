@@ -2376,6 +2376,15 @@ function enterApp(module){
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   try{ localStorage.setItem('rl_inapp','1'); }catch(e){}
+  // If the user reached the manager area via an existing session
+  // (showManagerLanding) rather than a fresh login (startApp), the data was
+  // never loaded — without this the events page sits on "Loading…" forever.
+  if(!state.events.length){
+    lastLoad = Date.now();
+    loadAll();
+    startRealtime();
+    attachSyncListeners();
+  }
   switchTab(state.currentTab || 'dashboard');
 }
 function showLanding(){
