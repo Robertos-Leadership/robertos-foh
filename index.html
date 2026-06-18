@@ -410,6 +410,109 @@
     padding: 3px 8px;
   }
 
+  /* -- SPLASH LANDING -- */
+  #foh-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background:
+      linear-gradient(180deg, rgba(44,24,16,0.72) 0%, rgba(74,21,32,0.88) 60%, rgba(44,24,16,0.96) 100%),
+      url('https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/6978863119fac3dc920f9f63_Home%20Gallery%20Image%20-%20Dubai%20-%20Scala.jpg') center/cover fixed;
+    text-align: center;
+    padding: 48px 32px;
+    transition: opacity 0.5s ease;
+  }
+  #foh-splash.hiding {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .splash-logo {
+    width: min(260px, 68vw);
+    height: auto;
+    margin-bottom: 36px;
+    filter: brightness(0) invert(1);
+    opacity: 0.92;
+  }
+  .splash-rule {
+    width: 1px;
+    height: 56px;
+    background: linear-gradient(180deg, transparent, var(--gold), transparent);
+    margin: 0 auto 28px;
+  }
+  .splash-eyebrow {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.45em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    margin-bottom: 16px;
+  }
+  .splash-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(38px, 10vw, 72px);
+    font-weight: 400;
+    font-style: italic;
+    color: #fff;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    margin-bottom: 10px;
+  }
+  .splash-sub {
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.42);
+    margin-bottom: 52px;
+  }
+  .splash-enter {
+    display: inline-block;
+    background: transparent;
+    border: 1px solid var(--gold);
+    color: var(--gold-light);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.38em;
+    text-transform: uppercase;
+    padding: 14px 44px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .splash-enter:hover {
+    background: var(--gold);
+    color: var(--vino-dark);
+    border-color: var(--gold);
+  }
+  .splash-date {
+    position: absolute;
+    bottom: 28px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.28);
+    pointer-events: none;
+  }
+  .splash-difc {
+    position: absolute;
+    top: 28px;
+    right: 28px;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.22);
+    pointer-events: none;
+  }
+  @media (max-width: 480px) {
+    #foh-splash { background-attachment: scroll; }
+  }
+
   /* -- APP SHELL -- */
   #app { display:none; min-height:100vh; }
 
@@ -1831,6 +1934,18 @@
 </div>
 
 <!-- FOH PUBLIC HOME -->
+<!-- SPLASH LANDING — every employee lands here first -->
+<div id="foh-splash">
+  <div class="splash-difc">DIFC · Dubai</div>
+  <img class="splash-logo" src="https://cdn.prod.website-files.com/68b1adb67aae8a1c4f33bfa5/68d1e4ffcb7414691a2bf1a6_robertos_logo_burgundy_apostrophe_color.svg" alt="Roberto's">
+  <div class="splash-rule"></div>
+  <div class="splash-eyebrow">Roberto's DIFC</div>
+  <div class="splash-title">Front of House</div>
+  <div class="splash-sub">Team Portal</div>
+  <button class="splash-enter" onclick="splashEnter()">Enter</button>
+  <div class="splash-date" id="splash-date-label"></div>
+</div>
+
 <div id="foh-public" style="display:none; flex-direction:column; min-height:100vh; background:var(--bg); padding-bottom:72px;">
 
   <!-- header -->
@@ -5331,6 +5446,8 @@ function fohTab(tab){
 }
 
 function showFohPublic(){
+  const splash = document.getElementById('foh-splash');
+  if(splash) splash.style.display = 'none';
   document.getElementById('foh-public').style.display = 'flex';
   document.getElementById('foh-nav').style.display = 'flex';
   document.getElementById('login').classList.remove('open');
@@ -5354,12 +5471,27 @@ function fohSignOut(){
   showFohPublic();
 }
 
+// -- SPLASH --
+function splashEnter(){
+  const splash = document.getElementById('foh-splash');
+  splash.classList.add('hiding');
+  setTimeout(function(){
+    splash.style.display = 'none';
+    showFohPublic();
+  }, 500);
+}
+
 // -- INIT --
 (async function init(){
+  // Set splash date label
   try{
-    // Always show public FOH app first
-    showFohPublic();
-    // Always clear manager restore flag — FOH public is always the default landing
+    const d = new Date();
+    const label = d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const el = document.getElementById('splash-date-label');
+    if(el) el.textContent = label;
+  }catch(e){}
+  // Splash stays visible — employee taps Enter to proceed
+  try{
     try{ localStorage.removeItem('rl_inapp'); }catch(e){}
     const { data } = await sb.auth.getSession();
     if(data && data.session){
@@ -5368,9 +5500,7 @@ function fohSignOut(){
     sb.auth.onAuthStateChange((event)=>{
       if(event==='SIGNED_OUT') showFohPublic();
     });
-  }catch(e){
-    showFohPublic();
-  }
+  }catch(e){}
 })();
 </script>
 
