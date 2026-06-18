@@ -1637,6 +1637,79 @@
     color: #ccc; font-style: italic;
   }
 
+
+  /* ── Schedule toolbar (from Kitchen App) ── */
+  .sch-toolbar{background:var(--vino);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .sch-nav{display:flex;align-items:center;gap:6px}
+  .sch-nav-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;width:30px;height:30px;border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+  .sch-nav-btn:hover{background:rgba(255,255,255,.25)}
+  .sch-week-label{font-family:'Playfair Display',serif;font-size:14px;color:#fff;letter-spacing:.5px;min-width:160px;text-align:center}
+  .sch-today-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-family:'Inter',sans-serif}
+  .sch-view-tabs{display:flex;gap:4px}
+  .sch-vtab{padding:6px 14px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+  .sch-vtab.active,.sch-vtab:hover{background:var(--bg);color:var(--vino)}
+  .sch-toolbar-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .sch-copy-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif;letter-spacing:.5px}
+  .sch-copy-btn:hover{background:rgba(255,255,255,.22)}
+  .sch-copy-btn.live::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#7fc08e;margin-right:5px;vertical-align:middle}
+  .sch-copy-btn.err::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#d8a14a;margin-right:5px;vertical-align:middle}
+  .sch-delweek-btn{background:rgba(192,57,43,.3);border:1px solid rgba(192,57,43,.5);color:#ffb3a7;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif}
+  .sch-lock-btn{padding:6px 12px;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+  .sch-lock-btn:hover{background:rgba(255,255,255,.25)}
+  .sch-lock-btn.unlocked{background:#2d7a4f;border-color:#2d7a4f;font-weight:700}
+  /* Grid extras */
+  .sch-th-role{min-width:120px;text-align:left;padding-left:8px}
+  .sch-emp-id{display:block;font-size:9px;color:var(--text-light);letter-spacing:.5px;margin-top:1px}
+  .sch-del-btn{color:rgba(107,31,42,.3);margin-right:6px;font-size:14px;cursor:pointer;vertical-align:middle}
+  .sch-del-btn:hover{color:var(--red)}
+  .sch-add-row td{padding:6px 12px;border-bottom:1px solid var(--border)}
+  .sch-add-staff-btn{background:transparent;border:1px dashed rgba(107,31,42,.3);color:var(--text-light);padding:4px 12px;border-radius:3px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif}
+  .sch-add-staff-btn:hover{border-color:var(--vino);color:var(--vino)}
+  .sch-add-staff-panel{display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sch-add-staff-panel.show{display:flex}
+  .sch-add-name-inp,.sch-add-role-inp{padding:5px 8px;border:1px solid var(--border-strong);border-radius:3px;font-size:12px;font-family:'Inter',sans-serif;background:var(--surface);color:var(--text)}
+  .dish-move-yes{background:var(--vino);border:none;color:#fff;padding:5px 12px;border-radius:3px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif}
+  .dish-move-no{background:transparent;border:1px solid var(--border-strong);color:var(--text-light);padding:5px 12px;border-radius:3px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif}
+  .sch-summary-row{background:var(--surface2)}
+  .sch-summary-row td{padding:8px 6px;font-size:12px;font-weight:700;color:var(--vino);text-align:center;border-top:2px solid var(--border-strong)}
+  .sum-label{text-align:left!important;padding-left:12px!important;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-light)!important;font-weight:400!important}
+  /* Day view */
+  .sch-day-section{margin-bottom:16px}
+  .sch-day-section-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--vino);padding:6px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px}
+  .sch-day-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(107,31,42,.05);flex-wrap:wrap}
+  .sch-day-name{font-size:13px;font-weight:600;color:var(--text);min-width:160px}
+  .sch-day-role{font-size:11px;color:var(--text-light);min-width:120px}
+  .sch-day-shift{font-size:12px;color:var(--vino);min-width:110px}
+  .sch-day-hours{font-size:12px;color:var(--text-light);min-width:40px}
+  .sch-day-att{font-size:11px;color:var(--text-light)}
+  .sch-att.sch-att-in{color:#2d7a4f;font-weight:600}
+  .sch-att.sch-att-out{color:var(--text-light)}
+  .sch-att.sch-att-miss{color:var(--amber)}
+  /* Shift cell extras */
+  .sch-actual-tag{display:block;font-size:9px;color:inherit;opacity:.7;margin-top:1px}
+  .sch-actual-open{color:#3a6b47;font-size:10px}
+  .sch-actual-close{font-size:9px;color:#a8342a}
+  /* Modal */
+  .sch-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center}
+  .sch-modal-box{background:var(--surface);border-radius:6px;padding:24px;min-width:300px;max-width:380px;width:90%;max-height:90vh;overflow-y:auto}
+  .sch-modal-title{font-family:'Playfair Display',serif;font-size:16px;color:var(--vino);margin-bottom:16px;letter-spacing:.5px}
+  .sch-modal-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .sch-modal-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-light);width:52px;flex-shrink:0;font-family:'Inter',sans-serif}
+  .sch-modal-sel,.sch-modal-inp{flex:1;padding:8px 10px;border:1px solid var(--border-strong);border-radius:4px;font-size:13px;font-family:'Inter',sans-serif;background:var(--surface2);color:var(--text)}
+  .sch-modal-sel:focus,.sch-modal-inp:focus{outline:none;border-color:var(--vino)}
+  .sch-modal-times{margin-bottom:4px}
+  .sch-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+  .sch-modal-cancel{padding:8px 16px;border:1px solid var(--border-strong);border-radius:4px;background:none;color:var(--text-light);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif}
+  .sch-modal-save{padding:8px 20px;border:none;border-radius:4px;background:var(--vino);color:#fff;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;letter-spacing:.5px}
+  .sch-modal-save:hover{background:var(--vino-light)}
+  .sch-time-row{display:flex;align-items:center;gap:4px}
+  .sch-time-sel{padding:6px 4px;border:1px solid var(--border-strong);border-radius:3px;font-size:13px;font-family:'Inter',sans-serif;background:var(--surface2);color:var(--text);width:58px}
+  .sch-time-sep{color:var(--text-light);font-weight:bold}
+  .sch-split-toggle{background:transparent;border:1px dashed var(--border-strong);color:var(--text-light);padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif;transition:all .15s}
+  .sch-split-toggle:hover,.sch-split-toggle.active{border-color:var(--vino);color:var(--vino)}
+  .sch-pin-input{width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:4px;font-size:24px;text-align:center;letter-spacing:8px;font-family:'Inter',sans-serif;background:var(--surface2);color:var(--text)}
+  .sch-pin-input:focus{outline:none;border-color:var(--vino)}
+
 </style>
 </head>
 <body>
@@ -3909,6 +3982,32 @@ async function signOut(){
 //  FOH PUBLIC LAYER
 // ══════════════════════════════════════════════
 
+
+const FOH_SECTIONS = [
+  { key: 'Management',     label: 'Management' },
+  { key: 'Restaurant',     label: 'Restaurant' },
+  { key: 'Head Waiter',    label: 'Head Waiter' },
+  { key: 'Waiter/Waitress',label: 'Waiter / Waitress' },
+  { key: 'Runners',        label: 'Runners' },
+  { key: 'Bar',            label: 'Bar' },
+  { key: 'Hostess Desk',   label: 'Hostess Desk' },
+  { key: 'Security',       label: 'Security' },
+  { key: 'Housekeeping',   label: 'Housekeeping' },
+  { key: 'Cashiers',       label: 'Cashiers' },
+];
+
+const FOH_STATUS_META = {
+  working: { label: '',    bg: 'working' },
+  off:     { label: 'OFF', bg: 'off' },
+  wo:      { label: 'WO',  bg: 'wo' },
+  sl:      { label: 'SL',  bg: 'sl' },
+  al:      { label: 'AL',  bg: 'al' },
+  ph:      { label: 'PH',  bg: 'ph' },
+  em:      { label: 'EM',  bg: 'em' },
+  tr:      { label: 'TR',  bg: 'tr' },
+  cat:     { label: 'CAT', bg: 'cat' },
+};
+
 const FOH_ROSTER = [
   // Management
   { emp_id:'100065', name:'Manuel Petrosino',    role:'Beverage Manager',           section:'Management',    schedule:{ Mon:'IN', Tue:'IN', Wed:'IN', Thu:'IN', Fri:'IN', Sat:'IN', Sun:'OFF' } },
@@ -4145,6 +4244,823 @@ function fohSelectDay(day){
   renderFohSchedule();
 }
 
+
+// ══════════════════════════════════════════════
+//  FOH SCHEDULE MODULE
+// ══════════════════════════════════════════════
+
+let fohSchedWeekStart  = null;
+let fohSchedRoster     = {};
+let fohSchedStaff      = [];
+let fohSchedView       = 'week';
+let fohSchedEditTarget = null;
+let fohSchedRTChannel  = null;
+let fohSchedAttendance = {};
+let fohSchedLastSync   = '';
+
+const FOH_SCHED_PIN = '2468';
+const FOH_SCHED_LOCK_TIMEOUT = 5 * 60 * 1000;
+let fohSchedUnlocked     = false;
+let fohSchedLockTimer    = null;
+let fohSchedPendingAction= null;
+const FOH_ATT_START      = '2026-06-13';
+
+// ── Helpers (reuse same date utils already in file) ──
+function fohSchedRosterKey(sid, date){ return sid + '|' + date; }
+function fohSchedTodayStr(){ return formatDate(new Date()); }
+function fohSchedAttKey(empId, date){ return empId + '|' + date; }
+
+// ── Lock ──
+function fohSchedGuard(fn){
+  if(fohSchedUnlocked){ fohSchedTouchLock(); return true; }
+  fohSchedPendingAction = fn || null;
+  fohSchedOpenPin(); return false;
+}
+function fohSchedTouchLock(){
+  if(fohSchedLockTimer) clearTimeout(fohSchedLockTimer);
+  fohSchedLockTimer = setTimeout(fohSchedLockNow, FOH_SCHED_LOCK_TIMEOUT);
+}
+function fohSchedLockNow(){
+  fohSchedUnlocked = false;
+  if(fohSchedLockTimer){ clearTimeout(fohSchedLockTimer); fohSchedLockTimer=null; }
+  fohSchedUpdateLockBtn();
+}
+function fohSchedUpdateLockBtn(){
+  var b = document.getElementById('foh-sch-lock-btn');
+  if(!b) return;
+  b.innerHTML = fohSchedUnlocked ? '&#128275; Editing' : '&#128274; Locked';
+  b.classList.toggle('unlocked', fohSchedUnlocked);
+}
+function fohSchedToggleLock(){
+  if(fohSchedUnlocked) fohSchedLockNow();
+  else fohSchedGuard(null);
+}
+function fohSchedOpenPin(){
+  var inp = document.getElementById('foh-sch-pin-inp');
+  inp.value = '';
+  document.getElementById('foh-sch-pin-err').style.display = 'none';
+  document.getElementById('foh-sch-pin-modal').style.display = 'flex';
+  setTimeout(function(){ inp.focus(); }, 60);
+}
+function fohSchedClosePin(e){
+  if(e && e.target !== document.getElementById('foh-sch-pin-modal')) return;
+  document.getElementById('foh-sch-pin-modal').style.display = 'none';
+  fohSchedPendingAction = null;
+}
+function fohSchedCancelPin(){
+  document.getElementById('foh-sch-pin-modal').style.display = 'none';
+  fohSchedPendingAction = null;
+}
+function fohSchedSubmitPin(){
+  var v = document.getElementById('foh-sch-pin-inp').value.trim();
+  if(v === FOH_SCHED_PIN){
+    fohSchedUnlocked = true; fohSchedTouchLock(); fohSchedUpdateLockBtn();
+    document.getElementById('foh-sch-pin-modal').style.display = 'none';
+    var fn = fohSchedPendingAction; fohSchedPendingAction = null;
+    if(fn) fn();
+  } else {
+    document.getElementById('foh-sch-pin-err').style.display = 'block';
+    var inp = document.getElementById('foh-sch-pin-inp');
+    inp.value = ''; inp.focus();
+  }
+}
+
+// ── Data loading ──
+async function fohLoadSchedData(){
+  var weekEnd  = formatDate(addDays(fohSchedWeekStart, 13));
+  var weekFrom = formatDate(addDays(fohSchedWeekStart, -7));
+  var res = await Promise.all([
+    sb.from('foh_staff').select('*').eq('active', true).order('sort_order'),
+    sb.from('foh_roster').select('*').gte('work_date', weekFrom).lte('work_date', weekEnd)
+  ]);
+  fohSchedStaff = res[0].data || [];
+  fohSchedRoster = {};
+  (res[1].data || []).forEach(function(r){
+    fohSchedRoster[fohSchedRosterKey(r.staff_id, String(r.work_date).slice(0,10))] = r;
+  });
+}
+
+async function fohLoadAttendance(){
+  var from = formatDate(addDays(fohSchedWeekStart, -1));
+  var to   = formatDate(addDays(fohSchedWeekStart, 8));
+  var empIds = fohSchedStaff.filter(function(s){ return s.emp_id; }).map(function(s){ return s.emp_id; });
+  if(!empIds.length) return;
+  var res = await sbKitchen.from('attendance').select('*')
+    .gte('att_date', from).lte('att_date', to).in('emp_id', empIds).limit(2000);
+  fohSchedAttendance = {};
+  (res.data || []).forEach(function(a){
+    fohSchedAttendance[fohSchedAttKey(a.emp_id, String(a.att_date).slice(0,10))] = a;
+  });
+}
+
+function fohSchedAttState(staff, dateStr){
+  if(!staff.emp_id) return { kind:'none' };
+  var rrow = fohSchedRoster[fohSchedRosterKey(staff.id, dateStr)];
+  var scheduled = (!rrow || rrow.status === 'working');
+  var a = fohSchedAttendance[fohSchedAttKey(staff.emp_id, dateStr)];
+  var isToday = dateStr === fohSchedTodayStr();
+  var isPast  = dateStr < fohSchedTodayStr();
+  if(a && a.first_in){
+    var effOut = a.last_out || a.manual_out || null;
+    if(effOut) return { kind:'done', in:a.first_in.slice(11,16), out:effOut.slice(11,16), manual:!a.last_out&&!!a.manual_out, hours:calcHours(a.first_in.slice(11,16), effOut.slice(11,16)) };
+    if(isToday) return { kind:'in', in:a.first_in.slice(11,16) };
+    var pe = rrow ? formatTime(rrow.shift_end) : '';
+    return { kind:'open', in:a.first_in.slice(11,16), plannedEnd:pe };
+  }
+  if(scheduled && (isPast||isToday) && dateStr >= FOH_ATT_START){
+    if(isPast) return { kind:'absent' };
+    if(rrow && rrow.shift_start){
+      var now = new Date();
+      var nowM = now.getHours()*60 + now.getMinutes();
+      var sp = String(rrow.shift_start).slice(0,5).split(':');
+      var startM = parseInt(sp[0])*60 + parseInt(sp[1]||0);
+      if(nowM > startM+15 && nowM < startM+720) return { kind:'absent' };
+    }
+  }
+  return { kind:'none' };
+}
+
+function fohSchedEffHours(staff, dateStr){
+  var rr = fohSchedRoster[fohSchedRosterKey(staff.id, dateStr)];
+  if(rr && rr.status !== 'working') return 0;
+  var att = fohSchedAttState(staff, dateStr);
+  if(att.kind==='done') return att.hours;
+  if(att.kind==='in'||att.kind==='open'||att.kind==='absent') return 0;
+  var ts = rr ? formatTime(rr.shift_start) : '';
+  var te = rr ? formatTime(rr.shift_end)   : '';
+  if(!ts||!te) return 0;
+  return calcHours(ts, te, rr?formatTime(rr.shift_start2):'', rr?formatTime(rr.shift_end2):'');
+}
+
+// ── Navigation ──
+function fohSchedWeekOffset(n){
+  fohSchedWeekStart = addDays(fohSchedWeekStart, n*7);
+  fohLoadSchedData().then(fohLoadAttendance).then(fohRenderSchedView);
+}
+function fohSchedGoToday(){
+  fohSchedWeekStart = getMonday(new Date());
+  fohLoadSchedData().then(fohLoadAttendance).then(fohRenderSchedView);
+}
+function fohSchedSetView(v){
+  fohSchedView = v;
+  document.querySelectorAll('.foh-sch-vtab').forEach(function(b){ b.classList.remove('active'); });
+  var el = document.getElementById('foh-svt-'+v);
+  if(el) el.classList.add('active');
+  fohRenderSchedView();
+}
+
+// ── Render ──
+function fohRenderSchedView(){
+  var days = []; for(var i=0;i<7;i++) days.push(addDays(fohSchedWeekStart,i));
+  var opts = {day:'numeric',month:'short'};
+  var lbl = document.getElementById('foh-sch-week-label');
+  if(lbl) lbl.textContent = days[0].toLocaleDateString('en-GB',opts) + ' – ' + days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var wv = document.getElementById('foh-sch-week-view');
+  var dv = document.getElementById('foh-sch-day-view');
+  if(fohSchedView === 'week'){
+    if(wv) wv.style.display='block';
+    if(dv) dv.style.display='none';
+    fohRenderSchedWeek();
+  } else {
+    if(wv) wv.style.display='none';
+    if(dv) dv.style.display='block';
+    fohRenderSchedDay();
+  }
+}
+
+function fohRenderSchedWeek(){
+  var today = formatDate(new Date());
+  var days = []; for(var i=0;i<7;i++) days.push(addDays(fohSchedWeekStart,i));
+  var dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  var html = '<table class="sch-grid"><thead><tr>';
+  html += '<th class="sch-th-name">Name</th><th class="sch-th-role">Role</th>';
+  for(var di=0;di<days.length;di++){
+    var ds = formatDate(days[di]);
+    html += '<th class="'+(ds===today?'sch-th-today':'')+'">' + dayNames[di] +
+      '<br><span style="font-size:10px;opacity:.8">' + days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></th>';
+  }
+  html += '<th>Hrs</th><th>Days</th></tr></thead><tbody>';
+
+  FOH_SECTIONS.forEach(function(sec){
+    var allStaff = fohSchedStaff.filter(function(s){ return s.section === sec.key; });
+    if(!allStaff.length) return;
+    html += '<tr class="sch-station-hdr"><td colspan="10">' + sec.label + '</td></tr>';
+    allStaff.forEach(function(staff){
+      var sid = staff.id;
+      var wHours=0, wDays=0;
+      html += '<tr>';
+      html += '<td class="sch-td-name" style="cursor:pointer" onclick="fohSchedEditEmpId(event,\''+sid+'\')" title="Tap to set employee ID">' +
+        '<span class="sch-del-btn" onclick="fohSchedConfirmDelete(event,\''+sid+'\')">×</span>' +
+        staff.name +
+        (staff.emp_id ? '<span class="sch-emp-id">'+staff.emp_id+'</span>' : '') + '</td>';
+      html += '<td class="sch-td-role" onclick="fohSchedEditRole(event,\''+sid+'\')" style="cursor:pointer">' +
+        staff.role + ' <span style="opacity:.3;font-size:10px">✎</span></td>';
+
+      for(var dj=0;dj<days.length;dj++){
+        var ds2 = formatDate(days[dj]);
+        var rrow = fohSchedRoster[fohSchedRosterKey(sid, ds2)];
+        var isTod = ds2 === today;
+        html += '<td class="sch-cell'+(isTod?' sch-cell-today':'')+'" onclick="fohSchedOpenEdit(\''+sid+'\',\''+ds2+'\')">';
+        if(!rrow || rrow.status === 'working'){
+          var ts  = rrow ? formatTime(rrow.shift_start)  : '';
+          var te  = rrow ? formatTime(rrow.shift_end)    : '';
+          var ts2 = rrow ? formatTime(rrow.shift_start2) : '';
+          var te2 = rrow ? formatTime(rrow.shift_end2)   : '';
+          var att = fohSchedAttState(staff, ds2);
+          if(att.kind==='done'){
+            wHours+=att.hours; wDays++;
+            html+='<div class="sch-shift actual">'+att.in+'<br>'+att.out+(att.manual?'<span class="sch-actual-tag">closed</span>':'')+'</div>';
+          } else if(att.kind==='in'){
+            wDays++;
+            html+='<div class="sch-shift actual-live">'+att.in+'<br><span class="sch-actual-open">working</span></div>';
+          } else if(att.kind==='open'){
+            wDays++;
+            html+='<div class="sch-shift actual-open-flag" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')">'+att.in+'<br><span class="sch-actual-close">tap to close</span></div>';
+          } else if(att.kind==='absent'){
+            wDays++;
+            html+='<div class="sch-shift actual-absent">'+(ts&&te?ts+'<br>'+te:'')+'<span class="sch-actual-tag">no clock-in</span></div>';
+          } else {
+            if(ts&&te){ wHours+=calcHours(ts,te,ts2,te2); wDays++; }
+            var splitLabel = (ts2&&te2)?'<br><span style="opacity:.6;font-size:9px">'+ts2+'–'+te2+'</span>':'';
+            html+='<div class="sch-shift working">'+(ts&&te?ts+'<br>'+te+splitLabel:'<span style="color:#bbb;font-size:10px">+ add</span>')+'</div>';
+          }
+        } else {
+          var meta = FOH_STATUS_META[rrow.status] || { label:rrow.status.toUpperCase(), bg:'off' };
+          if(rrow.status !== 'off') wDays++;
+          html+='<div class="sch-shift '+meta.bg+'">'+meta.label+'</div>';
+        }
+        html += '</td>';
+      }
+      html += '<td class="sch-td-hours">'+(wHours>0?wHours+'h':'—')+'</td>';
+      html += '<td class="sch-td-days">'+(wDays>0?wDays:'—')+'</td>';
+      html += '</tr>';
+    });
+
+    html += '<tr class="sch-add-row"><td colspan="10">' +
+      '<button class="sch-add-staff-btn" onclick="fohSchedShowAddStaff(\''+sec.key+'\')">+ Add staff to '+sec.label+'</button>' +
+      '<div class="sch-add-staff-panel" id="foh-sadd-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'">' +
+        '<input type="text" class="sch-add-name-inp" id="foh-sadd-name-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'" placeholder="Full name" />' +
+        '<input type="text" class="sch-add-role-inp" id="foh-sadd-role-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'" placeholder="Role" />' +
+        '<button class="dish-move-yes" onclick="fohSchedSaveNewStaff(\''+sec.key+'\')">Add</button>' +
+        '<button class="dish-move-no" onclick="fohSchedHideAddStaff(\''+sec.key+'\')">Cancel</button>' +
+      '</div>' +
+    '</td></tr>';
+  });
+
+  html += '</tbody>';
+
+  // Footer totals
+  html += '<tfoot><tr class="sch-summary-row"><td class="sum-label">Total hours</td><td></td>';
+  var grandTotal=0;
+  for(var sumDi=0;sumDi<days.length;sumDi++){
+    var sumDs = formatDate(days[sumDi]);
+    var dayTotal=0;
+    fohSchedStaff.forEach(function(s){ dayTotal += fohSchedEffHours(s, sumDs); });
+    dayTotal = Math.round(dayTotal*10)/10;
+    grandTotal += dayTotal;
+    html += '<td>'+(dayTotal>0?dayTotal+'h':'—')+'</td>';
+  }
+  grandTotal = Math.round(grandTotal*10)/10;
+  html += '<td>'+(grandTotal>0?grandTotal+'h':'—')+'</td><td>—</td></tr></tfoot>';
+  html += '</table>';
+
+  var wrap = document.getElementById('foh-sch-grid-wrap');
+  if(wrap) wrap.innerHTML = html;
+}
+
+function fohRenderSchedDay(){
+  var today = formatDate(new Date());
+  var total=0, clockedIn=0;
+  var sections='';
+  FOH_SECTIONS.forEach(function(sec){
+    var working = fohSchedStaff.filter(function(s){
+      if(s.section !== sec.key) return false;
+      var row = fohSchedRoster[fohSchedRosterKey(s.id, today)];
+      return !row || row.status === 'working';
+    });
+    if(!working.length) return;
+    total += working.length;
+    working.sort(function(a,b){
+      var ra = fohSchedRoster[fohSchedRosterKey(a.id,today)];
+      var rb = fohSchedRoster[fohSchedRosterKey(b.id,today)];
+      return (ra&&ra.shift_start?ra.shift_start:'99').localeCompare(rb&&rb.shift_start?rb.shift_start:'99');
+    });
+    sections += '<div class="sch-day-section"><div class="sch-day-section-title">'+sec.label+'</div>';
+    working.forEach(function(staff){
+      var row = fohSchedRoster[fohSchedRosterKey(staff.id, today)];
+      var ts = row ? formatTime(row.shift_start) : '';
+      var te = row ? formatTime(row.shift_end)   : '';
+      var att = fohSchedAttState(staff, today);
+      var attTxt='', attCls='';
+      if(att.kind==='done'){ attTxt='Worked '+att.in+'–'+att.out; attCls='sch-att-out'; }
+      else if(att.kind==='in'){ attTxt='In '+att.in; attCls='sch-att-in'; }
+      else if(att.kind==='open'){ attTxt='In '+att.in+' · no clock-out'; attCls='sch-att-miss'; }
+      else if(att.kind==='absent'){ attTxt='No clock-in'; attCls='sch-att-miss'; }
+      var hVal = att.kind==='done' ? att.hours : calcHours(ts,te);
+      sections += '<div class="sch-day-row">'+
+        '<span class="sch-day-name">'+staff.name+'</span>'+
+        '<span class="sch-day-role">'+staff.role+'</span>'+
+        '<span class="sch-day-shift">'+(ts&&te?ts+' – '+te:'<em style="color:#bbb">No time set</em>')+'</span>'+
+        '<span class="sch-day-hours">'+(hVal>0?hVal+'h':'')+'</span>'+
+        '<span class="sch-day-att'+(attTxt?' sch-att '+attCls:'')+'">'+(attTxt||'')+'</span>'+
+        '</div>';
+    });
+    sections += '</div>';
+  });
+  fohSchedStaff.forEach(function(s){
+    if(!s.emp_id) return;
+    var a = fohSchedAttendance[fohSchedAttKey(s.emp_id,today)];
+    if(a && a.first_in && !a.last_out && !a.manual_out) clockedIn++;
+  });
+  var content = document.getElementById('foh-sch-day-content');
+  if(content) content.innerHTML =
+    '<div style="margin-bottom:12px;font-size:13px;color:var(--vino-light)">'+total+' staff on duty'+
+    ' · <span style="color:#4a7c59;font-weight:600">'+clockedIn+' clocked in</span>'+
+    (fohSchedLastSync?' · <span style="opacity:.55;font-size:12px">'+fohSchedLastSync+'</span>':'')+
+    '</div>' + sections;
+}
+
+// ── Edit modal ──
+function fohSchedOpenEdit(staffId, date){
+  if(!fohSchedGuard(function(){ fohSchedOpenEdit(staffId,date); })) return;
+  fohSchedEditTarget = { staffId:staffId, date:date };
+  var staff = fohSchedStaff.find(function(s){ return s.id===staffId; });
+  var row = fohSchedRoster[fohSchedRosterKey(staffId,date)];
+  var d = new Date(date+'T12:00:00');
+  document.getElementById('foh-sch-modal-title').textContent =
+    (staff?staff.name:'') + ' · ' + d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  document.getElementById('foh-sch-status-sel').value = row ? row.status : 'working';
+  var st = row&&row.shift_start ? formatTime(row.shift_start) : '14:00';
+  var et = row&&row.shift_end   ? formatTime(row.shift_end)   : '00:00';
+  var sp=st.split(':'), ep=et.split(':');
+  document.getElementById('foh-sch-start-h').value = sp[0]||'14';
+  document.getElementById('foh-sch-start-m').value = sp[1]||'00';
+  document.getElementById('foh-sch-end-h').value   = ep[0]||'00';
+  document.getElementById('foh-sch-end-m').value   = ep[1]||'00';
+  document.getElementById('foh-sch-notes-inp').value = row&&row.notes?row.notes:'';
+  var hasSplit = row&&row.shift_start2&&row.shift_end2;
+  var s2 = hasSplit?formatTime(row.shift_start2):'18:00';
+  var e2 = hasSplit?formatTime(row.shift_end2):'00:00';
+  var s2p=s2.split(':'), e2p=e2.split(':');
+  document.getElementById('foh-sch-start2-h').value=s2p[0]||'18';
+  document.getElementById('foh-sch-start2-m').value=s2p[1]||'00';
+  document.getElementById('foh-sch-end2-h').value  =e2p[0]||'00';
+  document.getElementById('foh-sch-end2-m').value  =e2p[1]||'00';
+  var sf = document.getElementById('foh-sch-split-fields');
+  var st2 = document.getElementById('foh-sch-split-toggle');
+  if(hasSplit){ sf.style.display='block'; st2.textContent='− Remove split shift'; st2.classList.add('active'); }
+  else { sf.style.display='none'; st2.textContent='+ Add split shift'; st2.classList.remove('active'); }
+  fohSchedStatusChange();
+  document.getElementById('foh-sch-modal').style.display='flex';
+}
+function fohSchedToggleSplit(){
+  var f=document.getElementById('foh-sch-split-fields');
+  var b=document.getElementById('foh-sch-split-toggle');
+  var open=f.style.display!=='none';
+  if(open){ f.style.display='none'; b.textContent='+ Add split shift'; b.classList.remove('active'); }
+  else { f.style.display='block'; b.textContent='− Remove split shift'; b.classList.add('active'); }
+}
+function fohSchedStatusChange(){
+  var s=document.getElementById('foh-sch-status-sel').value;
+  document.getElementById('foh-sch-time-fields').style.display=s==='working'?'block':'none';
+}
+function fohSchedCloseModal(e){
+  if(e && e.target!==document.getElementById('foh-sch-modal')) return;
+  document.getElementById('foh-sch-modal').style.display='none';
+  fohSchedEditTarget=null;
+}
+async function fohSchedSaveShift(){
+  if(!fohSchedEditTarget) return;
+  var staffId=fohSchedEditTarget.staffId, date=fohSchedEditTarget.date;
+  var status=document.getElementById('foh-sch-status-sel').value;
+  var start=document.getElementById('foh-sch-start-h').value+':'+document.getElementById('foh-sch-start-m').value;
+  var end  =document.getElementById('foh-sch-end-h').value  +':'+document.getElementById('foh-sch-end-m').value;
+  var hasSplit2=document.getElementById('foh-sch-split-fields').style.display!=='none';
+  var start2=hasSplit2?document.getElementById('foh-sch-start2-h').value+':'+document.getElementById('foh-sch-start2-m').value:null;
+  var end2  =hasSplit2?document.getElementById('foh-sch-end2-h').value  +':'+document.getElementById('foh-sch-end2-m').value  :null;
+  var notes =document.getElementById('foh-sch-notes-inp').value.trim();
+  document.getElementById('foh-sch-modal').style.display='none';
+  var key=fohSchedRosterKey(staffId,date);
+  var payload=Object.assign({},fohSchedRoster[key]||{},{
+    staff_id:staffId, work_date:date, status:status,
+    shift_start: status==='working'?(start||null):null,
+    shift_end:   status==='working'?(end||null):null,
+    shift_start2:status==='working'?(start2||null):null,
+    shift_end2:  status==='working'?(end2||null):null,
+    notes:notes||null, updated_at:new Date().toISOString()
+  });
+  fohSchedRoster[key]=payload;
+  fohRenderSchedWeek();
+  var res=await sb.from('foh_roster').upsert(payload,{onConflict:'staff_id,work_date'});
+  if(res.error) console.error('Save error:',res.error);
+  fohSchedEditTarget=null;
+}
+
+// ── Inline edit emp_id ──
+function fohSchedEditEmpId(event, staffId){
+  event.stopPropagation();
+  if(!fohSchedGuard(function(){ fohSchedEditEmpId(event,staffId); })) return;
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff) return;
+  var v=prompt('Employee ID (COSEC) for '+staff.name+'\nLeave empty = no clock-in tracking:', staff.emp_id||'');
+  if(v===null) return;
+  v=(v||'').trim(); staff.emp_id=v||null;
+  fohRenderSchedWeek();
+  sb.from('foh_staff').update({emp_id:v||null}).eq('id',staffId)
+    .then(function(res){ if(res.error){ console.error('Emp ID error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); } });
+}
+
+// ── Inline edit role ──
+function fohSchedEditRole(event, staffId){
+  event.stopPropagation();
+  if(!fohSchedGuard(null)) return;
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff) return;
+  var td=event.currentTarget;
+  td.innerHTML='<input type="text" class="sch-role-input" value="'+staff.role+'" '+
+    'onblur="fohSchedSaveRole(\''+staffId+'\',this)" '+
+    'onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\')fohRenderSchedWeek()" '+
+    'style="width:110px;padding:3px 6px;border:1px solid var(--vino);font-size:12px;background:var(--surface)"/>';
+  td.querySelector('input').focus(); td.querySelector('input').select();
+}
+async function fohSchedSaveRole(staffId, input){
+  var newRole=input.value.trim();
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff||!newRole||newRole===staff.role){ fohRenderSchedWeek(); return; }
+  staff.role=newRole; fohRenderSchedWeek();
+  var res=await sb.from('foh_staff').update({role:newRole}).eq('id',staffId);
+  if(res.error){ console.error('Role error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); }
+}
+
+// ── Close open shift ──
+function fohSchedCloseShift(event, staffId, dateStr){
+  event.stopPropagation();
+  if(!fohSchedGuard(function(){ fohSchedCloseShift(event,staffId,dateStr); })) return;
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff||!staff.emp_id) return;
+  var rrow=fohSchedRoster[fohSchedRosterKey(staffId,dateStr)];
+  var plannedEnd=rrow?formatTime(rrow.shift_end):'';
+  var a=fohSchedAttendance[fohSchedAttKey(staff.emp_id,dateStr)];
+  if(!a||!a.first_in) return;
+  var out=prompt('Close shift for '+staff.name+' on '+dateStr+'\nClocked in at '+a.first_in.slice(11,16)+'. Clock-out time:', plannedEnd||'00:00');
+  if(out===null) return;
+  out=out.trim();
+  if(!/^\d{1,2}:\d{2}$/.test(out)){ alert('Please use HH:MM'); return; }
+  a.manual_out=out; fohRenderSchedView();
+  sbKitchen.from('attendance').update({manual_out:out,closed_by:'foh-manager',closed_at:new Date().toISOString()})
+    .eq('emp_id',staff.emp_id).eq('att_date',dateStr)
+    .then(function(res){ if(res.error) console.error('Close shift error:',res.error); });
+}
+
+// ── Delete staff ──
+function fohSchedConfirmDelete(event, staffId){
+  event.stopPropagation();
+  if(!fohSchedGuard(null)) return;
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff) return;
+  if(!confirm('Remove '+staff.name+' from roster? This cannot be undone.')) return;
+  fohSchedStaff=fohSchedStaff.filter(function(s){ return s.id!==staffId; });
+  fohRenderSchedWeek();
+  sb.from('foh_staff').update({active:false}).eq('id',staffId)
+    .then(function(res){ if(res.error){ console.error('Delete error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); } });
+}
+
+// ── Add staff ──
+function fohSchedShowAddStaff(sectionKey){
+  if(!fohSchedGuard(function(){ fohSchedShowAddStaff(sectionKey); })) return;
+  document.querySelectorAll('.sch-add-staff-panel.show').forEach(function(p){ p.classList.remove('show'); });
+  var sk=sectionKey.replace(/[^a-z0-9]/gi,'_');
+  var panel=document.getElementById('foh-sadd-'+sk);
+  if(panel){ panel.classList.add('show'); panel.querySelector('.sch-add-name-inp').focus(); }
+}
+function fohSchedHideAddStaff(sectionKey){
+  var sk=sectionKey.replace(/[^a-z0-9]/gi,'_');
+  var panel=document.getElementById('foh-sadd-'+sk);
+  if(panel) panel.classList.remove('show');
+}
+async function fohSchedSaveNewStaff(sectionKey){
+  var sk=sectionKey.replace(/[^a-z0-9]/gi,'_');
+  var nameInp=document.getElementById('foh-sadd-name-'+sk);
+  var roleInp=document.getElementById('foh-sadd-role-'+sk);
+  var name=nameInp?nameInp.value.trim():'';
+  var role=roleInp?roleInp.value.trim():'';
+  if(!name||!role){ alert('Please enter both name and role.'); return; }
+  fohSchedHideAddStaff(sectionKey);
+  var sortOrder=fohSchedStaff.filter(function(s){ return s.section===sectionKey; }).length+1;
+  var tempId='temp-'+Date.now();
+  var newStaff={id:tempId,name:name,role:role,section:sectionKey,sort_order:sortOrder,active:true};
+  fohSchedStaff.push(newStaff); fohRenderSchedWeek();
+  var res=await sb.from('foh_staff').insert({name:name,role:role,section:sectionKey,sort_order:sortOrder,active:true}).select().single();
+  if(res.error){
+    console.error('Add staff error:',res.error);
+    fohSchedStaff=fohSchedStaff.filter(function(s){ return s.id!==tempId; }); fohRenderSchedWeek();
+  } else {
+    var idx=fohSchedStaff.findIndex(function(s){ return s.id===tempId; });
+    if(idx!==-1) fohSchedStaff[idx].id=res.data.id;
+    fohRenderSchedWeek();
+  }
+}
+
+// ── Duplicate week ──
+function fohSchedDuplicateWeek(){
+  if(!fohSchedGuard(function(){ fohSchedDuplicateWeek(); })) return;
+  var fmt=function(d){ return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); };
+  document.getElementById('foh-sch-dup-src').textContent=
+    'Source: '+fmt(fohSchedWeekStart)+' – '+fmt(addDays(fohSchedWeekStart,6));
+  document.getElementById('foh-sch-dup-date').value=formatDate(addDays(fohSchedWeekStart,7));
+  document.getElementById('foh-sch-dup-overwrite').checked=false;
+  document.getElementById('foh-sch-dup-modal').style.display='flex';
+}
+function fohSchedCloseDup(e){
+  if(e && e.target!==document.getElementById('foh-sch-dup-modal')) return;
+  document.getElementById('foh-sch-dup-modal').style.display='none';
+}
+function fohSchedCancelDup(){ document.getElementById('foh-sch-dup-modal').style.display='none'; }
+
+async function fohSchedDeleteWeek(){
+  if(!fohSchedGuard(function(){ fohSchedDeleteWeek(); })) return;
+  var from=formatDate(fohSchedWeekStart), to=formatDate(addDays(fohSchedWeekStart,6));
+  var fmt=function(d){ return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); };
+  if(!confirm('Delete ALL roster entries for '+fmt(fohSchedWeekStart)+' – '+fmt(addDays(fohSchedWeekStart,6))+'?\n\nStaff names stay — only shifts removed. Cannot be undone.')) return;
+  Object.keys(fohSchedRoster).forEach(function(k){
+    var d=k.split('|')[1]; if(d>=from && d<=to) delete fohSchedRoster[k];
+  });
+  fohRenderSchedView();
+  var res=await sb.from('foh_roster').delete().gte('work_date',from).lte('work_date',to);
+  if(res.error){ console.error('Delete week error:',res.error); fohLoadSchedData().then(fohRenderSchedView); }
+}
+
+async function fohSchedConfirmDuplicate(){
+  var v=document.getElementById('foh-sch-dup-date').value;
+  if(!v){ alert('Pick a target week first.'); return; }
+  var target=getMonday(new Date(v+'T12:00:00'));
+  var tFrom=formatDate(target), tTo=formatDate(addDays(target,6));
+  if(tFrom===formatDate(fohSchedWeekStart)){ alert('Target week is same as source.'); return; }
+  var overwrite=document.getElementById('foh-sch-dup-overwrite').checked;
+  document.getElementById('foh-sch-dup-modal').style.display='none';
+  var offsetDays=Math.round((target-fohSchedWeekStart)/86400000);
+  var days=[]; for(var i=0;i<7;i++) days.push(addDays(fohSchedWeekStart,i));
+  var existingSet={};
+  if(overwrite){
+    var del=await sb.from('foh_roster').delete().gte('work_date',tFrom).lte('work_date',tTo);
+    if(del.error){ console.error('Overwrite clear error:',del.error); alert('Could not clear target week.'); return; }
+  } else {
+    var ex=await sb.from('foh_roster').select('staff_id,work_date').gte('work_date',tFrom).lte('work_date',tTo);
+    (ex.data||[]).forEach(function(r){ existingSet[r.staff_id+'|'+String(r.work_date).slice(0,10)]=true; });
+  }
+  var upserts=[];
+  fohSchedStaff.forEach(function(staff){
+    days.forEach(function(d){
+      var srcDate=formatDate(d), tgtDate=formatDate(addDays(d,offsetDays));
+      var existing=fohSchedRoster[fohSchedRosterKey(staff.id,srcDate)];
+      if(!existing) return;
+      if(!overwrite && existingSet[staff.id+'|'+tgtDate]) return;
+      upserts.push({staff_id:staff.id,work_date:tgtDate,status:existing.status,
+        shift_start:existing.shift_start||null,shift_end:existing.shift_end||null,
+        shift_start2:existing.shift_start2||null,shift_end2:existing.shift_end2||null,
+        notes:existing.notes||null,updated_at:new Date().toISOString()});
+    });
+  });
+  if(!upserts.length){ alert('Nothing to duplicate — source week is empty or target is fully set.'); return; }
+  var res=await sb.from('foh_roster').upsert(upserts,{onConflict:'staff_id,work_date',ignoreDuplicates:!overwrite});
+  if(res.error) console.error('Duplicate error:',res.error);
+  fohSchedWeekStart=target;
+  await fohLoadSchedData(); await fohLoadAttendance(); fohRenderSchedView();
+}
+
+// ── Print ──
+function fohSchedPrint(){
+  var today=formatDate(new Date());
+  var days=[]; for(var i=0;i<7;i++) days.push(addDays(fohSchedWeekStart,i));
+  var dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var weekStr=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+
+    days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var html='<div style="margin-bottom:8px"><h2 style="font-size:13px;color:#410207;margin:0 0 2px">Roberto\'s DIFC — FOH Roster: '+weekStr+'</h2>'+
+    '<p style="font-size:9px;color:#666;margin:0">Printed: '+new Date().toLocaleString('en-GB')+'</p></div>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:9px"><thead><tr>'+
+    '<th style="background:#410207;color:#fff;padding:5px 4px;text-align:left;min-width:130px">Name</th>'+
+    '<th style="background:#410207;color:#fff;padding:5px 4px;text-align:left">Role</th>';
+  for(var di=0;di<days.length;di++) html+='<th style="background:#410207;color:#fff;padding:5px 4px">'+dayNames[di]+' '+days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</th>';
+  html+='<th style="background:#410207;color:#fff;padding:5px 4px">Hours</th><th style="background:#410207;color:#fff;padding:5px 4px">Days</th></tr></thead><tbody>';
+  FOH_SECTIONS.forEach(function(sec){
+    var stStaff=fohSchedStaff.filter(function(s){ return s.section===sec.key; });
+    if(!stStaff.length) return;
+    html+='<tr><td colspan="11" style="background:#f5f5f5;font-weight:700;font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:4px 6px">'+sec.label+'</td></tr>';
+    stStaff.forEach(function(staff){
+      var wh=0, wd=0;
+      html+='<tr><td style="padding:4px 6px;font-weight:600;border:1px solid #ccc">'+staff.name+'</td>'+
+        '<td style="padding:4px 4px;font-size:8px;color:#666;border:1px solid #ccc">'+staff.role+'</td>';
+      days.forEach(function(d){
+        var ds=formatDate(d);
+        var row=fohSchedRoster[fohSchedRosterKey(staff.id,ds)];
+        if(!row||row.status==='working'){
+          var ts=row?formatTime(row.shift_start):'', te=row?formatTime(row.shift_end):'';
+          var h=calcHours(ts,te); if(ts&&te){ wh+=h; wd++; }
+          html+='<td style="padding:4px;text-align:center;border:1px solid #ccc">'+(ts&&te?ts+'–'+te:'')+'</td>';
+        } else {
+          var meta=FOH_STATUS_META[row.status]||{label:row.status.toUpperCase()};
+          if(row.status!=='off') wd++;
+          html+='<td style="padding:4px;text-align:center;border:1px solid #ccc;color:#999">'+meta.label+'</td>';
+        }
+      });
+      html+='<td style="padding:4px;text-align:center;font-weight:700;border:1px solid #ccc">'+(wh>0?wh+'h':'—')+'</td>'+
+        '<td style="padding:4px;text-align:center;border:1px solid #ccc">'+(wd||'—')+'</td></tr>';
+    });
+  });
+  html+='</tbody></table>';
+  var printDoc='<!doctype html><html><head><title>FOH Roster</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;margin:0}</style></head><body>'+html+'
+<!-- FOH Schedule modals -->
+<div id="foh-sch-dup-modal" class="sch-modal-overlay" style="display:none" onclick="fohSchedCloseDup(event)">
+  <div class="sch-modal-box" style="max-width:340px">
+    <div class="sch-modal-title">&#10697; Duplicate week</div>
+    <div id="foh-sch-dup-src" style="font-size:12px;color:var(--text-light);margin-bottom:14px;font-family:'Inter',sans-serif"></div>
+    <div class="sch-modal-row">
+      <label class="sch-modal-label" style="width:80px">To week of</label>
+      <input type="date" id="foh-sch-dup-date" class="sch-modal-inp" />
+    </div>
+    <div style="font-size:11px;color:var(--text-light);margin:-6px 0 12px 90px;font-family:'Inter',sans-serif">Pick any date — snaps to that Mon–Sun</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-family:'Inter',sans-serif;color:var(--text);margin-bottom:4px;cursor:pointer">
+      <input type="checkbox" id="foh-sch-dup-overwrite" style="width:16px;height:16px;accent-color:var(--vino)" />
+      Overwrite target week if already created
+    </label>
+    <div class="sch-modal-actions">
+      <button class="sch-modal-cancel" onclick="fohSchedCancelDup()">Cancel</button>
+      <button class="sch-modal-save" onclick="fohSchedConfirmDuplicate()">Duplicate</button>
+    </div>
+  </div>
+</div>
+
+<div id="foh-sch-pin-modal" class="sch-modal-overlay" style="display:none" onclick="fohSchedClosePin(event)">
+  <div class="sch-modal-box" style="max-width:300px">
+    <div class="sch-modal-title">&#128274; Enter passcode to edit</div>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="foh-sch-pin-inp" class="sch-pin-input" autocomplete="off"
+      onkeydown="if(event.key==='Enter')fohSchedSubmitPin();if(event.key==='Escape')fohSchedCancelPin()" />
+    <div id="foh-sch-pin-err" style="display:none;color:#991b1b;font-size:12px;margin-top:8px;font-family:'Inter',sans-serif">Incorrect passcode — try again</div>
+    <div class="sch-modal-actions">
+      <button class="sch-modal-cancel" onclick="fohSchedCancelPin()">Cancel</button>
+      <button class="sch-modal-save" onclick="fohSchedSubmitPin()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<div id="foh-sch-modal" class="sch-modal-overlay" style="display:none" onclick="fohSchedCloseModal(event)">
+  <div class="sch-modal-box">
+    <div class="sch-modal-title" id="foh-sch-modal-title">Edit Shift</div>
+    <div class="sch-modal-row">
+      <label class="sch-modal-label">Status</label>
+      <select id="foh-sch-status-sel" class="sch-modal-sel" onchange="fohSchedStatusChange()">
+        <option value="working">Working</option>
+        <option value="off">Day Off</option>
+        <option value="wo">Week Off (WO)</option>
+        <option value="sl">Sick Leave (SL)</option>
+        <option value="al">Annual Leave (AL)</option>
+        <option value="ph">Public Holiday (PH)</option>
+        <option value="em">Emergency (EM)</option>
+        <option value="tr">Training (TR)</option>
+        <option value="cat">Catering (CAT)</option>
+      </select>
+    </div>
+    <div id="foh-sch-time-fields" class="sch-modal-times">
+      <div class="sch-modal-row">
+        <label class="sch-modal-label">Start</label>
+        <div class="sch-time-row">
+          <select id="foh-sch-start-h" class="sch-time-sel"><option>00</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option></select>
+          <span class="sch-time-sep">:</span>
+          <select id="foh-sch-start-m" class="sch-time-sel"><option>00</option><option>15</option><option>30</option><option>45</option></select>
+        </div>
+      </div>
+      <div class="sch-modal-row">
+        <label class="sch-modal-label">End</label>
+        <div class="sch-time-row">
+          <select id="foh-sch-end-h" class="sch-time-sel"><option>00</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option></select>
+          <span class="sch-time-sep">:</span>
+          <select id="foh-sch-end-m" class="sch-time-sel"><option>00</option><option>15</option><option>30</option><option>45</option></select>
+        </div>
+      </div>
+      <div class="sch-modal-row" style="margin-top:4px">
+        <label class="sch-modal-label"></label>
+        <button type="button" class="sch-split-toggle" id="foh-sch-split-toggle" onclick="fohSchedToggleSplit()">+ Add split shift</button>
+      </div>
+      <div id="foh-sch-split-fields" style="display:none">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-light);padding:8px 0 4px;font-family:'Inter',sans-serif">Second block</div>
+        <div class="sch-modal-row">
+          <label class="sch-modal-label">In again</label>
+          <div class="sch-time-row">
+            <select id="foh-sch-start2-h" class="sch-time-sel"><option>00</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option></select>
+            <span class="sch-time-sep">:</span>
+            <select id="foh-sch-start2-m" class="sch-time-sel"><option>00</option><option>15</option><option>30</option><option>45</option></select>
+          </div>
+        </div>
+        <div class="sch-modal-row">
+          <label class="sch-modal-label">Out again</label>
+          <div class="sch-time-row">
+            <select id="foh-sch-end2-h" class="sch-time-sel"><option>00</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option></select>
+            <span class="sch-time-sep">:</span>
+            <select id="foh-sch-end2-m" class="sch-time-sel"><option>00</option><option>15</option><option>30</option><option>45</option></select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sch-modal-row">
+      <label class="sch-modal-label">Notes</label>
+      <input type="text" id="foh-sch-notes-inp" class="sch-modal-inp" placeholder="Optional note" />
+    </div>
+    <div class="sch-modal-actions">
+      <button class="sch-modal-cancel" onclick="document.getElementById('foh-sch-modal').style.display='none'">Cancel</button>
+      <button class="sch-modal-save" onclick="fohSchedSaveShift()">Save</button>
+    </div>
+  </div>
+</div>
+
+</body></html>';
+  var w=window.open('','_blank');
+  if(!w){ alert('Pop-up blocked — allow pop-ups and try again.'); return; }
+  w.document.open(); w.document.write(printDoc); w.document.close();
+  w.focus(); setTimeout(function(){ w.print(); },150);
+}
+
+// ── Sync attendance ──
+function fohSchedForceSync(){
+  var btn=document.getElementById('foh-sch-sync-btn');
+  if(btn){ btn.textContent='Syncing…'; btn.classList.remove('live','err'); }
+  fohLoadAttendance().then(function(){
+    fohSchedLastSync='Live · '+new Date().toTimeString().slice(0,5);
+    if(btn){ btn.textContent=fohSchedLastSync; btn.classList.add('live'); }
+    fohRenderSchedView();
+  }).catch(function(){
+    fohSchedLastSync='Offline';
+    if(btn){ btn.textContent='Offline'; btn.classList.add('err'); }
+  });
+}
+
+// ── Realtime subscription ──
+function fohSubscribeSchedRealtime(){
+  if(fohSchedRTChannel) return;
+  fohSchedRTChannel = sb.channel('foh_roster_rt')
+    .on('postgres_changes',{event:'*',schema:'public',table:'foh_roster'},function(payload){
+      var r=payload.new||payload.old;
+      if(!r) return;
+      var workDate=String(r.work_date).slice(0,10);
+      var k=fohSchedRosterKey(r.staff_id,workDate);
+      if(payload.eventType==='DELETE') delete fohSchedRoster[k];
+      else fohSchedRoster[k]=Object.assign({},payload.new,{work_date:workDate});
+      fohRenderSchedView();
+    }).subscribe();
+}
+
+// ── Open schedule page ──
+async function openFohSchedule(){
+  var el = document.getElementById('foh-tab-content');
+  el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-light);font-size:13px;font-style:italic">Loading schedule…</div>';
+
+  if(!fohSchedWeekStart) fohSchedWeekStart = getMonday(new Date());
+  await fohLoadSchedData();
+  await fohLoadAttendance();
+  fohSubscribeSchedRealtime();
+
+  // Render schedule into the tab content as a full-screen module
+  el.innerHTML = `
+    <div id="foh-sched-module" style="margin:-20px -16px 0;padding:0">
+      <div class="sch-toolbar" style="position:sticky;top:52px;z-index:40">
+        <div class="sch-nav">
+          <button class="sch-nav-btn" onclick="fohSchedWeekOffset(-1)">&#8592;</button>
+          <span id="foh-sch-week-label" class="sch-week-label"></span>
+          <button class="sch-nav-btn" onclick="fohSchedWeekOffset(1)">&#8594;</button>
+          <button class="sch-today-btn" onclick="fohSchedGoToday()">Today</button>
+        </div>
+        <div class="sch-view-tabs">
+          <button class="foh-sch-vtab sch-vtab active" id="foh-svt-week" onclick="fohSchedSetView('week')">Week</button>
+          <button class="foh-sch-vtab sch-vtab" id="foh-svt-day" onclick="fohSchedSetView('day')">Today</button>
+          <button class="foh-sch-vtab sch-vtab" id="foh-svt-print" onclick="fohSchedPrint()">&#128438; Print</button>
+        </div>
+        <div class="sch-toolbar-actions">
+          <button class="sch-copy-btn" id="foh-sch-sync-btn" onclick="fohSchedForceSync()">Live</button>
+          <button class="sch-copy-btn" onclick="fohSchedDuplicateWeek()">&#10697; Duplicate</button>
+          <button class="sch-delweek-btn" onclick="fohSchedDeleteWeek()">&#128465; Delete week</button>
+          <button class="sch-lock-btn" id="foh-sch-lock-btn" onclick="fohSchedToggleLock()">&#128274; Locked</button>
+        </div>
+      </div>
+      <div id="foh-sch-week-view" style="overflow:auto;padding:0 0 80px">
+        <div id="foh-sch-grid-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:12px 16px"></div>
+      </div>
+      <div id="foh-sch-day-view" style="display:none;overflow:auto;padding:16px 16px 80px">
+        <div id="foh-sch-day-content"></div>
+      </div>
+    </div>
+  `;
+
+  fohSchedUpdateLockBtn();
+  fohRenderSchedView();
+
+  // Auto-refresh attendance every 5 min
+  if(!window.fohAttTimer){
+    window.fohAttTimer = setInterval(function(){
+      fohLoadAttendance().then(function(){ fohRenderSchedView(); });
+    }, 5*60*1000);
+  }
+}
+
 // ── TAB SWITCHING ──
 function fohTab(tab){
   // Update nav buttons
@@ -4155,7 +5071,7 @@ function fohTab(tab){
   if(tab === 'home'){
     renderFohHome();
   } else if(tab === 'schedule'){
-    renderFohSchedule();
+    openFohSchedule();
   } else if(tab === 'manager'){
     // Check if already logged in
     sb.auth.getSession().then(({ data }) => {
