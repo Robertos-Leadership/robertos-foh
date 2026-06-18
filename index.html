@@ -4510,8 +4510,8 @@ function fohSchedAttState(staff, dateStr){
   var isToday = dateStr === fohSchedTodayStr();
   var isPast  = dateStr < fohSchedTodayStr();
   if(a && a.first_in){
-    var effOut = a.last_out || a.manual_out || null;
-    if(effOut) return { kind:'done', in:attHHMM(a.first_in), out:attHHMM(effOut), manual:!a.last_out&&!!a.manual_out, hours:calcHours(attHHMM(a.first_in), attHHMM(effOut)) };
+    var effOut = a.manual_out || a.last_out || null;   // manual override wins over the machine punch
+    if(effOut) return { kind:'done', in:attHHMM(a.first_in), out:attHHMM(effOut), manual:!!a.manual_out, hours:calcHours(attHHMM(a.first_in), attHHMM(effOut)) };
     if(isToday) return { kind:'in', in:attHHMM(a.first_in) };
     var pe = rrow ? formatTime(rrow.shift_end) : '';
     return { kind:'open', in:attHHMM(a.first_in), plannedEnd:pe };
@@ -4619,10 +4619,10 @@ function fohRenderSchedWeek(){
           var att = fohSchedAttState(staff, ds2);
           if(att.kind==='done'){
             wHours+=att.hours; wDays++;
-            html+='<div class="sch-shift actual">'+att.in+'<br>'+att.out+(att.manual?'<span class="sch-actual-tag">closed</span>':'')+'</div>';
+            html+='<div class="sch-shift actual" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to edit / override clock-out">'+att.in+'<br>'+att.out+(att.manual?'<span class="sch-actual-tag">edited</span>':'')+'</div>';
           } else if(att.kind==='in'){
             wDays++;
-            html+='<div class="sch-shift actual-live">'+att.in+'<br><span class="sch-actual-open">working</span></div>';
+            html+='<div class="sch-shift actual-live" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to set / close clock-out">'+att.in+'<br><span class="sch-actual-open">working</span></div>';
           } else if(att.kind==='open'){
             wDays++;
             html+='<div class="sch-shift actual-open-flag" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')">'+att.in+'<br><span class="sch-actual-close">tap to close</span></div>';
@@ -4852,14 +4852,30 @@ function fohSchedCloseShift(event, staffId, dateStr){
   var plannedEnd=rrow?formatTime(rrow.shift_end):'';
   var a=fohSchedAttendance[fohSchedAttKey(staff.emp_id,dateStr)];
   if(!a||!a.first_in) return;
-  var out=prompt('Close shift for '+staff.name+' on '+dateStr+'\nClocked in at '+attHHMM(a.first_in)+'. Clock-out time:', plannedEnd||'00:00');
+  var machineOut = a.last_out ? attHHMM(a.last_out) : '(none)';
+  var current    = a.manual_out ? attHHMM(a.manual_out) : (a.last_out ? attHHMM(a.last_out) : '');
+  var out=prompt(
+    'Clock-OUT for '+staff.name+' — '+dateStr+
+    '\nClocked in: '+attHHMM(a.first_in)+'\nMachine clock-out: '+machineOut+
+    '\n\nEnter a clock-out time (HH:MM) to set or OVERRIDE the machine.'+
+    '\nType "-" to clear your override and use the machine value.',
+    current||plannedEnd||'00:00');
   if(out===null) return;
   out=out.trim();
-  if(!/^\d{1,2}:\d{2}$/.test(out)){ alert('Please use HH:MM'); return; }
+  if(out===''){ return; } // no change
+  if(out==='-'){
+    // Clear manual override -> fall back to the machine punch
+    a.manual_out=null; fohRenderSchedView();
+    sbKitchen.from('attendance').update({manual_out:null,closed_by:null,closed_at:null})
+      .eq('emp_id',staff.emp_id).eq('att_date',dateStr)
+      .then(function(res){ if(res.error){ console.error('Clear override error:',res.error); alert('Could not clear the override: '+res.error.message); } });
+    return;
+  }
+  if(!/^\d{1,2}:\d{2}$/.test(out)){ alert('Please use HH:MM (24h), or "-" to clear.'); return; }
   a.manual_out=out; fohRenderSchedView();
   sbKitchen.from('attendance').update({manual_out:out,closed_by:'foh-manager',closed_at:new Date().toISOString()})
     .eq('emp_id',staff.emp_id).eq('att_date',dateStr)
-    .then(function(res){ if(res.error) console.error('Close shift error:',res.error); });
+    .then(function(res){ if(res.error){ console.error('Override clock-out error:',res.error); alert('Could not save the clock-out: '+res.error.message); } });
 }
 
 // ── Delete staff ──
