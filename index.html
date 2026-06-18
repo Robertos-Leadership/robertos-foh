@@ -1619,6 +1619,24 @@
     display: flex; align-items: center; gap: 8px;
   }
 
+
+  /* ── FOH ATTENDANCE ── */
+  .foh-att-row {
+    display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap;
+  }
+  .foh-att-in {
+    font-size: 10px; font-family: 'Inter', sans-serif;
+    color: #2d7a4f; font-weight: 600; letter-spacing: 0.05em;
+  }
+  .foh-att-out {
+    font-size: 10px; font-family: 'Inter', sans-serif;
+    color: var(--text-light); letter-spacing: 0.05em;
+  }
+  .foh-att-absent {
+    font-size: 10px; font-family: 'Inter', sans-serif;
+    color: #ccc; font-style: italic;
+  }
+
 </style>
 </head>
 <body>
@@ -3890,44 +3908,44 @@ async function signOut(){
 
 const FOH_ROSTER = [
   // Management
-  { name:'Manuel Petrosino',    role:'Beverage Manager',           section:'Management',    schedule:{ Mon:'IN', Tue:'IN', Wed:'IN', Thu:'IN', Fri:'IN', Sat:'IN', Sun:'OFF' } },
-  { name:'Jins Thomas',         role:'Asst. Restaurant Manager',   section:'Management',    schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
-  { name:'Katarina Vukotic',    role:'Customer Experience Mgr',    section:'Management',    schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'100065', name:'Manuel Petrosino',    role:'Beverage Manager',           section:'Management',    schedule:{ Mon:'IN', Tue:'IN', Wed:'IN', Thu:'IN', Fri:'IN', Sat:'IN', Sun:'OFF' } },
+  { emp_id:'000515', name:'Jins Thomas',         role:'Asst. Restaurant Manager',   section:'Management',    schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'100126', name:'Katarina Vukotic',    role:'Customer Experience Mgr',    section:'Management',    schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
   // Restaurant
-  { name:'Alessandro Viscardi', role:'Restaurant Supervisor',      section:'Restaurant',    schedule:{ Mon:'2pm–12am', Tue:'2pm–12am', Wed:'2pm–12am', Thu:'2pm–12am', Fri:'2pm–12am', Sat:'2pm–12am', Sun:'OFF' } },
-  { name:'Rida Maazouz',        role:'Restaurant Supervisor',      section:'Restaurant',    schedule:{ Mon:'5pm–3am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'100119', name:'Alessandro Viscardi', role:'Restaurant Supervisor',      section:'Restaurant',    schedule:{ Mon:'2pm–12am', Tue:'2pm–12am', Wed:'2pm–12am', Thu:'2pm–12am', Fri:'2pm–12am', Sat:'2pm–12am', Sun:'OFF' } },
+  { emp_id:'000860', name:'Rida Maazouz',        role:'Restaurant Supervisor',      section:'Restaurant',    schedule:{ Mon:'5pm–3am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
   // Head Waiter
-  { name:'Kamal Gurung',        role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'2pm–12am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
-  { name:'Mohammed Ait Nacer',  role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'4pm–2am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
-  { name:'Iliaz Ismailov',      role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'OFF', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'000827', name:'Kamal Gurung',        role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'2pm–12am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'100022', name:'Mohammed Ait Nacer',  role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'4pm–2am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'100135', name:'Iliaz Ismailov',      role:'Head Waiter',                section:'Head Waiter',   schedule:{ Mon:'OFF', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
   // Waiter/Waitress
-  { name:'Pasquale Compierchio',role:'Waiter',                     section:'Waiter/Waitress', schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
-  { name:'Than Htike Yadanar',  role:'Waitress',                   section:'Waiter/Waitress', schedule:{ Mon:'2pm–12am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
-  { name:'Thein Gi Win',        role:'Waitress',                   section:'Waiter/Waitress', schedule:{ Mon:'4pm–2am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'100150', name:'Pasquale Compierchio',role:'Waiter',                     section:'Waiter/Waitress', schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'100178', name:'Than Htike Yadanar',  role:'Waitress',                   section:'Waiter/Waitress', schedule:{ Mon:'2pm–12am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'100021', name:'Thein Gi Win',        role:'Waitress',                   section:'Waiter/Waitress', schedule:{ Mon:'4pm–2am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
   // Runners
-  { name:'Purshottan Neupane',  role:'Head Runner',                section:'Runners',       schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
-  { name:'Santhosh Muthuswamy', role:'Runner',                     section:'Runners',       schedule:{ Mon:'3pm–1am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
-  { name:'Tulsiram Neupane',    role:'Runner',                     section:'Runners',       schedule:{ Mon:'4pm–2am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'000565', name:'Purshottan Neupane',  role:'Head Runner',                section:'Runners',       schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'100171', name:'Santhosh Muthuswamy', role:'Runner',                     section:'Runners',       schedule:{ Mon:'3pm–1am', Tue:'OFF', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
+  { emp_id:'100182', name:'Tulsiram Neupane',    role:'Runner',                     section:'Runners',       schedule:{ Mon:'4pm–2am', Tue:'4pm–2am', Wed:'4pm–2am', Thu:'4pm–2am', Fri:'4pm–2am', Sat:'4pm–2am', Sun:'OFF' } },
   // Bar
-  { name:'Jad',                 role:'Asst. Bar Manager',          section:'Bar',           schedule:{ Mon:'OFF', Tue:'2pm–1am', Wed:'2pm–1am', Thu:'2pm–1am', Fri:'2pm–1am', Sat:'2pm–1am', Sun:'OFF' } },
-  { name:'J.K.',                role:'Bartender',                  section:'Bar',           schedule:{ Mon:'4pm–close', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
-  { name:'Robert Kisambu',      role:'Barista',                    section:'Bar',           schedule:{ Mon:'2pm–1am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
-  { name:'Roberto Ramos',       role:'Barista',                    section:'Bar',           schedule:{ Mon:'3pm–1am', Tue:'OFF', Wed:'2pm–1am', Thu:'2pm–1am', Fri:'2pm–1am', Sat:'2pm–1am', Sun:'OFF' } },
-  { name:'Ricky',               role:'Barback',                    section:'Bar',           schedule:{ Mon:'4pm–close', Tue:'5pm–3am', Wed:'4pm–close', Thu:'4pm–close', Fri:'4pm–close', Sat:'4pm–close', Sun:'OFF' } },
-  { name:'Abishek',             role:'Asst. Head Sommelier',       section:'Bar',           schedule:{ Mon:'4pm–2am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
-  { name:'Antonio',             role:'Senior Sommelier',           section:'Bar',           schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'100161', name:'Jad',                 role:'Asst. Bar Manager',          section:'Bar',           schedule:{ Mon:'OFF', Tue:'2pm–1am', Wed:'2pm–1am', Thu:'2pm–1am', Fri:'2pm–1am', Sat:'2pm–1am', Sun:'OFF' } },
+  { emp_id:null,     name:'J.K.',                role:'Bartender',                  section:'Bar',           schedule:{ Mon:'4pm–close', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'000851', name:'Robert Kisambu',      role:'Barista',                    section:'Bar',           schedule:{ Mon:'2pm–1am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'000815', name:'Roberto Ramos',       role:'Barista',                    section:'Bar',           schedule:{ Mon:'3pm–1am', Tue:'OFF', Wed:'2pm–1am', Thu:'2pm–1am', Fri:'2pm–1am', Sat:'2pm–1am', Sun:'OFF' } },
+  { emp_id:'100167', name:'Ricky',               role:'Barback',                    section:'Bar',           schedule:{ Mon:'4pm–close', Tue:'5pm–3am', Wed:'4pm–close', Thu:'4pm–close', Fri:'4pm–close', Sat:'4pm–close', Sun:'OFF' } },
+  { emp_id:'100190', name:'Abishek',             role:'Asst. Head Sommelier',       section:'Bar',           schedule:{ Mon:'4pm–2am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'100153', name:'Antonio',             role:'Senior Sommelier',           section:'Bar',           schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
   // Hostess
-  { name:'Syrgayim Ermekbaeva', role:'Hostess',                    section:'Hostess Desk',  schedule:{ Mon:'5pm–2am', Tue:'OFF', Wed:'5pm–2am', Thu:'2pm–11pm', Fri:'2pm–11pm', Sat:'2pm–11pm', Sun:'OFF' } },
-  { name:'Nour Al Haj Hassan',  role:'Hostess',                    section:'Hostess Desk',  schedule:{ Mon:'2pm–11pm', Tue:'2pm–11pm', Wed:'2pm–11pm', Thu:'5pm–2am', Fri:'5pm–2am', Sat:'5pm–2am', Sun:'OFF' } },
+  { emp_id:'100133', name:'Syrgayim Ermekbaeva', role:'Hostess',                    section:'Hostess Desk',  schedule:{ Mon:'5pm–2am', Tue:'OFF', Wed:'5pm–2am', Thu:'2pm–11pm', Fri:'2pm–11pm', Sat:'2pm–11pm', Sun:'OFF' } },
+  { emp_id:'100152', name:'Nour Al Haj Hassan',  role:'Hostess',                    section:'Hostess Desk',  schedule:{ Mon:'2pm–11pm', Tue:'2pm–11pm', Wed:'2pm–11pm', Thu:'5pm–2am', Fri:'5pm–2am', Sat:'5pm–2am', Sun:'OFF' } },
   // Security
-  { name:'Nir Bahadur Magar',   role:'Security',                   section:'Security',      schedule:{ Mon:'5pm–3am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'100056', name:'Nir Bahadur Magar',   role:'Security',                   section:'Security',      schedule:{ Mon:'5pm–3am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
   // Housekeeping
-  { name:'Mohammad Hanif',      role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'9am–7pm', Tue:'9am–7pm', Wed:'9am–7pm', Thu:'9am–7pm', Fri:'9am–7pm', Sat:'9am–7pm', Sun:'OFF' } },
-  { name:'Bishnu Shrestha',     role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
-  { name:'Mary Njeri',          role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'5pm–3am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'LEAVE', Sat:'LEAVE', Sun:'OFF' } },
+  { emp_id:'000046', name:'Mohammad Hanif',      role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'9am–7pm', Tue:'9am–7pm', Wed:'9am–7pm', Thu:'9am–7pm', Fri:'9am–7pm', Sat:'9am–7pm', Sun:'OFF' } },
+  { emp_id:'100179', name:'Bishnu Shrestha',     role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'OFF', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'100169', name:'Mary Njeri',          role:'Housekeeping',               section:'Housekeeping',  schedule:{ Mon:'5pm–3am', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'LEAVE', Sat:'LEAVE', Sun:'OFF' } },
   // Cashiers
-  { name:'Cho Zin',             role:'Cashier',                    section:'Cashiers',      schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
-  { name:'Roshan',              role:'Cashier',                    section:'Cashiers',      schedule:{ Mon:'5pm–3am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
+  { emp_id:'100121', name:'Cho Zin',             role:'Cashier',                    section:'Cashiers',      schedule:{ Mon:'OFF', Tue:'3pm–1am', Wed:'3pm–1am', Thu:'3pm–1am', Fri:'3pm–1am', Sat:'3pm–1am', Sun:'OFF' } },
+  { emp_id:'000632', name:'Roshan',              role:'Cashier',                    section:'Cashiers',      schedule:{ Mon:'5pm–3am', Tue:'5pm–3am', Wed:'5pm–3am', Thu:'5pm–3am', Fri:'5pm–3am', Sat:'5pm–3am', Sun:'OFF' } },
 ];
 
 const FOH_EVENTS = {
@@ -4019,16 +4037,15 @@ async function renderFohHome(){
 }
 
 // ── SCHEDULE TAB ──
-function renderFohSchedule(){
+async function renderFohSchedule(){
   const el = document.getElementById('foh-tab-content');
   const todayShort = fohTodayShort();
   if(!fohCurrentDay) fohCurrentDay = todayShort;
 
   // Day chips
   const chips = DAYS_SHORT.map(d => {
-    const isToday   = d === todayShort;
-    const isActive  = d === fohCurrentDay;
-    const isSun     = d === 'Sun';
+    const isToday  = d === todayShort;
+    const isActive = d === fohCurrentDay;
     return `<div class="foh-day-chip ${isActive?'active':''} ${isToday&&!isActive?'today':''}"
       onclick="fohSelectDay('${d}')">${fohDateLabel(d).slice(0,3)}</div>`;
   }).join('');
@@ -4039,13 +4056,38 @@ function renderFohSchedule(){
     ? `<div class="foh-event-banner">&#127775; ${eventName}</div>`
     : '';
 
-  // Group staff by section for selected day
+  // Show skeleton immediately
+  el.innerHTML = `
+    <div class="foh-schedule-header">${chips}</div>
+    ${banner}
+    <div style="text-align:center;padding:32px 0;color:var(--text-light);font-size:13px;font-style:italic;">Loading attendance…</div>
+  `;
+
+  // Fetch today's attendance from Kitchen App Supabase (only for today)
+  let attMap = {};
+  if(fohCurrentDay === todayShort){
+    try {
+      const todayISO_ = localISO(new Date());
+      const empIds = FOH_ROSTER.filter(s=>s.emp_id).map(s=>s.emp_id);
+      const { data: attData } = await sbKitchen.from('attendance')
+        .select('emp_id, first_in, last_out, manual_out')
+        .eq('att_date', todayISO_)
+        .in('emp_id', empIds);
+      for(const row of (attData||[])){
+        attMap[row.emp_id] = row;
+      }
+    } catch(e){ /* silent — attendance is best-effort */ }
+  }
+
+  // Group staff by section
   const sections = {};
   for(const s of FOH_ROSTER){
     const shift = s.schedule[fohCurrentDay] || 'OFF';
     if(!sections[s.section]) sections[s.section] = [];
     sections[s.section].push({ ...s, shift });
   }
+
+  const isToday = fohCurrentDay === todayShort;
 
   let sectionsHtml = '';
   for(const [sec, staff] of Object.entries(sections)){
@@ -4054,12 +4096,29 @@ function renderFohSchedule(){
       const isLeave = s.shift === 'LEAVE';
       const dotColor = isOff ? '#ddd' : isLeave ? '#d4870a' : '#2d7a4f';
       const badgeClass = isOff ? 'foh-shift-off' : isLeave ? 'foh-shift-leave' : 'foh-shift-on';
+
+      // Attendance (today only)
+      let attHtml = '';
+      if(isToday && s.emp_id && !isOff && !isLeave){
+        const att = attMap[s.emp_id];
+        if(att){
+          const clockIn  = att.first_in  ? att.first_in.slice(11,16)  : null;
+          const clockOut = (att.last_out || att.manual_out) ? (att.last_out || att.manual_out).slice(11,16) : null;
+          const inHtml  = clockIn  ? `<span class="foh-att-in">IN ${clockIn}</span>`   : `<span class="foh-att-absent">Not in yet</span>`;
+          const outHtml = clockOut ? `<span class="foh-att-out">OUT ${clockOut}</span>` : '';
+          attHtml = `<div class="foh-att-row">${inHtml}${outHtml}</div>`;
+        } else {
+          attHtml = `<div class="foh-att-row"><span class="foh-att-absent">Not clocked in</span></div>`;
+        }
+      }
+
       return `
         <div class="foh-staff-row">
           <div class="foh-staff-dot" style="background:${dotColor}"></div>
           <div style="flex:1">
             <div class="foh-staff-name">${s.name}</div>
             <div class="foh-staff-role">${s.role}</div>
+            ${attHtml}
           </div>
           <div class="foh-shift-badge ${badgeClass}">${s.shift}</div>
         </div>`;
