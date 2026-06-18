@@ -4802,7 +4802,7 @@ async function fohSchedSaveShift(){
   fohSchedRoster[key]=payload;
   fohRenderSchedWeek();
   var res=await sb.from('foh_roster').upsert(payload,{onConflict:'staff_id,work_date'});
-  if(res.error) console.error('Save error:',res.error);
+  if(res.error){ console.error('Save error:',res.error); alert('Could not save the shift: '+res.error.message); }
   fohSchedEditTarget=null;
 }
 
@@ -4973,7 +4973,7 @@ async function fohSchedConfirmDuplicate(){
   });
   if(!upserts.length){ alert('Nothing to duplicate — source week is empty or target is fully set.'); return; }
   var res=await sb.from('foh_roster').upsert(upserts,{onConflict:'staff_id,work_date',ignoreDuplicates:!overwrite});
-  if(res.error) console.error('Duplicate error:',res.error);
+  if(res.error){ console.error('Duplicate error:',res.error); alert('Could not duplicate the week: '+res.error.message); return; }
   fohSchedWeekStart=target;
   await fohLoadSchedData(); await fohLoadAttendance(); fohRenderSchedView();
 }
