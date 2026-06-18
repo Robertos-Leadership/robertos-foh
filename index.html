@@ -3982,6 +3982,36 @@ async function signOut(){
 }
 
 
+
+// ── Date / time helpers (ported from Kitchen App) ──
+function formatDate(d){
+  var dt = new Date(d);
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+function getMonday(d){
+  var dt = new Date(d); var day = dt.getDay();
+  dt.setDate(dt.getDate()+(day===0?-6:1-day));
+  dt.setHours(12,0,0,0); return dt;
+}
+function addDays(d,n){
+  var dt = new Date(d); dt.setDate(dt.getDate()+n);
+  dt.setHours(12,0,0,0); return dt;
+}
+function formatTime(t){ return t ? String(t).substring(0,5) : ''; }
+function calcHours(start, end, start2, end2){
+  if(!start||!end) return 0;
+  var sp=start.split(':'), ep=end.split(':');
+  var mins=(parseInt(ep[0])*60+parseInt(ep[1]||0))-(parseInt(sp[0])*60+parseInt(sp[1]||0));
+  if(mins<=0) mins+=1440;
+  if(start2&&end2){
+    var sp2=start2.split(':'), ep2=end2.split(':');
+    var mins2=(parseInt(ep2[0])*60+parseInt(ep2[1]||0))-(parseInt(sp2[0])*60+parseInt(sp2[1]||0));
+    if(mins2<=0) mins2+=1440;
+    mins+=mins2;
+  }
+  return Math.round(mins/6)/10;
+}
+
 // ══════════════════════════════════════════════
 //  FOH PUBLIC LAYER
 // ══════════════════════════════════════════════
