@@ -5334,10 +5334,10 @@ const FOH_SECTIONS = [
 
 // Department band colours for the PRINTED roster — strong, distinct, readable with white text.
 const FOH_SECTION_PRINT_COLOR = {
-  'Management':'#410207', 'Restaurant':'#1d4ed8', 'Head Waiter':'#047857',
-  'Waiter/Waitress':'#b45309', 'Runners':'#0f766e', 'Bar':'#6d28d9',
-  'Hostess Desk':'#be185d', 'Security':'#374151', 'Housekeeping':'#c2410c',
-  'Cashiers':'#4d7c0f',
+  'Management':'#ead9db', 'Restaurant':'#d9e3f3', 'Head Waiter':'#d8ecde',
+  'Waiter/Waitress':'#f1e4cf', 'Runners':'#d6e9e6', 'Bar':'#e3dcf0',
+  'Hostess Desk':'#f1dde7', 'Security':'#e0e3e8', 'Housekeeping':'#f1e0d3',
+  'Cashiers':'#e3ecd2',
 };
 
 const FOH_STATUS_META = {
@@ -6127,7 +6127,7 @@ function fohSchedPrint(){
     days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   var html='<div style="margin-bottom:8px"><h2 style="font-size:13px;color:#410207;margin:0 0 2px">Roberto\'s DIFC — FOH Roster: '+weekStr+'</h2>'+
     '<p style="font-size:9px;color:#666;margin:0">Printed: '+new Date().toLocaleString('en-GB')+'</p></div>';
-  html+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
+  html+='<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr>'+
     '<th style="background:#410207;color:#fff;padding:5px 4px;text-align:left;min-width:130px">Name</th>'+
     '<th style="background:#410207;color:#fff;padding:5px 4px;text-align:left">Role</th>';
   for(var di=0;di<days.length;di++) html+='<th style="background:#410207;color:#fff;padding:5px 4px">'+dayNames[di]+' '+days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</th>';
@@ -6135,12 +6135,12 @@ function fohSchedPrint(){
   FOH_SECTIONS.forEach(function(sec){
     var stStaff=fohSchedStaff.filter(function(s){ return s.section===sec.key; });
     if(!stStaff.length) return;
-    var secColor = FOH_SECTION_PRINT_COLOR[sec.key] || '#410207';
-    html+='<tr><td colspan="11" style="background:'+secColor+';color:#fff;font-weight:800;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:7px 9px;border:1px solid '+secColor+'">'+sec.label+'</td></tr>';
+    var secColor = FOH_SECTION_PRINT_COLOR[sec.key] || '#ece3d3';
+    html+='<tr><td colspan="11" style="background:'+secColor+';color:#2f2a28;font-weight:800;font-size:10px;letter-spacing:1px;text-transform:uppercase;border:1px solid #d8cbb8">'+sec.label+'</td></tr>';
     stStaff.forEach(function(staff){
       var wh=0, wd=0;
-      html+='<tr><td style="padding:5px 6px;font-weight:700;border:1px solid #ccc;border-left:4px solid '+secColor+'">'+staff.name+'</td>'+
-        '<td style="padding:5px 6px;font-size:11px;color:#1a1a1a;font-weight:700;border:1px solid #ccc">'+staff.role+'</td>';
+      html+='<tr><td style="font-weight:700;border:1px solid #ccc;border-left:4px solid '+secColor+'">'+staff.name+'</td>'+
+        '<td style="font-size:10px;color:#1a1a1a;font-weight:700;border:1px solid #ccc">'+staff.role+'</td>';
       days.forEach(function(d){
         var ds=formatDate(d);
         var row=fohSchedRoster[fohSchedRosterKey(staff.id,ds)];
@@ -6160,7 +6160,7 @@ function fohSchedPrint(){
     });
   });
   html+='</tbody></table>';
-    var printDoc='<!doctype html><html><head><title>FOH Roster</title><style>@page{size:A3 landscape;margin:8mm}body{font-family:Arial,sans-serif;margin:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+html+'</body></html>';
+    var printDoc='<!doctype html><html><head><title>FOH Roster</title><style>@page{size:A3 landscape;margin:8mm}body{font-family:Arial,sans-serif;margin:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}td{padding:2px 5px!important;line-height:1.2}th{padding:3px 4px!important}</style></head><body>'+html+'</body></html>';
   var w=window.open('','_blank');
 
   if(!w){ alert('Pop-up blocked — allow pop-ups and try again.'); return; }
