@@ -2457,6 +2457,10 @@ function setWeekScope(scope){
     if(scope==='next'){
       // the week after this one, if it exists; otherwise stay on this week
       state.currentWeek[ev.id] = (upcoming[1] && upcoming[1].id) || (upcoming[0] && upcoming[0].id) || pickDefaultWeekId(weeks);
+    } else if(scope==='last'){
+      // most recent PAST week (week_date < today); else fall back to the default upcoming
+      const past = (weeks||[]).filter(w=>w.week_date && String(w.week_date).slice(0,10) < todayISO()).sort((a,b)=>String(b.week_date).localeCompare(String(a.week_date)));
+      state.currentWeek[ev.id] = (past[0] && past[0].id) || pickDefaultWeekId(weeks);
     } else {
       state.currentWeek[ev.id] = pickDefaultWeekId(weeks);
     }
@@ -2557,6 +2561,20 @@ function renderDashboard(){
     const wid = state.currentWeek[ev.id];
     if(!wid) continue;
     const week = (state.weeks[ev.id]||[]).find(w=>w.id===wid);
+    if(week && week.status==='cancelled'){
+      eventCards.push(`
+      <div class="event-journey-card" style="opacity:.6">
+        <div class="event-card-top">
+          <div class="event-card-title">${ev.name}</div>
+          <div class="event-card-date">${week.week_label||week.week_date} | Cancelled</div>
+        </div>
+        <div class="event-card-note">Cancelled for this week only - the event runs as normal every other week.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gold btn-sm" onclick="restoreWeek('${week.id}','${ev.id}')">Restore this week</button>
+        </div>
+      </div>`);
+      continue;
+    }
     const tasks = state.tasks[wid]||[];
     const readiness = readinessForTasks(tasks);
     const currentStage = state.selectedStage[ev.id] || currentStageForTasks(tasks);
@@ -2583,6 +2601,7 @@ function renderDashboard(){
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-gold btn-sm" onclick="openJourney('${ev.id}','full')">Open Journey</button>
           <button class="btn btn-outline btn-sm" onclick="openJourney('${ev.id}','pending')">Pending Journey</button>
+          <button class="btn btn-outline btn-sm" onclick="cancelWeek('${wid}','${ev.id}')">Cancel this week</button>
         </div>
       </div>`);
   }
@@ -2654,6 +2673,7 @@ function renderDashboard(){
     <div><div class="page-title">Leaders</div><div class="page-sub">One clear action list by person, across every event.</div></div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <div class="week-scope">
+        <button class="week-scope-btn ${scope==='last'?'active':''}" onclick="setWeekScope('last')">Last Week</button>
         <button class="week-scope-btn ${scope==='this'?'active':''}" onclick="setWeekScope('this')">This Week</button>
         <button class="week-scope-btn ${scope==='next'?'active':''}" onclick="setWeekScope('next')">Next Week</button>
       </div>
@@ -3134,6 +3154,31 @@ async function toggleEventPause(eventId){
   logActivity(next==='paused' ? 'paused event' : 'resumed event', ev.name);
   toast(ev.name + (next==='paused' ? ' paused' : ' resumed'));
   if(next==='active'){ loadAll(); } else { renderMain(); }
+}
+
+// Cancel ONE week only (e.g. this Saturday) without pausing the whole series.
+async function cancelWeek(weekId, eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  const wk = (state.weeks[eventId]||[]).find(w=>w.id===weekId);
+  if(!wk) return;
+  if(!confirm('Cancel ' + (ev ? ev.name + ' — ' : '') + (wk.week_label||wk.week_date) + ' for this week only?\n\nThe event keeps running every other week.')) return;
+  const { error } = await sb.from('weeks').update({ status:'cancelled' }).eq('id', weekId);
+  if(error){ toast('Could not cancel the week', true); return; }
+  wk.status = 'cancelled';
+  logActivity('cancelled week', (wk.week_label||wk.week_date) + ' — ' + (ev?ev.name:''));
+  toast((ev?ev.name+' ':'') + 'cancelled for ' + (wk.week_label||wk.week_date));
+  renderMain();
+}
+async function restoreWeek(weekId, eventId){
+  const ev = state.events.find(e=>e.id===eventId);
+  const wk = (state.weeks[eventId]||[]).find(w=>w.id===weekId);
+  if(!wk) return;
+  const { error } = await sb.from('weeks').update({ status:'upcoming' }).eq('id', weekId);
+  if(error){ toast('Could not restore the week', true); return; }
+  wk.status = 'upcoming';
+  logActivity('restored week', (wk.week_label||wk.week_date) + ' — ' + (ev?ev.name:''));
+  toast((ev?ev.name+' ':'') + 'restored');
+  renderMain();
 }
 
 async function createNewWeek(eventId){
