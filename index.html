@@ -4695,8 +4695,31 @@ async function clOpen(ds){
   C.comps=(row&&Array.isArray(row.comps))?row.comps.slice():[];
   C.good=(row&&Array.isArray(row.comments_good))?row.comments_good.slice():[];
   C.bad=(row&&Array.isArray(row.comments_bad))?row.comments_bad.slice():[];
+  // SevenRooms covers reference (Kitchen project covers feed)
+  C.srCovers=null;
+  try{ var cv=await sbKitchen.from('covers').select('day_covers,night_covers').eq('service_date',ds).limit(1); if(!cv.error&&cv.data&&cv.data.length) C.srCovers=cv.data[0]; }catch(e){}
+  // Manager(s) on duty — from the schedule (foh_staff Management + foh_roster working)
+  C.onDuty=[];
+  try{
+    var stf=await sb.from('foh_staff').select('id,name').eq('section','Management').eq('active',true);
+    var byId={}; (stf.data||[]).forEach(function(s){byId[s.id]=s.name;}); var ids=Object.keys(byId);
+    if(ids.length){
+      var ros=await sb.from('foh_roster').select('staff_id,status,shift_start').eq('work_date',ds).in('staff_id',ids);
+      C.onDuty=(ros.data||[]).filter(function(r){return r.status==='working';}).map(function(r){return {name:byId[r.staff_id], start:r.shift_start};}).filter(function(x){return x.name;});
+    }
+  }catch(e){}
   document.getElementById('cl-modal').style.display='flex';
-  clFill(row); clRenderComps(); clRenderComments(); clRecalc();
+  clFill(row); clRenderComps(); clRenderComments();
+  // Auto-fill manager on duty for a NEW report (never overwrite a saved one)
+  if(!row && C.onDuty.length){
+    var am=C.onDuty.filter(function(x){return x.start && x.start<'15:00';}).map(function(x){return x.name;});
+    var pm=C.onDuty.filter(function(x){return !x.start || x.start>='15:00';}).map(function(x){return x.name;});
+    var amEl=document.getElementById('cl-mgr-am'), pmEl=document.getElementById('cl-mgr-pm');
+    if(amEl && !amEl.value && am.length) amEl.value=am.join(', ');
+    if(pmEl && !pmEl.value) pmEl.value=(pm.length?pm:C.onDuty.map(function(x){return x.name;})).join(', ');
+  }
+  var od=document.getElementById('cl-onduty'); if(od) od.innerHTML=C.onDuty.length?('&#128197; From schedule — Management on duty: <b>'+C.onDuty.map(function(x){return clEsc(x.name);}).join(', ')+'</b>'):'No Management rostered for this date.';
+  clRecalc();
 }
 function clClose(){ document.getElementById('cl-modal').style.display='none'; }
 function clFill(row){
@@ -4735,6 +4758,12 @@ function clRecalc(){
   if(g('cl-tips-tot')) g('cl-tips-tot').textContent=revMoney(tips);
   var ct=clInit().comps.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
   if(g('cl-comps-tot')) g('cl-comps-tot').innerHTML= clInit().comps.length?('Comps total <b>'+revMoney(ct)+'</b>'+(tot?' · '+(ct/tot*100).toFixed(1)+'% of net':'')):'';
+  var sr=clInit().srCovers;
+  if(g('cl-sr-covers')){
+    if(sr){ var srTot=(Number(sr.day_covers)||0)+(Number(sr.night_covers)||0);
+      g('cl-sr-covers').innerHTML='SevenRooms — dinner <b>'+(Number(sr.night_covers)||0)+'</b>'+((Number(sr.day_covers)||0)?(' · lunch <b>'+sr.day_covers+'</b>'):'')+' covers · you entered '+totCov+(srTot?(totCov===srTot?' <b style="color:#2d7a4f">✓ matches</b>':' <span style="color:#b3402f">('+(totCov-srTot>=0?'+':'')+(totCov-srTot)+' vs SevenRooms)</span>'):'');
+    } else g('cl-sr-covers').textContent='';
+  }
 }
 function clAddComp(){ clInit().comps.push({table:'',guest:'',amount:'',reason:'',manager:''}); clRenderComps(); }
 function clRemoveComp(i){ clInit().comps.splice(i,1); clRenderComps(); clRecalc(); }
@@ -6305,6 +6334,7 @@ function fohSignOut(){
             <td class="rev-eg-avg" id="cl-ld-avg">—</td></tr>
         </tbody></table></div>
       <div id="cl-tot" class="rev-edit-totals"></div>
+      <div id="cl-sr-covers" class="cl-note"></div>
 
       <div class="cl-sec-h">Sales split — Food / Beverage / Tobacco <span class="cl-opt">optional</span></div>
       <div class="cl-row3">
@@ -6327,6 +6357,7 @@ function fohSignOut(){
       <div id="cl-comps-tot" class="cl-note"></div>
 
       <div class="cl-sec-h">Manager on duty</div>
+      <div id="cl-onduty" class="cl-note" style="margin-bottom:8px"></div>
       <div class="cl-row2">
         <label>AM<input id="cl-mgr-am" class="cl-inp"></label>
         <label>PM<input id="cl-mgr-pm" class="cl-inp"></label>
