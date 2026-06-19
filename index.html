@@ -2393,7 +2393,12 @@ function enterApp(module){
     attachSyncListeners();
   }
   loadRevenue();
-  switchTab((module==='revenue'||module==='operations') ? module : (state.currentTab || 'dashboard'));
+  // Land in the chosen module — Revenue/Operations go straight there; Events keeps the
+  // current Events-family tab (Leaders or an event) but NEVER another module's tab.
+  var cur=state.currentTab;
+  var target=(module==='revenue'||module==='operations') ? module
+    : ((cur==='dashboard' || (cur && cur.indexOf('event_')===0)) ? cur : 'dashboard');
+  switchTab(target);
 }
 function showLanding(){
   document.getElementById('landing').style.display = 'grid';
