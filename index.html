@@ -4536,6 +4536,9 @@ function revBriefing(){
   L.push('  Vs '+revMonthLabel(rv.prevPeriod)+' matched window: net '+revPct(rv.net.chg)+', covers '+revPct(rv.covers.chg)+', avg spend/cover '+revPct(rv.spendCover.chg)+'.');
   L.push('  Weekday avg net: '+rv.weekdays.map(function(w){return w.wd.slice(0,3)+' '+Math.round(w.cur);}).join(', ')+'.');
   L.push('  Full-month forecast '+Math.round(rv.forecast)+' vs budget '+Math.round(rv.budgetTotal)+' ('+revPct(rv.vsBudgetPct)+').');
+  var T=(R.targets&&R.targets[p])||0;
+  if(T>0){ var reqRem=T-rv.mtd, upl=rv.projected?(reqRem/rv.projected-1):null;
+    L.push('  Target '+Math.round(T)+'. Forecast vs target: '+Math.round(rv.forecast-T)+' ('+revPct(T?(rv.forecast-T)/T:0)+'). To hit target, the remaining days must deliver '+Math.round(reqRem)+' vs projected '+Math.round(rv.projected)+(upl!=null?' = a '+(upl>=0?'+':'')+(upl*100).toFixed(1)+'% uplift on the current run-rate':'')+'.'); }
   return L.join('\n');
 }
 // The ONLY tool the analyst can call. It never does arithmetic itself — it parameterises
@@ -4594,6 +4597,86 @@ async function revAiReport(){
   }catch(err){ if(box) box.textContent='Analyst not available yet ('+(err.message||err)+'). Make sure the revenue-assistant Edge Function is deployed with tool support (v2).'; }
 }
 
+// ══════════════════════════════════════════════
+//  AI CHAT / REPORTS — full-screen module. Multi-turn, quick-report chips,
+//  same deterministic engine (the model never computes; it parameterises + narrates).
+// ══════════════════════════════════════════════
+var REV_CHAT_SYS='You are a precise F&B revenue analyst for Roberto\'s DIFC. Use ONLY the figures in the DATA block or returned by the compute_scenario tool — never invent or calculate numbers yourself. For ANY what-if about changing average spend or covers you MUST call compute_scenario; the tool result already contains every derived figure (deltas, gap_to_target, percentages) — quote them verbatim, do NOT do arithmetic. When F&B figures are marked "est", say they are estimates from the standard mix, not actuals. Be a clear, board-ready analyst: use short headings, tables and bullets; lead with the answer; call out risks and notable swings. Keep follow-ups in context.';
+function revChatInit(){ var R=revInit(); if(!R.chat) R.chat={thread:[], api:[], busy:false}; return R.chat; }
+function revChatOpen(){ revChatInit(); document.getElementById('rev-chat-modal').style.display='flex'; revChatRender(); var inp=document.getElementById('rev-chat-input'); if(inp) setTimeout(function(){inp.focus();},60); }
+function revChatClose(){ document.getElementById('rev-chat-modal').style.display='none'; }
+function revChatClear(){ var c=revChatInit(); c.thread=[]; c.api=[]; revChatRender(); }
+function revChatKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); revChatSubmit(); } }
+function revChatSubmit(){ var inp=document.getElementById('rev-chat-input'); if(!inp) return; var t=inp.value.trim(); if(!t) return; inp.value=''; inp.style.height='auto'; revChatSend(t); }
+function revChatChip(type){
+  var ml=revMonthLabel(revInit().period);
+  var q={
+    board:'Give me a board-ready summary of '+ml+': performance vs last month, full-month forecast vs budget, and the key risks.',
+    whatif:'What happens to the budget and forecast for '+ml+' if average spend rises 2%? Does it close the gap to target?',
+    day:'Give me the full breakdown — net, Restaurant vs Scala, daypart, covers, average spend and F&B — for the most recent trading day.',
+    gap:'How far is '+ml+' from the target, and what uplift in the remaining days would be needed to close the gap?'
+  }[type];
+  if(q) revChatSend(q);
+}
+async function revChatSend(text){
+  var c=revChatInit(); if(c.busy) return;
+  c.thread.push({role:'user', text:text}); c.api.push({role:'user', content:text});
+  c.busy=true; revChatRender();
+  var SYS=REV_CHAT_SYS+'\n\nDATA:\n'+revBriefing();
+  var cardsHTML='';
+  try{
+    for(var step=0; step<6; step++){
+      var resp=await fetch(REV_AI_URL,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY}, body:JSON.stringify({ action:'chat', model:'claude-sonnet-4-6', max_tokens:1800, system:SYS, tools:[REV_TOOL_SCENARIO], messages:c.api }) });
+      var data=await resp.json();
+      if(!resp.ok) throw new Error(data.error||('HTTP '+resp.status));
+      var content=data.content||[];
+      c.api.push({role:'assistant', content:content.length?content:[{type:'text',text:(data.text||'')}]});
+      var toolUses=content.filter(function(b){return b.type==='tool_use';});
+      if(data.stop_reason==='tool_use' && toolUses.length){
+        var results=toolUses.map(function(tu){ var r=revScenario(tu.input); cardsHTML+=revScenarioCardHTML(r); return {id:tu.id, round:revScenRound(r)}; });
+        c.api.push({role:'user', content:results.map(function(x){ return {type:'tool_result', tool_use_id:x.id, content:JSON.stringify(x.round)}; })});
+        revChatRender(); continue;
+      }
+      var textOut=content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n').trim() || data.text || '';
+      c.thread.push({role:'assistant', text:textOut, cards:cardsHTML}); c.busy=false; revChatRender(); return;
+    }
+    c.thread.push({role:'assistant', text:'Reached the analysis step limit — try narrowing the question.', cards:cardsHTML}); c.busy=false; revChatRender();
+  }catch(err){ c.busy=false; c.thread.push({role:'assistant', text:'⚠️ Analyst unavailable: '+(err.message||err), cards:cardsHTML}); revChatRender(); }
+}
+// markdown-lite → HTML (headings, tables, bullets, bold/italic/code). Escapes first.
+function revMd(s){
+  s=String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function inl(t){ return t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>'); }
+  var lines=s.split('\n'), out=[], i=0;
+  function cells(r){ return r.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(function(x){return x.trim();}); }
+  while(i<lines.length){
+    var ln=lines[i];
+    if(/\|/.test(ln) && i+1<lines.length && /^[\s|:\-]+$/.test(lines[i+1]) && /-/.test(lines[i+1])){
+      var th=cells(ln).map(function(x){return '<th>'+inl(x)+'</th>';}).join(''); i+=2; var trs=[];
+      while(i<lines.length && /\|/.test(lines[i])){ trs.push('<tr>'+cells(lines[i]).map(function(x){return '<td>'+inl(x)+'</td>';}).join('')+'</tr>'); i++; }
+      out.push('<table class="rev-md-tbl"><thead><tr>'+th+'</tr></thead><tbody>'+trs.join('')+'</tbody></table>'); continue;
+    }
+    if(/^#{1,4}\s+/.test(ln)){ out.push('<div class="rev-md-h">'+inl(ln.replace(/^#+\s+/,''))+'</div>'); i++; continue; }
+    if(/^\s*---+\s*$/.test(ln)){ out.push('<hr class="rev-md-hr">'); i++; continue; }
+    if(/^\s*[-*]\s+/.test(ln)){ var items=[]; while(i<lines.length && /^\s*[-*]\s+/.test(lines[i])){ items.push('<li>'+inl(lines[i].replace(/^\s*[-*]\s+/,''))+'</li>'); i++; } out.push('<ul class="rev-md-ul">'+items.join('')+'</ul>'); continue; }
+    if(ln.trim()===''){ out.push('<div class="rev-md-sp"></div>'); i++; continue; }
+    out.push('<div class="rev-md-p">'+inl(ln)+'</div>'); i++;
+  }
+  return out.join('');
+}
+function revChatRender(){
+  var c=revChatInit(), box=document.getElementById('rev-chat-thread'); if(!box) return;
+  function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var h='';
+  if(!c.thread.length){ h+='<div class="rev-chat-empty"><div class="rev-chat-empty-t">Ask anything about your revenue</div><div class="rev-chat-empty-s">e.g. "compare June to May", "F&B split on 12 May", "Fridays +5% covers", "investor one-pager" — or tap a quick report below.</div></div>'; }
+  c.thread.forEach(function(m){
+    if(m.role==='user'){ h+='<div class="rev-chat-row rev-chat-u"><div class="rev-chat-bub rev-chat-ub">'+esc(m.text)+'</div></div>'; }
+    else { h+='<div class="rev-chat-row rev-chat-a"><div class="rev-chat-bub rev-chat-ab">'+(m.cards||'')+'<div class="rev-chat-md">'+revMd(m.text)+'</div></div></div>'; }
+  });
+  if(c.busy){ h+='<div class="rev-chat-row rev-chat-a"><div class="rev-chat-bub rev-chat-ab rev-chat-think"><span></span><span></span><span></span></div></div>'; }
+  box.innerHTML=h; box.scrollTop=box.scrollHeight;
+}
+
 // ── Render ──
 function renderRevenue(){
   var R=revInit();
@@ -4610,7 +4693,7 @@ function revRenderMonth(){
   h.push('<div class="rev-wrap">');
   // toolbar
   h.push('<div class="rev-toolbar"><div class="rev-nav"><button class="rev-btn" onclick="revStep(-1)">&#8592;</button><span class="rev-period">'+revMonthLabel(p)+'</span><button class="rev-btn" onclick="revStep(1)">&#8594;</button><button class="rev-btn" onclick="revAddMonth()">+ Add month</button></div>'
-    +'<div class="rev-views"><button class="rev-vtab active" onclick="revSetView(\'month\')">Month</button><button class="rev-vtab" onclick="revSetView(\'year\')">Year</button><button class="rev-btn rev-ai-btn" onclick="revAiReport()">&#9733; AI report</button></div></div>');
+    +'<div class="rev-views"><button class="rev-vtab active" onclick="revSetView(\'month\')">Month</button><button class="rev-vtab" onclick="revSetView(\'year\')">Year</button><button class="rev-btn rev-ai-btn" onclick="revChatOpen()">&#9733; Ask / Reports</button></div></div>');
   // monthly budget — enter once, auto-distributes across days by weekday pattern (editable per day)
   var mb=revMonthlyBudget(p), allocD=m.budgetTotal-(mb||0), onBudget=(mb!=null&&Math.abs(allocD)<1);
   h.push('<div class="rev-budget-bar">'
@@ -6034,6 +6117,29 @@ function fohSignOut(){
   </div>
 </div>
 
+<div id="rev-chat-modal" style="display:none;position:fixed;inset:0;background:rgba(40,5,8,.6);z-index:9500;align-items:center;justify-content:center" onclick="if(event.target===this)revChatClose()">
+  <div class="rev-chat-win">
+    <div class="rev-chat-head">
+      <div class="rev-chat-title">&#9733; Revenue Analyst</div>
+      <div class="rev-chat-head-r">
+        <button class="rev-chat-newbtn" onclick="revChatClear()" title="Start a new conversation">New</button>
+        <button class="rev-chat-x" onclick="revChatClose()" title="Close">&times;</button>
+      </div>
+    </div>
+    <div id="rev-chat-thread" class="rev-chat-thread"></div>
+    <div class="rev-chat-chips">
+      <button class="rev-chat-chip" onclick="revChatChip('board')">&#128202; Board summary</button>
+      <button class="rev-chat-chip" onclick="revChatChip('whatif')">&#128256; What-if (+2% spend)</button>
+      <button class="rev-chat-chip" onclick="revChatChip('day')">&#128197; Latest day</button>
+      <button class="rev-chat-chip" onclick="revChatChip('gap')">&#127919; Gap to target</button>
+    </div>
+    <div class="rev-chat-inputbar">
+      <textarea id="rev-chat-input" class="rev-chat-input" rows="1" placeholder="Ask anything about your revenue&hellip;" onkeydown="revChatKey(event)" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+      <button class="rev-chat-send" onclick="revChatSubmit()">Send</button>
+    </div>
+  </div>
+</div>
+
 <style>
   .rev-wrap{max-width:980px;margin:0 auto;padding:8px 4px 60px}
   .rev-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px}
@@ -6092,6 +6198,43 @@ function fohSignOut(){
   .rev-scen-tbl td:first-child{text-align:left;font-weight:600;color:var(--ink)}
   .rev-scen-note{font-size:11px;color:var(--text-light);padding:7px 12px;font-style:italic}
   .rev-scen-think{color:var(--text-light);font-size:12px;margin-top:6px}
+  .rev-chat-win{background:var(--cream);width:780px;max-width:96vw;height:88vh;border-radius:10px;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,.45);overflow:hidden}
+  .rev-chat-head{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:var(--vino);color:var(--cream)}
+  .rev-chat-title{font-family:var(--font-serif);font-size:17px;font-weight:700}
+  .rev-chat-head-r{display:flex;align-items:center;gap:10px}
+  .rev-chat-newbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:var(--cream);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font-sans)}
+  .rev-chat-x{background:transparent;border:none;color:var(--cream);font-size:26px;line-height:1;cursor:pointer;padding:0 2px}
+  .rev-chat-thread{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;background:var(--sabbia-light,#faf7f1)}
+  .rev-chat-empty{text-align:center;margin:auto;max-width:430px}
+  .rev-chat-empty-t{font-family:var(--font-serif);font-size:18px;color:var(--vino);margin-bottom:8px}
+  .rev-chat-empty-s{font-size:12px;line-height:1.6;color:var(--text-light)}
+  .rev-chat-row{display:flex}
+  .rev-chat-u{justify-content:flex-end}
+  .rev-chat-a{justify-content:flex-start}
+  .rev-chat-bub{max-width:84%;border-radius:10px;padding:11px 14px;font-size:13px;line-height:1.55}
+  .rev-chat-ub{background:var(--vino);color:var(--cream);border-bottom-right-radius:3px;white-space:pre-wrap}
+  .rev-chat-ab{background:var(--surface);border:1px solid var(--border);color:var(--ink);border-bottom-left-radius:3px;max-width:92%}
+  .rev-chat-think{display:flex;gap:5px;align-items:center}
+  .rev-chat-think span{width:7px;height:7px;border-radius:50%;background:var(--gold,#C9A84C);animation:revblink 1.2s infinite both}
+  .rev-chat-think span:nth-child(2){animation-delay:.2s}
+  .rev-chat-think span:nth-child(3){animation-delay:.4s}
+  @keyframes revblink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  .rev-chat-chips{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border);background:var(--cream)}
+  .rev-chat-chip{background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.45);color:#8a6d18;border-radius:16px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:var(--font-sans);white-space:nowrap}
+  .rev-chat-chip:hover{background:rgba(201,168,76,.25)}
+  .rev-chat-inputbar{display:flex;gap:8px;align-items:flex-end;padding:12px 14px;border-top:1px solid var(--border);background:var(--cream)}
+  .rev-chat-input{flex:1;resize:none;border:1px solid var(--sabbia-dark);border-radius:8px;padding:10px 12px;font-family:var(--font-sans);font-size:14px;background:var(--surface);color:var(--ink);max-height:120px;line-height:1.4}
+  .rev-chat-send{background:var(--vino);color:var(--cream);border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:var(--font-sans)}
+  .rev-chat-md .rev-md-h{font-family:var(--font-serif);color:var(--vino);font-size:14px;font-weight:700;margin:9px 0 4px}
+  .rev-chat-md .rev-md-p{margin:4px 0}
+  .rev-chat-md .rev-md-sp{height:6px}
+  .rev-chat-md .rev-md-hr{border:none;border-top:1px solid var(--border);margin:9px 0}
+  .rev-chat-md .rev-md-ul{margin:4px 0 4px 18px;padding:0}
+  .rev-chat-md .rev-md-ul li{margin:2px 0}
+  .rev-chat-md .rev-md-tbl{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  .rev-chat-md .rev-md-tbl th{background:var(--vino);color:var(--cream);padding:5px 8px;text-align:left;font-size:10px;letter-spacing:.03em;text-transform:uppercase}
+  .rev-chat-md .rev-md-tbl td{padding:5px 8px;border-bottom:1px solid var(--border)}
+  .rev-chat-md code{background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px;font-size:12px}
   .rev-setup{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;max-width:560px;margin:20px auto;color:var(--ink)}
   .rev-setup .rev-h{font-family:var(--font-serif);font-size:17px;color:var(--vino);margin-bottom:10px}
   .rev-lbl{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--vino-light,#8a4a52);font-family:var(--font-sans);margin-bottom:4px}
