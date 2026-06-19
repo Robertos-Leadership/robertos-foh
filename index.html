@@ -6266,19 +6266,19 @@ function fohSchedPrint(){
   var dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var weekStr=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+
     days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-  var html='<div style="margin-bottom:10px"><h2 style="font-size:20px;color:#410207;margin:0 0 3px">Roberto\'s DIFC — FOH Roster: '+weekStr+'</h2>'+
-    '<p style="font-size:11px;color:#666;margin:0">Printed: '+new Date().toLocaleString('en-GB')+'</p></div>';
+  var html='<div style="margin-bottom:6px"><h2 style="font-size:18px;color:#410207;margin:0 0 2px">Roberto\'s DIFC — FOH Roster: '+weekStr+'</h2>'+
+    '<p style="font-size:10px;color:#666;margin:0">Printed: '+new Date().toLocaleString('en-GB')+'</p></div>';
   html+='<table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed"><thead><tr>'+
-    '<th style="background:#410207;color:#fff;padding:7px 5px;text-align:left;width:13%">Name</th>'+
-    '<th style="background:#410207;color:#fff;padding:7px 5px;text-align:left;width:11%">Role</th>';
-  for(var di=0;di<days.length;di++) html+='<th style="background:#410207;color:#fff;padding:7px 4px;font-size:13px">'+dayNames[di]+'<br><span style="font-size:11px;font-weight:400">'+days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</span></th>';
-  html+='<th style="background:#410207;color:#fff;padding:7px 4px;width:6%">Hours</th><th style="background:#410207;color:#fff;padding:7px 4px;width:5%">Days</th></tr></thead><tbody>';
+    '<th style="background:#410207;color:#fff;padding:4px 5px;text-align:left;width:13%">Name</th>'+
+    '<th style="background:#410207;color:#fff;padding:4px 5px;text-align:left;width:11%">Role</th>';
+  for(var di=0;di<days.length;di++) html+='<th style="background:#410207;color:#fff;padding:4px 4px;font-size:13px">'+dayNames[di]+'<br><span style="font-size:11px;font-weight:400">'+days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</span></th>';
+  html+='<th style="background:#410207;color:#fff;padding:4px 4px;width:6%">Hours</th><th style="background:#410207;color:#fff;padding:4px 4px;width:5%">Days</th></tr></thead><tbody>';
   // Events strip — one row across the top, up to 2 events per day
-  html+='<tr><td colspan="2" style="background:#5e0a10;color:#fff;font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;border:1px solid #d8cbb8;padding:5px 7px">Events</td>';
+  html+='<tr><td colspan="2" style="background:#5e0a10;color:#fff;font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;border:1px solid #d8cbb8;padding:3px 7px">Events</td>';
   for(var ev=0;ev<days.length;ev++){
     var evDs=formatDate(days[ev]);
     var dayEvs=fohSchedEvents[evDs]||[];
-    html+='<td style="border:1px solid #ccc;padding:5px 4px;text-align:center;font-size:12px;font-weight:700;color:#410207;background:#f6eedd">'+
+    html+='<td style="border:1px solid #ccc;padding:2px 4px;text-align:center;font-size:12px;font-weight:700;color:#410207;background:#f6eedd">'+
       (dayEvs.length?dayEvs.map(function(e){return fohEvEsc(e.name);}).join('<br>'):'')+'</td>';
   }
   html+='<td colspan="2" style="border:1px solid #ccc;background:#f6eedd"></td></tr>';
@@ -6286,7 +6286,7 @@ function fohSchedPrint(){
     var stStaff=fohSchedStaff.filter(function(s){ return s.section===sec.key; });
     if(!stStaff.length) return;
     var secColor = FOH_SECTION_PRINT_COLOR[sec.key] || '#ece3d3';
-    html+='<tr><td colspan="11" style="background:'+secColor+';color:#2f2a28;font-weight:800;font-size:13px;letter-spacing:1px;text-transform:uppercase;border:1px solid #d8cbb8;padding:5px 8px">'+sec.label+'</td></tr>';
+    html+='<tr><td colspan="11" style="background:'+secColor+';color:#2f2a28;font-weight:800;font-size:13px;letter-spacing:1px;text-transform:uppercase;border:1px solid #d8cbb8;padding:3px 8px">'+sec.label+'</td></tr>';
     stStaff.forEach(function(staff){
       var wh=0, wd=0;
       html+='<tr><td style="font-size:14px;font-weight:700;border:1px solid #ccc;border-left:5px solid '+secColor+'">'+staff.name+'</td>'+
@@ -6299,20 +6299,20 @@ function fohSchedPrint(){
           var ts2=row?formatTime(row.shift_start2):'', te2=row?formatTime(row.shift_end2):'';
           var h=calcHours(ts,te,ts2,te2); if(ts&&te){ wh+=h; wd++; }
           var cell = ts&&te ? (ts+'–'+te + (ts2&&te2 ? '<br><span style="font-size:12px;color:#444">'+ts2+'–'+te2+'</span>' : '')) : '';
-          html+='<td style="padding:5px 4px;text-align:center;border:1px solid #ccc;font-size:14px;font-weight:600;white-space:nowrap">'+cell+'</td>';
+          html+='<td style="padding:2px 4px;text-align:center;border:1px solid #ccc;font-size:14px;font-weight:600;white-space:nowrap">'+cell+'</td>';
         } else {
           var meta=FOH_STATUS_META[row.status]||{label:row.status.toUpperCase()};
           if(row.status!=='off') wd++;
           var pcol=FOH_STATUS_PRINT_COLOR[row.status]||'#777';
-          html+='<td style="padding:5px 4px;text-align:center;border:1px solid #ccc;background:'+pcol+';color:#fff;font-weight:700;font-size:13px">'+meta.label+'</td>';
+          html+='<td style="padding:2px 4px;text-align:center;border:1px solid #ccc;background:'+pcol+';color:#fff;font-weight:700;font-size:13px">'+meta.label+'</td>';
         }
       });
-      html+='<td style="padding:5px 4px;text-align:center;font-weight:700;border:1px solid #ccc;font-size:14px">'+(wh>0?(Math.round(wh*10)/10)+'h':'—')+'</td>'+
-        '<td style="padding:5px 4px;text-align:center;border:1px solid #ccc;font-size:14px">'+(wd||'—')+'</td></tr>';
+      html+='<td style="padding:2px 4px;text-align:center;font-weight:700;border:1px solid #ccc;font-size:14px">'+(wh>0?(Math.round(wh*10)/10)+'h':'—')+'</td>'+
+        '<td style="padding:2px 4px;text-align:center;border:1px solid #ccc;font-size:14px">'+(wd||'—')+'</td></tr>';
     });
   });
   html+='</tbody></table>';
-    var printDoc='<!doctype html><html><head><title>FOH Roster</title><style>@page{size:A3 landscape;margin:8mm}html,body{margin:0}body{font-family:Arial,sans-serif;font-size:14px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}table{width:100%}td{line-height:1.25;word-wrap:break-word}</style></head><body>'+html+'</body></html>';
+    var printDoc='<!doctype html><html><head><title>FOH Roster</title><style>@page{size:A3 landscape;margin:6mm}html,body{margin:0}body{font-family:Arial,sans-serif;font-size:14px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}table{width:100%}td{line-height:1.1;word-wrap:break-word}tr{page-break-inside:avoid}</style></head><body>'+html+'</body></html>';
   var w=window.open('','_blank');
 
   if(!w){ alert('Pop-up blocked — allow pop-ups and try again.'); return; }
