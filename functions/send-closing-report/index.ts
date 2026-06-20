@@ -21,6 +21,7 @@ const CC = [
   "mpetrosino@robertos.ae",
   "vdetoni@robertos.ae",
   "dvalla@robertos.ae",
+  "jthomas@robertos.ae",
 ];
 
 const cors = {
