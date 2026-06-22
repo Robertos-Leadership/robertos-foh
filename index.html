@@ -57,6 +57,42 @@
   setInterval(check, 5 * 60 * 1000);
 })();
 </script>
+<script>
+/* ── Service worker registration ─────────────────────────────────────
+   Registers sw.js so the app keeps working offline and so always-on wall
+   screens pull a new deploy automatically. The worker is network-first, so
+   being online always gets fresh code — the cache is only an offline net.
+
+   When a new worker installs we tell it to activate immediately
+   (skipWaiting); when it takes over (controllerchange) we reload once so the
+   screen lands on the new version with no manual tap. reg.update() runs on
+   focus and on a 5-min heartbeat (the wall screen never changes focus, so
+   without the timer it would never look for a new worker). */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(function(reg){
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'visible') reg.update();
+    });
+    setInterval(function(){ reg.update(); }, 5 * 60 * 1000);
+    reg.addEventListener('updatefound', function(){
+      var newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', function(){
+        // A new worker finished installing while an old one is in control →
+        // activate it now (controllerchange below then reloads once).
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          newSW.postMessage('skipWaiting');
+        }
+      });
+    });
+  }).catch(function(){ /* SW unsupported / blocked — app still works online */ });
+
+  var swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if (!swRefreshing) { swRefreshing = true; location.reload(); }
+  });
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&display=swap');
@@ -2057,7 +2093,7 @@
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-06-22.5</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-06-22.6</div>
   </div>
 
   <!-- main scroll area -->
