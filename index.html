@@ -6221,6 +6221,9 @@ async function openFohSchedule(){
 
 // ── Send to HR (uses Kitchen App edge function + ExcelJS) ──
 async function fohSchedSendToHR(){
+  var _wkEnd = addDays(fohSchedWeekStart, 6);
+  var _wkStr = fohSchedWeekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' to ' + _wkEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  if(!confirm("Email this week's roster (" + _wkStr + ") to HR now?")) return;
   var btn = document.getElementById('foh-svt-hr');
   if(btn){ btn.textContent = '⏳ Generating...'; btn.disabled = true; }
   try {
