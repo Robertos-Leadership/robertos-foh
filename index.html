@@ -2595,6 +2595,14 @@ async function adminAddUser(){
   var u={email:em,name:nm||em,modules:['events','operations','revenue','stocktake'],is_admin:false};
   if(await adminSave(u)){ state.adminUsers.push(u); renderMain(); }
 }
+async function adminDeleteUser(email){
+  if(!confirm('Remove '+email+' from the access list?')) return;
+  var res=await sb.from('app_users').delete().eq('email', email);
+  if(res.error){ alert('Could not remove: '+res.error.message); return; }
+  state.adminUsers=(state.adminUsers||[]).filter(function(u){ return u.email!==email; });
+  renderMain();
+}
+function adminRefresh(){ state.adminLoaded=false; loadAdminUsers(); }
 function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
 function renderAdmin(){
   if(!state.adminLoaded){ loadAdminUsers(); return '<div class="loading">Loading users…</div>'; }
@@ -2608,7 +2616,7 @@ function renderAdmin(){
       var on=(u.notify||[]).indexOf(nt.k)!==-1;
       return '<label class="adm-tick adm-notif"><input type="checkbox" '+(on?'checked':'')+' onchange="adminToggleNotify(\''+admEsc(u.email)+'\',\''+nt.k+'\')"> '+nt.n+'</label>';
     }).join('');
-    return '<div class="adm-row"><div class="adm-who"><b>'+admEsc(u.name||u.email)+'</b><span>'+admEsc(u.email)+'</span></div><div class="adm-ticks">'+ticks+adm+'<span class="adm-sep"></span><span class="adm-emails-lbl">Emails:</span>'+notif+'</div></div>';
+    return '<div class="adm-row"><div class="adm-who"><b>'+admEsc(u.name||u.email)+'</b><span>'+admEsc(u.email)+'</span><button class="adm-del" onclick="adminDeleteUser(\''+admEsc(u.email)+'\')">Remove</button></div><div class="adm-ticks">'+ticks+adm+'<span class="adm-sep"></span><span class="adm-emails-lbl">Emails:</span>'+notif+'</div></div>';
   }).join('');
   return '<style>'
     +'.adm-wrap{max-width:760px;margin:0 auto;padding:18px 16px 90px;}'
@@ -2625,15 +2633,18 @@ function renderAdmin(){
     +'.adm-sep{flex-basis:100%;height:0;}'
     +'.adm-emails-lbl{font-size:12px;color:#9c8a72;text-transform:uppercase;letter-spacing:.04em;align-self:center;}'
     +'.adm-tick.adm-notif{color:#2d6a4f;}'
+    +'.adm-del{margin-left:10px;font-size:11px;color:#b3402f;background:none;border:1px solid #e3c9c4;border-radius:6px;padding:2px 8px;cursor:pointer;}'
+    +'.adm-del:hover{background:#f7ecea;}'
     +'</style>'
     +'<div class="adm-wrap">'
-    +'<div class="adm-head"><h2>Users &amp; Access</h2><button class="btn btn-gold" onclick="adminOpenSupabase()">+ Add login</button></div>'
+    +'<div class="adm-head"><h2>Users &amp; Access</h2><div style="display:flex;gap:8px;"><button class="btn btn-sm" onclick="adminRefresh()">Refresh</button><button class="btn btn-gold" onclick="adminOpenSupabase()">+ Add login</button></div></div>'
     +'<div class="adm-note">Tick a box to give or remove a module for that person — it saves instantly. <b>To add someone new:</b> tap “+ Add login”, create their email + password on the page that opens (turn ON “Auto Confirm User”), then add their email below.</div>'
     +'<div class="adm-add"><input id="adm-new-email" placeholder="new email (name@robertos.ae)"><input id="adm-new-name" placeholder="full name"><button class="btn btn-sm btn-gold" onclick="adminAddUser()">Add to list</button></div>'
     +'<div class="adm-list">'+(rows||'<div class="adm-note">No users yet.</div>')+'</div></div>';
 }
 function enterApp(module){
   if(fohBlocked(module)){ showManagerLanding(); return; }   // access gate
+  if(module==='admin') state.adminLoaded=false;             // always pull the latest list on open
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   try{ localStorage.setItem('rl_inapp','1'); }catch(e){}
