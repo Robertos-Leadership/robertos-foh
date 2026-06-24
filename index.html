@@ -2169,13 +2169,13 @@ if ('serviceWorker' in navigator) {
     <div class="landing-sub">Events planning, operational tools, and reporting for Roberto's DIFC.</div>
     <div class="landing-divider"></div>
     <div class="module-grid">
-      <div class="module-card" onclick="enterApp('events')">
+      <div class="module-card" id="mod-card-events" onclick="enterApp('events')">
         <div class="module-tag">Live</div>
         <div class="module-name">Events</div>
         <div class="module-desc">The Listening Bar, Jazz Tuesdays and weekly events.</div>
         <div class="module-badge">Open</div>
       </div>
-      <div class="module-card" onclick="enterApp('operations')">
+      <div class="module-card" id="mod-card-operations" onclick="enterApp('operations')">
         <div class="module-tag">Live</div>
         <div class="module-name">Operations</div>
         <div class="module-desc">Daily closing report — revenue, tips, comps &amp; shift notes.</div>
@@ -2187,11 +2187,17 @@ if ('serviceWorker' in navigator) {
         <div class="module-desc">Daily budget, covers, spend &amp; month-vs-month review.</div>
         <div class="module-badge">Open</div>
       </div>
-      <div class="module-card" onclick="enterApp('stocktake')">
+      <div class="module-card" id="mod-card-stocktake" onclick="enterApp('stocktake')">
         <div class="module-tag">Live</div>
         <div class="module-name">Stock Take</div>
         <div class="module-desc">Monthly beverage &amp; tobacco inventory count.</div>
         <div class="module-badge">Open</div>
+      </div>
+      <div class="module-card" id="mod-card-admin" onclick="enterApp('admin')" style="display:none;">
+        <div class="module-tag">Admin</div>
+        <div class="module-name">Admin</div>
+        <div class="module-desc">Users, access &amp; notifications.</div>
+        <div class="module-badge">You only</div>
       </div>
     </div>
     <div class="landing-signout">
@@ -2475,7 +2481,7 @@ function renderNav(){
   const active = resolveTab(state.currentTab);
   // Module-scoped nav: Revenue and Operations are single pages reached from the Manager
   // landing — no cross-module links there. Only the Events module keeps its own sub-tabs.
-  if(active==='revenue' || active==='operations' || active==='stocktake'){ nav.innerHTML=''; return; }
+  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin'){ nav.innerHTML=''; return; }
   const eventTabs = state.events.slice().sort(eventSort).map(ev=>
     `<div class="nav-tab ${active===eventTab(ev)?'active':''}" data-tab="${eventTab(ev)}" onclick="switchTab('${eventTab(ev)}')">${ev.name}</div>`
   ).join('');
@@ -2499,16 +2505,108 @@ function currentStageForTasks(tasks){
 }
 
 // -- NAVIGATION --
-// ── Per-user module access (beta: client-side gate; proper roles come later) ──
-// email -> modules the user may NOT open. Anyone not listed sees everything.
-var FOH_BLOCKED_MODULES = { 'jballout@robertos.ae': ['revenue'] };
+// ── Per-user module access — driven by the app_users table (managed in the Admin module). ──
+// state.access = { modules:[...], isAdmin:bool } for the logged-in user; loaded on sign-in.
+function moduleOf(t){
+  if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin') return t;
+  return 'events';   // dashboard, event_*, events => the Events module
+}
 function fohBlocked(module){
-  var e=(state.userEmail||'').toLowerCase();
-  return (FOH_BLOCKED_MODULES[e]||[]).indexOf(module)!==-1;
+  var m=moduleOf(module);
+  if(m==='admin') return !(state.access && state.access.isAdmin);
+  if(!state.access || !state.access.modules) return false;   // not configured yet -> allow (never lock anyone out)
+  return state.access.modules.indexOf(m)===-1;
 }
 function applyFohAccess(){
-  var rev=document.getElementById('mod-card-revenue');
-  if(rev) rev.style.display = fohBlocked('revenue') ? 'none' : '';
+  ['events','operations','revenue','stocktake'].forEach(function(m){
+    var c=document.getElementById('mod-card-'+m);
+    if(c) c.style.display = fohBlocked(m) ? 'none' : '';
+  });
+  var ad=document.getElementById('mod-card-admin');
+  if(ad) ad.style.display = (state.access && state.access.isAdmin) ? '' : 'none';
+}
+async function loadFohAccess(){
+  state.access=null;
+  var e=(state.userEmail||'').toLowerCase();
+  if(e){
+    try{ var r=await sb.from('app_users').select('modules,is_admin,name').eq('email',e).limit(1);
+      if(r.data && r.data[0]) state.access={ modules:r.data[0].modules||[], isAdmin:!!r.data[0].is_admin, name:r.data[0].name };
+    }catch(err){}
+  }
+  applyFohAccess();
+  if(state.currentTab && fohBlocked(state.currentTab)) switchTab('dashboard');
+}
+// ══════════════════════════════════════════════
+//  ADMIN MODULE — manage logins + module access (notifications: phase 2). Admin-only.
+// ══════════════════════════════════════════════
+var SUPA_USERS_URL='https://supabase.com/dashboard/project/paoaivwtkzujmrgrfjuq/auth/users';
+var ADMIN_MODULES=[{k:'events',n:'Events'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'}];
+function admEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function loadAdminUsers(){
+  sb.from('app_users').select('*').order('name').then(function(r){
+    state.adminUsers = r.error ? [] : (r.data||[]);
+    state.adminLoaded = true;
+    if(state.currentTab==='admin') renderMain();
+  });
+}
+function adminFind(email){ return (state.adminUsers||[]).find(function(u){return u.email===email;}); }
+async function adminSave(u){
+  var res=await sb.from('app_users').upsert({email:u.email,name:u.name,modules:u.modules,is_admin:u.is_admin,updated_at:new Date().toISOString()},{onConflict:'email'});
+  if(res.error){ alert('Could not save: '+res.error.message); return false; }
+  return true;
+}
+async function adminToggle(email, mod){
+  var u=adminFind(email); if(!u) return;
+  u.modules=u.modules||[];
+  var i=u.modules.indexOf(mod);
+  if(i===-1) u.modules.push(mod); else u.modules.splice(i,1);
+  renderMain();
+  await adminSave(u);
+  if(email===(state.userEmail||'').toLowerCase()) loadFohAccess();
+}
+async function adminToggleAdmin(email){
+  var u=adminFind(email); if(!u) return;
+  u.is_admin=!u.is_admin; renderMain();
+  await adminSave(u);
+  if(email===(state.userEmail||'').toLowerCase()) loadFohAccess();
+}
+async function adminAddUser(){
+  var em=(document.getElementById('adm-new-email').value||'').trim().toLowerCase();
+  var nm=(document.getElementById('adm-new-name').value||'').trim();
+  if(!em){ alert('Type the email first.'); return; }
+  if(adminFind(em)){ alert('That email is already in the list.'); return; }
+  var u={email:em,name:nm||em,modules:['events','operations','revenue','stocktake'],is_admin:false};
+  if(await adminSave(u)){ state.adminUsers.push(u); renderMain(); }
+}
+function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
+function renderAdmin(){
+  if(!state.adminLoaded){ loadAdminUsers(); return '<div class="loading">Loading users…</div>'; }
+  var rows=(state.adminUsers||[]).map(function(u){
+    var ticks=ADMIN_MODULES.map(function(m){
+      var on=(u.modules||[]).indexOf(m.k)!==-1;
+      return '<label class="adm-tick"><input type="checkbox" '+(on?'checked':'')+' onchange="adminToggle(\''+admEsc(u.email)+'\',\''+m.k+'\')"> '+m.n+'</label>';
+    }).join('');
+    var adm='<label class="adm-tick adm-admin"><input type="checkbox" '+(u.is_admin?'checked':'')+' onchange="adminToggleAdmin(\''+admEsc(u.email)+'\')"> Admin</label>';
+    return '<div class="adm-row"><div class="adm-who"><b>'+admEsc(u.name||u.email)+'</b><span>'+admEsc(u.email)+'</span></div><div class="adm-ticks">'+ticks+adm+'</div></div>';
+  }).join('');
+  return '<style>'
+    +'.adm-wrap{max-width:760px;margin:0 auto;padding:18px 16px 90px;}'
+    +'.adm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;}'
+    +'.adm-head h2{font-family:Georgia,serif;color:#400207;margin:0;font-size:22px;}'
+    +'.adm-note{font-size:13px;color:#6b5a44;line-height:1.5;margin:6px 0 14px;}'
+    +'.adm-add{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}'
+    +'.adm-add input{flex:1;min-width:160px;padding:9px 11px;border:1px solid #d8cbb6;border-radius:8px;font-size:14px;}'
+    +'.adm-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid #e8ddc9;}'
+    +'.adm-who b{display:block;color:#2c1810;font-size:15px;}.adm-who span{font-size:12px;color:#9c8a72;}'
+    +'.adm-ticks{display:flex;gap:14px;flex-wrap:wrap;}'
+    +'.adm-tick{font-size:13px;color:#4a3b2a;display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;}'
+    +'.adm-tick.adm-admin{color:#8a1f2a;font-weight:bold;}'
+    +'</style>'
+    +'<div class="adm-wrap">'
+    +'<div class="adm-head"><h2>Users &amp; Access</h2><button class="btn btn-gold" onclick="adminOpenSupabase()">+ Add login</button></div>'
+    +'<div class="adm-note">Tick a box to give or remove a module for that person — it saves instantly. <b>To add someone new:</b> tap “+ Add login”, create their email + password on the page that opens (turn ON “Auto Confirm User”), then add their email below.</div>'
+    +'<div class="adm-add"><input id="adm-new-email" placeholder="new email (name@robertos.ae)"><input id="adm-new-name" placeholder="full name"><button class="btn btn-sm btn-gold" onclick="adminAddUser()">Add to list</button></div>'
+    +'<div class="adm-list">'+(rows||'<div class="adm-note">No users yet.</div>')+'</div></div>';
 }
 function enterApp(module){
   if(fohBlocked(module)){ showManagerLanding(); return; }   // access gate
@@ -2528,7 +2626,7 @@ function enterApp(module){
   // Land in the chosen module — Revenue/Operations go straight there; Events keeps the
   // current Events-family tab (Leaders or an event) but NEVER another module's tab.
   var cur=state.currentTab;
-  var target=(module==='revenue'||module==='operations'||module==='stocktake') ? module
+  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin') ? module
     : ((cur==='dashboard' || (cur && cur.indexOf('event_')===0)) ? cur : 'dashboard');
   switchTab(target);
 }
@@ -2644,7 +2742,7 @@ function renderMain(){
   const el = document.getElementById('main-content');
   const sec = document.getElementById('topbar-section');
   const tab = state.currentTab;
-  if(sec) sec.textContent = tab==='revenue' ? 'Revenue' : (tab==='operations' ? 'Operations' : (tab==='stocktake' ? 'Stock Take' : (tab==='dashboard' ? 'Leaders' : 'Events')));
+  if(sec) sec.textContent = tab==='revenue' ? 'Revenue' : (tab==='operations' ? 'Operations' : (tab==='stocktake' ? 'Stock Take' : (tab==='admin' ? 'Admin' : (tab==='dashboard' ? 'Leaders' : 'Events'))));
   // Build the HTML first, then only touch the DOM if it actually changed.
   // The realtime path reloads all tables and re-renders on ANY change from ANY
   // screen — most of which don't affect the current view. Skipping an identical
@@ -2655,6 +2753,7 @@ function renderMain(){
   if(tab==='revenue'){ html = renderRevenue(); }
   else if(tab==='operations'){ html = renderOperations(); }
   else if(tab==='stocktake'){ html = renderStockTake(); }
+  else if(tab==='admin'){ html = renderAdmin(); }
   else if(state.events.length===0){ html = '<div class="loading">Loading...</div>'; }
   else if(tab==='dashboard'){ html = renderDashboard(); needsListeners = true; }
   else { html = renderEventPage(state.events.find(e=>e.id===tabEventId(tab))); needsListeners = true; }
@@ -4463,6 +4562,7 @@ async function signIn(){
   document.getElementById('login-password').value = '';
   document.getElementById('foh-public').style.display = 'none';
   document.getElementById('foh-nav').style.display = 'none';
+  await loadFohAccess();
   startApp();
 }
 
@@ -6056,6 +6156,7 @@ async function chkShowHistory(){
     const { data } = await sb.auth.getSession();
     if(data && data.session){
       state.userEmail = data.session.user?.email || null;
+      loadFohAccess();
     }
     sb.auth.onAuthStateChange((event)=>{
       if(event==='SIGNED_OUT') showFohPublic();
