@@ -31,6 +31,12 @@ var STOCK_EMAIL_CC = ['amohamed@robertos.ae','mpetrosino@robertos.ae','jballout@
 // deferred, so this lives client-side. Counts are attributed to this label.
 var STOCK_SUPER = { '1212': 'Stock Take Admin', '0000': 'Cost Controller' };
 
+// Previous-month reference (the grey "Last month: …" line + last-month closing
+// total) is BUILT but hidden for now. Flip to true to switch it back on — planned
+// for July once June's inventory is done. When false, no prior-month data is even
+// loaded, so the display naturally shows nothing.
+var STOCK_SHOW_PREV = false;
+
 // ── state ──
 var stDept    = 'beverage';  // current list (beverage | tobacco)
 var stSheet   = null;        // { month, status, ... }
@@ -144,6 +150,7 @@ async function stLoadCounts(){
 // build a per-item lookup of what it closed at. Read-only history — no realtime. ──
 async function stLoadPrevMonth(){
   stPrevRef = {}; stPrevTotal = 0; stPrevMonth = null; stPrevLabel = '';
+  if(!STOCK_SHOW_PREV) return;   // feature built but hidden — flip STOCK_SHOW_PREV to re-enable
   if(!stMonth) return;
   var sres = await sb.from('stock_take_sheets').select('month')
     .eq('venue_id',STOCK_VENUE).eq('dept',stDept).lt('month',stMonth)
