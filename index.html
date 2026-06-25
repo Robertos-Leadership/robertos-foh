@@ -6249,7 +6249,7 @@ async function chkShowHistory(){
   }
 })();
 </script>
-<script src="foh-revenue.js?v=2026-06-22.5"></script>
+<script src="foh-revenue.js?v=2026-06-25.4"></script>
 <script src="foh-closing.js?v=2026-06-25.3"></script>
 <script src="foh-ops.js?v=2026-06-25.2"></script>
 <script src="stock-take.js?v=2026-06-23.2"></script>
@@ -6546,6 +6546,8 @@ async function chkShowHistory(){
     <div class="rev-chat-head">
       <div class="rev-chat-title">&#9733; Revenue Analyst</div>
       <div class="rev-chat-head-r">
+        <button id="rev-chat-copy" class="rev-chat-newbtn" onclick="revChatCopy()" title="Copy the latest analysis">Copy</button>
+        <button class="rev-chat-newbtn" onclick="revChatExport()" title="Export the latest analysis to PDF">&#128190; PDF</button>
         <button class="rev-chat-newbtn" onclick="revChatClear()" title="Start a new conversation">New</button>
         <button class="rev-chat-x" onclick="revChatClose()" title="Close">&times;</button>
       </div>
@@ -6639,6 +6641,17 @@ async function chkShowHistory(){
   .rev-chat-head-r{display:flex;align-items:center;gap:10px}
   .rev-chat-newbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:var(--cream);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font-sans)}
   .rev-chat-x{background:transparent;border:none;color:var(--cream);font-size:26px;line-height:1;cursor:pointer;padding:0 2px}
+  /* Revenue dashboard charts */
+  .rev-btn-sm{font-size:11px;padding:3px 10px;margin-left:10px}
+  .rev-dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:18px}
+  .rev-chart{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow)}
+  .rev-chart-t{font-weight:600;font-size:13px;color:var(--text-mid);margin-bottom:8px}
+  .rev-chart-svg{width:100%;height:auto;display:block}
+  .rev-chart-lg{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--text-light)}
+  .rev-lg{display:inline-flex;align-items:center;gap:5px}
+  .rev-lg i{width:11px;height:11px;border-radius:2px;display:inline-block}
+  .rev-chart-empty{padding:24px;text-align:center;color:var(--text-light);font-size:12px;background:var(--surface2);border-radius:8px}
+  .rev-chart-embed{margin:12px 0;max-width:470px}
   .rev-chat-thread{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;background:var(--sabbia-light,#faf7f1)}
   .rev-chat-empty{text-align:center;margin:auto;max-width:430px}
   .rev-chat-empty-t{font-family:var(--font-serif);font-size:18px;color:var(--vino);margin-bottom:8px}

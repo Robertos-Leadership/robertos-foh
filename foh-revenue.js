@@ -419,7 +419,7 @@ async function revAiReport(){
 //  AI CHAT / REPORTS — full-screen module. Multi-turn, quick-report chips,
 //  same deterministic engine (the model never computes; it parameterises + narrates).
 // ══════════════════════════════════════════════
-var REV_CHAT_SYS='You are a precise F&B revenue analyst for Roberto\'s DIFC. Use ONLY the figures in the DATA block or returned by the compute_scenario tool — never invent or calculate numbers yourself. For ANY what-if about changing average spend or covers you MUST call compute_scenario; the tool result already contains every derived figure (deltas, gap_to_target, percentages) — quote them verbatim, do NOT do arithmetic. When F&B figures are marked "est", say they are estimates from the standard mix, not actuals. An OPERATIONS LOG (closing reports) may be provided — when asked about patterns/themes, mine it for recurring shift challenges, comps trends, and comment themes, and quantify how often each recurs. When the user asks to SET / CHANGE / APPLY a monthly budget, a weekday average spend, or a weekday cover target, call propose_change with the final value — NEVER claim it has been applied; the app shows the user an Approve button they must click. Be a clear, board-ready analyst: use short headings, tables and bullets; lead with the answer; call out risks and notable swings. Keep follow-ups in context.';
+var REV_CHAT_SYS='You are a precise F&B revenue analyst for Roberto\'s DIFC. Use ONLY the figures in the DATA block or returned by the compute_scenario tool — never invent or calculate numbers yourself. For ANY what-if about changing average spend or covers you MUST call compute_scenario; the tool result already contains every derived figure (deltas, gap_to_target, percentages) — quote them verbatim, do NOT do arithmetic. When F&B figures are marked "est", say they are estimates from the standard mix, not actuals. An OPERATIONS LOG (closing reports) may be provided — when asked about patterns/themes, mine it for recurring shift challenges, comps trends, and comment themes, and quantify how often each recurs. When the user asks to SET / CHANGE / APPLY a monthly budget, a weekday average spend, or a weekday cover target, call propose_change with the final value — NEVER claim it has been applied; the app shows the user an Approve button they must click. Be a clear, board-ready analyst: use short headings, tables and bullets; lead with the answer; call out risks and notable swings. Keep follow-ups in context.\n\nVISUALS: When a chart makes the answer clearer (a trend, a comparison or a split), insert a chart token on its OWN line. The app draws the chart from the real data for the month being viewed — you NEVER supply the numbers, you only choose which chart. Available tokens: [[chart:net-vs-budget]] (daily net vs budget bars), [[chart:mtd-cumulative]] (cumulative net vs budget — are we ahead?), [[chart:venue-split]] (Restaurant vs Lounge share), [[chart:weekday]] (avg net by weekday vs last month), [[chart:daypart]] (lunch/dinner by venue). Use at most 2–3 per answer, each on its own line, and refer to them in your text. The user can export any answer to PDF.';
 function revChatInit(){ var R=revInit(); if(!R.chat) R.chat={thread:[], api:[], busy:false}; return R.chat; }
 function revChatOpen(){ revChatInit(); document.getElementById('rev-chat-modal').style.display='flex'; revChatRender(); var inp=document.getElementById('rev-chat-input'); if(inp) setTimeout(function(){inp.focus();},60); }
 function revChatClose(){ document.getElementById('rev-chat-modal').style.display='none'; }
@@ -480,6 +480,8 @@ function revMd(s){
   function cells(r){ return r.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(function(x){return x.trim();}); }
   while(i<lines.length){
     var ln=lines[i];
+    var cm=ln.match(/^\s*\[\[chart:([a-z\-]+)\]\]\s*$/);   // AI-embedded chart token → app-drawn SVG (real data)
+    if(cm){ var cv=revChartSvg(cm[1]); if(cv) out.push('<div class="rev-chart-embed">'+cv+'</div>'); i++; continue; }
     if(/\|/.test(ln) && i+1<lines.length && /^[\s|:\-]+$/.test(lines[i+1]) && /-/.test(lines[i+1])){
       var th=cells(ln).map(function(x){return '<th>'+inl(x)+'</th>';}).join(''); i+=2; var trs=[];
       while(i<lines.length && /\|/.test(lines[i])){ trs.push('<tr>'+cells(lines[i]).map(function(x){return '<td>'+inl(x)+'</td>';}).join('')+'</tr>'); i++; }
@@ -504,6 +506,176 @@ function revChatRender(){
   });
   if(c.busy){ h+='<div class="rev-chat-row rev-chat-a"><div class="rev-chat-bub rev-chat-ab rev-chat-think"><span></span><span></span><span></span></div></div>'; }
   box.innerHTML=h; box.scrollTop=box.scrollHeight;
+}
+
+// ══════════════════════════════════════════════
+//  CHART ENGINE — inline SVG, no libraries. Charts are drawn from the SAME
+//  real data the tables use (the AI never supplies numbers — it only picks
+//  WHICH chart to show via a [[chart:name]] token). Brand palette is literal
+//  hex so charts also render correctly in the print/PDF window.
+// ══════════════════════════════════════════════
+var REV_CC={net:'#6B1F2A',budget:'#C9A84C',neg:'#c0392b',prev:'#d4c5b4',grid:'rgba(107,31,42,0.12)',txt:'#8B7355',ink:'#2C1810'};
+function revK(n){ n=Number(n)||0; var a=Math.abs(n); if(a>=1e6) return (n/1e6).toFixed(a>=1e7?0:1)+'M'; if(a>=1e3) return Math.round(n/1e3)+'k'; return String(Math.round(n)); }
+function revSvgOpen(w,h){ return '<svg class="rev-chart-svg" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter,Arial,sans-serif">'; }
+function revChartBox(title,svg,legend){ return '<div class="rev-chart"><div class="rev-chart-t">'+title+'</div><div class="rev-chart-c">'+svg+'</div>'+(legend?'<div class="rev-chart-lg">'+legend+'</div>':'')+'</div>'; }
+function revChartEmpty(title,msg){ return '<div class="rev-chart"><div class="rev-chart-t">'+title+'</div><div class="rev-chart-empty">'+msg+'</div></div>'; }
+function revLg(c,t){ return '<span class="rev-lg"><i style="background:'+c+'"></i>'+t+'</span>'; }
+function revYAxis(top,padL,padT,plotH,W,padR){ var s=''; for(var g=0; g<=4; g++){ var gv=top*g/4, gy=padT+plotH-(gv/top*plotH); s+='<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="'+REV_CC.grid+'"/><text x="'+(padL-6)+'" y="'+(gy+3)+'" font-size="9" fill="'+REV_CC.txt+'" text-anchor="end">'+revK(gv)+'</text>'; } return s; }
+
+// Daily net vs budget — two bars per trading day
+function revChartNetBudget(p){
+  var m=revMonthData(p), days=m.days.filter(function(d){return d.net!=null;});
+  if(!days.length) return revChartEmpty('Daily net vs budget — '+revMonthLabel(p),'No trading days entered yet.');
+  var W=Math.max(360,days.length*30+60),H=230,padL=46,padR=12,padT=16,padB=32,plotW=W-padL-padR,plotH=H-padT-padB;
+  var max=0; days.forEach(function(d){ max=Math.max(max,d.net||0,d.budget||0); }); var top=(max||1)*1.1, base=padT+plotH;
+  function Y(v){ return padT+plotH-(v/top*plotH); }
+  var gw=plotW/days.length, bw=Math.min(13,gw/2-2), every=Math.ceil(days.length/16);
+  var s=revSvgOpen(W,H)+revYAxis(top,padL,padT,plotH,W,padR);
+  days.forEach(function(d,idx){ var cx=padL+gw*idx+gw/2;
+    s+='<rect x="'+(cx-bw-1)+'" y="'+Y(d.net)+'" width="'+bw+'" height="'+(base-Y(d.net))+'" fill="'+(d.net>=d.budget?REV_CC.net:REV_CC.neg)+'" rx="1.5"/>';
+    s+='<rect x="'+(cx+1)+'" y="'+Y(d.budget)+'" width="'+bw+'" height="'+(base-Y(d.budget))+'" fill="'+REV_CC.budget+'" opacity="0.85" rx="1.5"/>';
+    if(idx%every===0||days.length<=16) s+='<text x="'+cx+'" y="'+(H-padB+14)+'" font-size="8.5" fill="'+REV_CC.txt+'" text-anchor="middle">'+d.d+'</text>';
+  });
+  return revChartBox('Daily net vs budget — '+revMonthLabel(p),s+'</svg>',revLg(REV_CC.net,'Net (actual)')+revLg(REV_CC.budget,'Budget')+revLg(REV_CC.neg,'Net below budget'));
+}
+// Cumulative net vs budget — two lines, "are we ahead?"
+function revChartCumulative(p){
+  var m=revMonthData(p); if(!m.windowDay) return revChartEmpty('Cumulative net vs budget — '+revMonthLabel(p),'No trading days entered yet.');
+  var rows=[],cn=0,cb=0; for(var d=1; d<=m.windowDay; d++){ var day=m.days[d-1]; cb+=day.budget; if(day.net!=null) cn+=day.net; rows.push({d:d,net:cn,bud:cb}); }
+  var W=Math.max(360,rows.length*14+60),H=230,padL=48,padR=14,padT=16,padB=28,plotW=W-padL-padR,plotH=H-padT-padB;
+  var max=0; rows.forEach(function(r){ max=Math.max(max,r.net,r.bud); }); var top=(max||1)*1.08;
+  function X(i){ return padL+(rows.length<=1?plotW/2:plotW*i/(rows.length-1)); }
+  function Y(v){ return padT+plotH-(v/top*plotH); }
+  var s=revSvgOpen(W,H)+revYAxis(top,padL,padT,plotH,W,padR);
+  s+='<polyline points="'+rows.map(function(r,i){return X(i)+','+Y(r.bud);}).join(' ')+'" fill="none" stroke="'+REV_CC.budget+'" stroke-width="2.5" stroke-dasharray="5 4"/>';
+  s+='<polyline points="'+rows.map(function(r,i){return X(i)+','+Y(r.net);}).join(' ')+'" fill="none" stroke="'+REV_CC.net+'" stroke-width="2.5"/>';
+  var last=rows[rows.length-1]; s+='<circle cx="'+X(rows.length-1)+'" cy="'+Y(last.net)+'" r="3.2" fill="'+REV_CC.net+'"/>';
+  [0,Math.floor((rows.length-1)/2),rows.length-1].forEach(function(i){ if(rows[i]) s+='<text x="'+X(i)+'" y="'+(H-padB+14)+'" font-size="9" fill="'+REV_CC.txt+'" text-anchor="middle">'+rows[i].d+'</text>'; });
+  return revChartBox('Cumulative net vs budget — '+revMonthLabel(p),s+'</svg>',revLg(REV_CC.net,'Net cumulative')+revLg(REV_CC.budget,'Budget cumulative'));
+}
+// Restaurant vs Lounge share — donut
+function revChartVenue(p){
+  var a=revAreaMTD(p); if(!a.totNet) return revChartEmpty('Revenue share — Restaurant vs Lounge','No venue split entered yet.');
+  var rF=a.restNet/a.totNet,lF=1-rF,r=54,cx=82,cy=82,sw=24,C=2*Math.PI*r;
+  var s=revSvgOpen(164,164);
+  s+='<g transform="rotate(-90 '+cx+' '+cy+')"><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+REV_CC.budget+'" stroke-width="'+sw+'"/><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+REV_CC.net+'" stroke-width="'+sw+'" stroke-dasharray="'+(rF*C)+' '+C+'"/></g>';
+  s+='<text x="'+cx+'" y="'+(cy-1)+'" font-size="21" font-weight="700" fill="'+REV_CC.ink+'" text-anchor="middle">'+Math.round(rF*100)+'%</text><text x="'+cx+'" y="'+(cy+14)+'" font-size="9" fill="'+REV_CC.txt+'" text-anchor="middle">Restaurant</text>';
+  return revChartBox('Revenue share — Restaurant vs Lounge',s+'</svg>',revLg(REV_CC.net,'Restaurant '+revMoney(a.restNet)+' ('+Math.round(rF*100)+'%)')+revLg(REV_CC.budget,'Scala Lounge '+revMoney(a.lounNet)+' ('+Math.round(lF*100)+'%)'));
+}
+// Avg net by weekday — this month vs last
+function revChartWeekday(p){
+  var rv=revReview(p), wks=rv.weekdays.filter(function(w){return w.cur>0||w.prev>0;});
+  if(!wks.length) return revChartEmpty('Avg net by weekday','No weekday data yet.');
+  var W=Math.max(360,wks.length*64+50),H=220,padL=46,padR=12,padT=16,padB=28,plotW=W-padL-padR,plotH=H-padT-padB;
+  var max=0; wks.forEach(function(w){ max=Math.max(max,w.cur,w.prev); }); var top=(max||1)*1.1, base=padT+plotH;
+  function Y(v){ return padT+plotH-(v/top*plotH); }
+  var gw=plotW/wks.length, bw=Math.min(18,gw/2-4);
+  var s=revSvgOpen(W,H)+revYAxis(top,padL,padT,plotH,W,padR);
+  wks.forEach(function(w,idx){ var cx=padL+gw*idx+gw/2;
+    s+='<rect x="'+(cx-bw-1)+'" y="'+Y(w.prev)+'" width="'+bw+'" height="'+(base-Y(w.prev))+'" fill="'+REV_CC.prev+'" rx="1.5"/>';
+    s+='<rect x="'+(cx+1)+'" y="'+Y(w.cur)+'" width="'+bw+'" height="'+(base-Y(w.cur))+'" fill="'+REV_CC.net+'" rx="1.5"/>';
+    s+='<text x="'+cx+'" y="'+(H-padB+14)+'" font-size="9" fill="'+REV_CC.txt+'" text-anchor="middle">'+w.wd.slice(0,3)+'</text>';
+  });
+  return revChartBox('Avg net by weekday',s+'</svg>',revLg(REV_CC.prev,revMonthLabel(rv.prevPeriod).split(' ')[0])+revLg(REV_CC.net,revMonthLabel(p).split(' ')[0]));
+}
+// Daypart revenue (MTD) — only meaningful once lunch/dinner split is entered
+function revChartDaypart(p){
+  var a=revAreaMTD(p), cats=[['Rest·Lunch',a.rlNet,REV_CC.net],['Rest·Dinner',a.rdNet,REV_CC.net],['Scala·Lunch',a.llNet,REV_CC.budget],['Scala·Dinner',a.ldNet,REV_CC.budget]];
+  if(!cats.some(function(c){return c[1]>0;})) return revChartEmpty('Daypart revenue (MTD)','No daypart split entered yet.');
+  var W=420,H=210,padL=48,padR=12,padT=14,padB=34,plotW=W-padL-padR,plotH=H-padT-padB;
+  var max=0; cats.forEach(function(c){max=Math.max(max,c[1]);}); var top=(max||1)*1.14, base=padT+plotH;
+  function Y(v){ return padT+plotH-(v/top*plotH); }
+  var gw=plotW/cats.length, bw=Math.min(46,gw-22);
+  var s=revSvgOpen(W,H)+revYAxis(top,padL,padT,plotH,W,padR);
+  cats.forEach(function(c,idx){ var cx=padL+gw*idx+gw/2;
+    s+='<rect x="'+(cx-bw/2)+'" y="'+Y(c[1])+'" width="'+bw+'" height="'+(base-Y(c[1]))+'" fill="'+c[2]+'" rx="2"/>';
+    s+='<text x="'+cx+'" y="'+(Y(c[1])-4)+'" font-size="8.5" fill="'+REV_CC.txt+'" text-anchor="middle">'+revK(c[1])+'</text>';
+    s+='<text x="'+cx+'" y="'+(H-padB+14)+'" font-size="8.5" fill="'+REV_CC.txt+'" text-anchor="middle">'+c[0]+'</text>';
+  });
+  return revChartBox('Daypart revenue (MTD)',s+'</svg>',revLg(REV_CC.net,'Restaurant')+revLg(REV_CC.budget,'Scala Lounge'));
+}
+// Dispatcher — used both by the on-page dashboard and by AI [[chart:name]] tokens.
+function revChartSvg(name){
+  var p=revInit().period;
+  switch(String(name)){
+    case 'net-vs-budget': return revChartNetBudget(p);
+    case 'mtd-cumulative': return revChartCumulative(p);
+    case 'venue-split': return revChartVenue(p);
+    case 'weekday': return revChartWeekday(p);
+    case 'daypart': return revChartDaypart(p);
+    default: return '';
+  }
+}
+function revToggleCharts(){ var R=revInit(); R.showCharts=(R.showCharts===false); renderMain(); }
+function revDashboard(p){
+  var R=revInit();
+  if(R.showCharts===false) return '<div class="rev-section-h">Dashboard<button class="rev-btn rev-btn-sm" onclick="revToggleCharts()">Show charts</button></div>';
+  var a=revAreaMTD(p), anyDP=(a.rlNet+a.rdNet+a.llNet+a.ldNet)>0;
+  var parts=[revChartNetBudget(p),revChartCumulative(p),revChartVenue(p),revChartWeekday(p)];
+  if(anyDP) parts.push(revChartDaypart(p));
+  return '<div class="rev-section-h">Dashboard<button class="rev-btn rev-btn-sm" onclick="revToggleCharts()">Hide</button><button class="rev-btn rev-btn-sm" onclick="revExportMonth()">&#128190; Export PDF</button></div><div class="rev-dash">'+parts.join('')+'</div>';
+}
+
+// ══════════════════════════════════════════════
+//  EXPORT — open a branded print window; the user picks "Save as PDF".
+//  SVG charts and HTML tables both render in the print window.
+// ══════════════════════════════════════════════
+function revPrintCss(){
+  return 'body{font-family:Inter,Arial,sans-serif;color:#2C1810;margin:0;padding:28px 32px;background:#fff}'
+    +'.rep-hd{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #6B1F2A;padding-bottom:12px;margin-bottom:18px}'
+    +'.rep-hd .b{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#6B1F2A;letter-spacing:.5px}'
+    +'.rep-hd .s{font-size:12px;color:#8B7355}.rep-hd .t{text-align:right;font-size:13px;color:#5C3D2E}'
+    +'h2{font-size:16px;color:#6B1F2A;margin:18px 0 10px}'
+    +'.rep-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}'
+    +'.rep-kpi{border:1px solid rgba(107,31,42,.15);border-radius:8px;padding:10px 12px}'
+    +'.rep-k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#8B7355}.rep-v{font-size:18px;font-weight:700;margin:3px 0}.rep-s{font-size:11px;color:#5C3D2E}'
+    +'.rep-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}'
+    +'.rev-chart{border:1px solid rgba(107,31,42,.15);border-radius:8px;padding:10px 12px}'
+    +'.rev-chart-t{font-weight:600;font-size:12px;color:#5C3D2E;margin-bottom:6px}.rev-chart-svg{width:100%;height:auto;display:block}'
+    +'.rev-chart-lg{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:#8B7355}'
+    +'.rev-lg{display:inline-flex;align-items:center;gap:4px}.rev-lg i{width:10px;height:10px;border-radius:2px;display:inline-block}'
+    +'.rev-chart-empty{padding:20px;text-align:center;color:#8B7355;font-size:11px}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0 14px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(107,31,42,.1)}th{color:#8B7355;font-size:10px;text-transform:uppercase;letter-spacing:.4px}'
+    +'.rev-md-h{font-weight:700;color:#6B1F2A;margin:12px 0 6px;font-size:14px}.rev-md-ul{margin:6px 0 6px 18px}.rev-md-p{margin:4px 0;font-size:13px;line-height:1.5}.rev-md-tbl td,.rev-md-tbl th{font-size:12px}'
+    +'.rev-chart-embed{max-width:460px;margin:10px 0}.rev-scen-card{border:1px solid rgba(107,31,42,.15);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px}'
+    +'@media print{.rep-charts{grid-template-columns:1fr 1fr}}';
+}
+function revPrintReport(title,bodyHTML){
+  var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site to export to PDF.'); return; }
+  var base=location.origin+location.pathname.replace(/[^/]*$/,'');
+  var when=new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var hd='<div class="rep-hd"><div><img src="'+base+'robertos-logo-burgundy.svg" style="height:34px" onerror="this.style.display=\'none\'"><div class="b">ROBERTO\'S DIFC</div><div class="s">Revenue report</div></div><div class="t">'+title+'<br><span class="s">Generated '+when+'</span></div></div>';
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+title+'</title><style>'+revPrintCss()+'</style></head><body>'+hd+bodyHTML+'</body></html>');
+  w.document.close(); setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} },350);
+}
+function revExportMonth(){
+  var p=revInit().period, m=revMonthData(p), rv=revReview(p), a=revAreaMTD(p);
+  var toB=m.budgetToDate?Math.round(m.mtdNet/m.budgetToDate*100):0;
+  function kpi(k,v,s){ return '<div class="rep-kpi"><div class="rep-k">'+k+'</div><div class="rep-v">'+v+'</div><div class="rep-s">'+s+'</div></div>'; }
+  var kpis='<div class="rep-kpis">'+kpi('MTD net sales',revMoney(m.mtdNet),m.tradingDays+' trading days')+kpi('Budget to date',revMoney(m.budgetToDate),toB+'% achieved')+kpi('Full-month forecast',revMoney(rv.forecast),revPct(rv.vsBudgetPct)+' vs budget')+kpi('Avg spend / cover',revMoney(rv.spendCover.cur),revPct(rv.spendCover.chg)+' vs last month')+'</div>';
+  var anyDP=(a.rlNet+a.rdNet+a.llNet+a.ldNet)>0;
+  var charts='<div class="rep-charts">'+revChartNetBudget(p)+revChartCumulative(p)+revChartVenue(p)+revChartWeekday(p)+(anyDP?revChartDaypart(p):'')+'</div>';
+  var rPct=a.totNet?Math.round(a.restNet/a.totNet*100):0;
+  var areaTbl='<h2>By area (MTD)</h2><table><thead><tr><th>Area</th><th>Revenue</th><th>Share</th><th>Covers</th><th>Avg/cover</th></tr></thead><tbody>'
+    +'<tr><td>Restaurant</td><td>'+revMoney(a.restNet)+'</td><td>'+rPct+'%</td><td>'+a.restCov+'</td><td>'+(a.restCov?revMoney(a.restNet/a.restCov).replace('AED ',''):'—')+'</td></tr>'
+    +'<tr><td>Scala Lounge &amp; Bar</td><td>'+revMoney(a.lounNet)+'</td><td>'+(100-rPct)+'%</td><td>'+a.lounCov+'</td><td>'+(a.lounCov?revMoney(a.lounNet/a.lounCov).replace('AED ',''):'—')+'</td></tr>'
+    +'<tr><td><b>Total</b></td><td><b>'+revMoney(a.totNet)+'</b></td><td>100%</td><td>'+a.totCov+'</td><td>'+(a.totCov?revMoney(a.totNet/a.totCov).replace('AED ',''):'—')+'</td></tr></tbody></table>';
+  var proj='<h2>Full-month projection</h2><table><tbody><tr><td>Actual MTD</td><td>'+revMoney(rv.mtd)+'</td></tr><tr><td>Projected ('+rv.remaining+' remaining days)</td><td>'+revMoney(rv.projected)+'</td></tr><tr><td><b>Forecast — full month</b></td><td><b>'+revMoney(rv.forecast)+'</b></td></tr><tr><td>vs Budget ('+revMoney(rv.budgetTotal)+')</td><td>'+revMoney(rv.vsBudget)+' · '+revPct(rv.vsBudgetPct)+'</td></tr></tbody></table>';
+  revPrintReport(revMonthLabel(p),'<h2>'+revMonthLabel(p)+' — overview</h2>'+kpis+charts+areaTbl+proj);
+}
+function revChatLastAssistant(){ var c=revChatInit(); for(var i=c.thread.length-1;i>=0;i--){ if(c.thread[i].role==='assistant') return c.thread[i]; } return null; }
+function revChatExport(){
+  var last=revChatLastAssistant();
+  if(!last){ alert('Ask the analyst something first, then export.'); return; }
+  revPrintReport('Revenue analysis — '+revMonthLabel(revInit().period),(last.cards||'')+'<div>'+revMd(last.text)+'</div>');
+}
+function revChatCopy(){
+  var last=revChatLastAssistant();
+  if(!last){ alert('Ask the analyst something first.'); return; }
+  var t=last.text||'';
+  function ok(){ var b=document.getElementById('rev-chat-copy'); if(b){ var o=b.textContent; b.textContent='Copied'; setTimeout(function(){b.textContent=o;},1400); } }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(ok,function(){ alert('Copy failed — select the text manually.'); }); }
+  else { var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');ok();}catch(e){} document.body.removeChild(ta); }
 }
 
 // CLOSING REPORT module (cl* functions) extracted to foh-closing.js — loaded via <script> after this one.
@@ -545,6 +717,8 @@ function revRenderMonth(){
   h.push('<div class="rev-card"><div class="rev-k">Full-month forecast</div><div class="rev-v">'+revMoney(rv.forecast)+'</div><div class="rev-sub '+revPctClass(rv.vsBudgetPct)+'">'+revPct(rv.vsBudgetPct)+' vs budget</div></div>');
   h.push('<div class="rev-card"><div class="rev-k">Avg spend / cover</div><div class="rev-v">'+revMoney(rv.spendCover.cur)+'</div><div class="rev-sub '+revPctClass(rv.spendCover.chg)+'">'+revPct(rv.spendCover.chg)+' vs '+revMonthLabel(rv.prevPeriod).split(' ')[0]+'</div></div>');
   h.push('</div>');
+  // visual dashboard (charts) — collapsible
+  h.push(revDashboard(p));
   // by area (MTD) — Restaurant vs Scala, with % share
   var area=revAreaMTD(p);
   var rPct=area.totNet?Math.round(area.restNet/area.totNet*100):0, lPct=area.totNet?(100-rPct):0;
