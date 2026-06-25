@@ -252,6 +252,13 @@ async function clSave(andEmail){
     alert('Please add covers for: '+missingCovers.join(', ')+'.\n\nRevenue without covers makes the average-spend numbers wrong on the Revenue dashboard.');
     return;
   }
+  // Block blank emails: don't fire a closing-report email to the team when the
+  // snapshot has no real content (mirrors the kitchen blank-submit guard).
+  if(andEmail){
+    var anyShiftNote=['day','night','late'].some(function(k){ return (shifts[k].feedback||'').trim() || (shifts[k].challenges||'').trim(); });
+    var hasAny = net!=null || clVal('cl-mgr-am') || clVal('cl-mgr-pm') || good.length || bad.length || comps.length || clVal('cl-events') || clVal('cl-support') || anyShiftNote;
+    if(!hasAny){ alert('Nothing to email — this closing report is empty.\n\nAdd revenue, a manager, or notes before using Save & Email.'); return; }
+  }
   var btns=[document.getElementById('cl-save'),document.getElementById('cl-save-email')];
   function setBusy(t){ btns.forEach(function(b){ if(b){ b.disabled=!!t; } }); var se=document.getElementById('cl-save-email'); if(se) se.textContent=t?(andEmail?'Saving & emailing…':'Saving…'):'Save & Email'; }
   setBusy(true);
