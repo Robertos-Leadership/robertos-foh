@@ -5018,7 +5018,62 @@ window.__schedEditing = function(){
 // FOH staff list (super-user passcodes allowed, same as stock-take), return
 // {emp_id,name} or null. Mirrors the kitchen resetIdentity() gate.
 const FOH_SEND_SUPER = { '1212': 'Admin', '0000': 'Cost Controller' };
+// TAP-YOUR-NAME picker — show the staff as tappable names instead of typing a
+// code. Managers/head waiters float to the top; search filters; a "manager code"
+// link keeps the super-user passcodes (1212/0000) + typed-id fallback working.
+// Resolves to {emp_id,name} (emp_id may be null for code-less staff) or null.
+function fohPickPerson(actionLabel){
+  return new Promise(function(resolve){
+    var done=false;
+    function onKey(e){ if(e.key==='Escape') finish(null); }
+    function finish(v){ if(done) return; done=true; var o=document.getElementById('fpk-ovl'); if(o) o.remove(); document.removeEventListener('keydown',onKey); resolve(v); }
+    var ov=document.createElement('div'); ov.id='fpk-ovl';
+    ov.setAttribute('style','position:fixed;inset:0;z-index:100050;background:rgba(40,2,7,.5);display:flex;align-items:flex-start;justify-content:center;padding:22px 14px;overflow:auto;');
+    ov.onclick=function(e){ if(e.target===ov) finish(null); };
+    ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:18px 18px 16px;box-shadow:0 14px 50px rgba(40,2,7,.3);">'
+      +'<div style="font-family:Georgia,serif;color:#6B1F2A;font-size:19px;">Who’s doing this?</div>'
+      +'<div style="font-size:12.5px;color:#8a7a62;margin:2px 0 12px;">Tap your name to '+admEsc(actionLabel)+'. It’s recorded.</div>'
+      +'<input id="fpk-search" placeholder="Search your name…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d8cbb6;border-radius:9px;font-size:15px;margin-bottom:12px;">'
+      +'<div id="fpk-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;max-height:46vh;overflow:auto;"><div style="color:#9c8a72;font-size:13px;padding:8px;">Loading…</div></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;">'
+      +'<button id="fpk-code" style="font-size:12.5px;color:#6B1F2A;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;">Use a manager code instead</button>'
+      +'<button id="fpk-cancel" class="btn btn-sm">Cancel</button></div></div>';
+    document.body.appendChild(ov);
+    document.addEventListener('keydown',onKey);
+    document.getElementById('fpk-cancel').onclick=function(){ finish(null); };
+    document.getElementById('fpk-code').onclick=function(){
+      var id=(prompt('Enter your manager / super-user code.')||'').trim(); if(!id) return;
+      if(FOH_SEND_SUPER[id]){ finish({emp_id:id,name:FOH_SEND_SUPER[id]}); return; }
+      sb.from('foh_staff').select('name,emp_id').eq('emp_id',id).eq('active',true).limit(1).then(function(r){
+        var s=r.data&&r.data[0]; if(s) finish({emp_id:id,name:s.name}); else alert('Code "'+id+'" was not found.');
+      });
+    };
+    function rankSec(sec){ var s=(sec||'').toLowerCase(); if(s.indexOf('manage')!==-1) return 0; if(s.indexOf('head')!==-1) return 1; return 2; }
+    function initials(n){ var p=(n||'').trim().split(/\s+/); return (((p[0]||'')[0]||'')+((p[1]||'')[0]||'')).toUpperCase(); }
+    sb.from('foh_staff').select('name,emp_id,role,section').eq('active',true).then(function(r){
+      var people=(r.error?[]:(r.data||[])).slice().sort(function(a,b){ return rankSec(a.section)-rankSec(b.section) || (a.name||'').localeCompare(b.name||''); });
+      var search=document.getElementById('fpk-search');
+      function render(q){
+        q=(q||'').trim().toLowerCase();
+        var html=people.filter(function(p){ return !q || (p.name||'').toLowerCase().indexOf(q)!==-1 || String(p.emp_id||'').indexOf(q)!==-1 || (p.role||'').toLowerCase().indexOf(q)!==-1; })
+          .map(function(p){ var idx=people.indexOf(p);
+            return '<button class="fpk-name" data-i="'+idx+'" style="display:flex;align-items:center;gap:9px;text-align:left;padding:9px 10px;border:1px solid #e4dccd;border-radius:9px;background:#fff;cursor:pointer;">'
+              +'<span style="width:32px;height:32px;border-radius:50%;background:#eadfcd;color:#6b4a2e;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex:none;">'+admEsc(initials(p.name))+'</span>'
+              +'<span style="min-width:0;"><span style="display:block;font-size:14px;font-weight:600;color:#2c1810;">'+admEsc(p.name||'')+'</span><span style="display:block;font-size:11.5px;color:#8a7a62;">'+admEsc(p.role||'')+'</span></span></button>';
+          }).join('');
+        var list=document.getElementById('fpk-list'); if(!list) return;
+        list.innerHTML = html || '<div style="color:#9c8a72;font-size:13px;padding:8px;">No match.</div>';
+        var btns=list.querySelectorAll('.fpk-name');
+        for(var j=0;j<btns.length;j++){ btns[j].onclick=function(){ var pp=people[+this.getAttribute('data-i')]; finish({emp_id: pp.emp_id?String(pp.emp_id):null, name: pp.name}); }; }
+      }
+      render('');
+      if(search){ search.oninput=function(){ render(search.value); }; setTimeout(function(){ try{ search.focus(); }catch(e){} },30); }
+    });
+  });
+}
 async function fohRequireStaffId(actionLabel){
+  if(typeof fohPickPerson==='function') return await fohPickPerson(actionLabel);
+  // Fallback: typed Employee ID (kept in case the picker fails to load).
   var id = (prompt('Enter your Employee ID to '+actionLabel+'.\n\nThis is recorded.')||'').trim();
   if(!id) return null;
   if(FOH_SEND_SUPER[id]) return { emp_id:id, name:FOH_SEND_SUPER[id] };
