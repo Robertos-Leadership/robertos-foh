@@ -39,9 +39,18 @@ Deno.serve(async (req) => {
     const html = body.html;
     if (!html) return json({ error: "No html provided" }, 400);
 
+    // Optional explicit recipient(s) — e.g. a one-off test send to a single person.
+    // When present, these win and we skip the app_users lookup entirely, so a test
+    // never reaches the whole team.
+    const overrideTo: string[] = Array.isArray(body.to)
+      ? body.to.filter((x: unknown): x is string => typeof x === "string" && x.includes("@"))
+      : [];
+
     // Recipients = everyone ticked for the closing-report email in app_users.
     let to: string[] = FALLBACK_TO;
-    try {
+    if (overrideTo.length) {
+      to = overrideTo;
+    } else try {
       const supa = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
