@@ -2098,7 +2098,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-06-25.3-dev</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-06-25.4-dev</div>
   </div>
 
   <!-- main scroll area -->
@@ -2562,8 +2562,8 @@ function loadAdminUsers(){
   // Read-only — nothing is written or moved; the two apps keep working as-is.
   Promise.all([
     sb.from('app_users').select('*').order('name'),
-    sb.from('foh_staff').select('id,name,emp_id,role,section,active,sort_order').eq('active',true),
-    sbKitchen.from('staff').select('id,name,emp_id,designation,station_key,active,sort_order').eq('active',true),
+    sb.from('foh_staff').select('*').eq('active',true),
+    sbKitchen.from('staff').select('*').eq('active',true),
     sb.from('app_config').select('value').eq('key','signers').limit(1)
   ]).then(function(res){
     state.adminUsers   = res[0].error ? [] : (res[0].data||[]);
@@ -2620,7 +2620,7 @@ async function adminDeleteUser(email){
 }
 function adminRefresh(){ state.adminLoaded=false; loadAdminUsers(); }
 function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
-var ADM_CSS='.adm-wrap{max-width:760px;margin:0 auto;padding:18px 16px 90px;}'
+var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.adm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;}'
   +'.adm-head h2{font-family:Georgia,serif;color:#400207;margin:0;font-size:22px;}'
   +'.adm-note{font-size:13px;color:#6b5a44;line-height:1.5;margin:6px 0 14px;}'
@@ -2711,7 +2711,8 @@ var ADM_CSS='.adm-wrap{max-width:760px;margin:0 auto;padding:18px 16px 90px;}'
   +'.px-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#400207;color:#fff;padding:10px 18px;border-radius:11px;font-size:13px;z-index:100002;box-shadow:0 8px 30px rgba(40,2,7,.35);}'
   /* responsive control centre: cards on phone (A) → list+detail on wide (B) */
   +'.px2-flex{display:flex;gap:16px;align-items:flex-start;}'
-  +'.px2-list{width:252px;flex:none;border:0.5px solid #e8ddc9;border-radius:12px;overflow:hidden;max-height:72vh;overflow-y:auto;}'
+  +'.px2-list{width:300px;flex:none;border:0.5px solid #e8ddc9;border-radius:12px;overflow:hidden;max-height:74vh;overflow-y:auto;}'
+  +'.px2-grp{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9c8a72;padding:8px 12px 4px;background:#fbf7f0;border-bottom:0.5px solid #f3ecdd;}'
   +'.px2-detailwrap{flex:1;min-width:0;}'
   +'.px2-row{width:100%;text-align:left;display:flex;align-items:center;gap:9px;padding:10px 11px;background:#fff;border:none;border-bottom:0.5px solid #f3ecdd;cursor:pointer;}'
   +'.px2-row:hover{background:#faf6ee;}'
@@ -2731,6 +2732,7 @@ var ADM_CSS='.adm-wrap{max-width:760px;margin:0 auto;padding:18px 16px 90px;}'
   +'.px-rb .px-badge{margin-left:0;}'
   +'.px-sig{background:#C9A84C;color:#400207;}'
   +'.px-nc{background:#fbe9e6;color:#b3402f;}'
+  +'.px-off{background:#eee7d8;color:#7a6a52;}'
   +'.px-venue{font-size:10.5px;color:#7a6a52;background:#f0e8da;padding:2px 8px;border-radius:9px;white-space:nowrap;}'
   +'.px-back{background:none;border:none;color:#6B1F2A;font-size:14px;cursor:pointer;padding:6px 0;margin-bottom:6px;}'
   +'.px-dempty{color:#9c8a72;font-size:13px;padding:30px 14px;text-align:center;border:0.5px dashed #e0d4bf;border-radius:12px;}'
@@ -2763,9 +2765,9 @@ function admBuildPeople(){
   function match(nm){ var s=admNorm(nm); if(!s) return null; if(byName[s]) return byName[s]; for(var k in byName){ if(k.indexOf(s+' ')===0) return byName[k]; } return null; }
   var out=[];
   (state.adminKitchen||[]).forEach(function(p){ var lg=match(p.name); if(lg) matched[lg.email]=true;
-    out.push({src:'kitchen',id:p.id,name:p.name||'',emp_id:p.emp_id?String(p.emp_id):'',role:p.designation||'',section:p.station_key||'',where:'Kitchen',login:lg}); });
+    out.push({src:'kitchen',id:p.id,name:p.name||'',emp_id:p.emp_id?String(p.emp_id):'',role:p.designation||'',section:p.station_key||'',where:'Kitchen',login:lg,in_schedule:p.in_schedule!==false}); });
   (state.adminFoh||[]).forEach(function(p){ var lg=match(p.name); if(lg) matched[lg.email]=true;
-    out.push({src:'foh',id:p.id,name:p.name||'',emp_id:p.emp_id?String(p.emp_id):'',role:p.role||'',section:p.section||'',where:'FOH',login:lg}); });
+    out.push({src:'foh',id:p.id,name:p.name||'',emp_id:p.emp_id?String(p.emp_id):'',role:p.role||'',section:p.section||'',where:'FOH',login:lg,in_schedule:p.in_schedule!==false}); });
   users.filter(function(u){ return !matched[u.email]; }).forEach(function(u){
     out.push({src:'office',id:u.email,name:u.name||u.email,emp_id:'',role:'',section:'',where:'Office',email:u.email,login:u}); });
   return out;
@@ -2862,6 +2864,7 @@ function admBadges(p){ var b='';
   if(p.login) b+= p.login.is_admin?'<span class="px-badge px-admin">admin</span>':'<span class="px-badge px-login">login</span>';
   if(admSignsAny(p)) b+='<span class="px-badge px-sig">signs</span>';
   if(!p.emp_id && p.src!=='office') b+='<span class="px-badge px-nc">no code</span>';
+  if(p.src==='foh' && p.in_schedule===false) b+='<span class="px-badge px-off">off roster</span>';
   return b;
 }
 function admPeopleFiltered(){
@@ -2889,7 +2892,8 @@ function admControlCentre(){
   var count='<div class="ppl-listhead"><span id="ppl-count">'+list.length+' shown</span></div>';
   if(wide){
     var pick=admResolvePick(list);
-    var rows=list.map(function(p){ return admListRow(p,pick); }).join('') || '<div class="px-dempty" style="border:none;">No people found.</div>';
+    var lastW='';
+    var rows=list.map(function(p){ var h=''; if(p.where!==lastW){ lastW=p.where; h='<div class="px2-grp">'+admEsc(p.where)+'</div>'; } return h+admListRow(p,pick); }).join('') || '<div class="px-dempty" style="border:none;">No people found.</div>';
     var detail=pick?admDetailFull(admByKey(pick)):'<div class="px-dempty">Select a person on the left.</div>';
     return '<div class="adm-wrap">'+admBarHTML()
       +'<div class="px2-flex"><div class="px2-list" id="px-people">'+rows+'</div><div class="px2-detailwrap">'+detail+'</div></div>'
@@ -2930,6 +2934,14 @@ function admDetailFull(p){
     ? '<div class="px-fld"><label>Email</label><div class="ro">'+admEsc(p.email||'')+'</div></div>'
     : '<div class="px-fld"><label>Role</label><input value="'+admEsc(p.role||'')+'" onchange="admPanelSave(\''+ek+'\',\'role\',this)"></div>';
   var venueFld='<div class="px-fld"><label>Where</label><div class="ro">'+admEsc(p.where)+'</div></div>';
+  var sectionFld=off?'':'<div class="px-fld"><label>'+(p.src==='foh'?'Section':'Station')+'</label><div class="ro">'+admEsc(p.section||'—')+'</div></div>';
+  var schedSec='';
+  if(p.src==='foh'){
+    var inSch=p.in_schedule!==false;
+    schedSec='<div class="px-psec"><div class="px-pslbl">Weekly schedule (roster)</div>'
+      +'<button class="px-pill'+(inSch?' on':'')+'" onclick="admScheduleToggle(\''+ek+'\')">'+(inSch?'✓ Shows in the schedule':'Hidden from the schedule')+'</button>'
+      +'<div class="px-dhint" style="margin-top:6px;">Turn off for people who shouldn’t appear on the weekly roster (office, freelance, on leave) — they stay in this list and keep their records.</div></div>';
+  }
   var loginSec='';
   if(p.login){
     var email=p.login.email, ee=admEsc(email);
@@ -2948,8 +2960,13 @@ function admDetailFull(p){
   }
   var removeSec=off?'':'<div class="px-psec"><button class="px-prm" onclick="admRemove(\''+p.src+'\',\''+admEsc(String(p.id))+'\')">Remove from '+(p.src==='kitchen'?'Kitchen':'FOH')+' staff</button></div>';
   return '<div class="px-panel"><div class="px-phead"><span class="px-av lg">'+admEsc(admIni(p.name))+'</span><div style="min-width:0;"><div class="px-pname">'+admEsc(p.name)+'</div><div class="px-prole">'+admEsc(p.role||(off?'Office / HQ':''))+' · '+admEsc(p.where)+'</div><div class="px-rb">'+admBadges(p)+'</div></div></div>'
-    +'<div class="px-flds">'+nameFld+codeFld+roleFld+venueFld+'</div>'
-    +loginSec+signSec+removeSec+'</div>';
+    +'<div class="px-flds">'+nameFld+codeFld+roleFld+venueFld+sectionFld+'</div>'
+    +schedSec+loginSec+signSec+removeSec+'</div>';
+}
+function admScheduleToggle(key){
+  var p=admByKey(key); if(!p||p.src==='office') return;
+  var cur=p.in_schedule!==false;
+  admWrite(p,'in_schedule',!cur).then(function(ok){ if(!ok) return; renderMain(); admAfterRender(function(){ try{admApplyFilter();}catch(e){} }); admToast(cur?'Hidden from schedule':'Now shows in schedule'); });
 }
 function admPick(key){ state.adminPick=key; renderMain(); admAfterRender(function(){ try{admApplyFilter();}catch(e){} }); }
 function admBack(){ state.adminPick=null; renderMain(); admAfterRender(function(){ try{admApplyFilter();}catch(e){} }); }
@@ -3152,11 +3169,19 @@ function admWrite(p,col,val){
     return adminSave({email:u.email,name:val,modules:u.modules,is_admin:u.is_admin,notify:u.notify||[]}).then(function(ok){ if(ok) u.name=val; return ok; });
   }
   var client=p.src==='foh'?sb:sbKitchen, table=p.src==='foh'?'foh_staff':'staff', payload={};
-  if(col==='name') payload.name=val; else if(col==='code') payload.emp_id=val||null; else if(col==='role') payload[p.src==='foh'?'role':'designation']=val;
+  if(col==='name') payload.name=val;
+  else if(col==='code') payload.emp_id=val||null;
+  else if(col==='role') payload[p.src==='foh'?'role':'designation']=val;
+  else if(col==='in_schedule') payload.in_schedule=(val===true||val==='true');
   return client.from(table).update(payload).eq('id',p.id).then(function(res){
-    if(res.error){ alert('Could not save: '+res.error.message); return false; }
+    if(res.error){
+      if(col==='in_schedule' && /in_schedule/.test(res.error.message||''))
+        alert('To use “show in schedule”, run this once in Supabase (FOH project):\n\nalter table foh_staff add column if not exists in_schedule boolean not null default true;\nnotify pgrst,\'reload schema\';');
+      else alert('Could not save: '+res.error.message);
+      return false;
+    }
     var rec=admStaffRec(p.src,p.id);
-    if(rec){ if(col==='name') rec.name=val; else if(col==='code') rec.emp_id=val||null; else if(col==='role'){ if(p.src==='foh') rec.role=val; else rec.designation=val; } }
+    if(rec){ if(col==='name') rec.name=val; else if(col==='code') rec.emp_id=val||null; else if(col==='role'){ if(p.src==='foh') rec.role=val; else rec.designation=val; } else if(col==='in_schedule') rec.in_schedule=payload.in_schedule; }
     return true;
   });
 }
@@ -5593,7 +5618,7 @@ async function fohLoadSchedData(){
     sb.from('foh_roster').select('*').gte('work_date', weekFrom).lte('work_date', weekEnd).limit(5000),
     sb.from('foh_events').select('*').gte('event_date', weekFrom).lte('event_date', weekEnd).limit(2000)
   ]);
-  fohSchedStaff = res[0].data || [];
+  fohSchedStaff = (res[0].data || []).filter(function(s){ return s.in_schedule!==false; });   // Admin "show in schedule" toggle (foh_staff.in_schedule); null/absent = shown
   fohSchedRoster = {};
   (res[1].data || []).forEach(function(r){
     fohSchedRoster[fohSchedRosterKey(r.staff_id, String(r.work_date).slice(0,10))] = r;
