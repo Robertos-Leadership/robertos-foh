@@ -2019,6 +2019,7 @@ if ('serviceWorker' in navigator) {
   .sch-shift.off{background:#7f1d1d;color:#fff;border:1px solid #7f1d1d;font-weight:700;letter-spacing:1px}
   .sch-shift.wo{background:#1d4ed8;color:#fff;border:1px solid #1d4ed8;font-weight:700;letter-spacing:1px}
   .sch-shift.sl{background:#d97706;color:#fff;border:1px solid #d97706;font-weight:700;letter-spacing:1px}
+  .sch-shift.ul{background:#475569;color:#fff;border:1px solid #475569;font-weight:700;letter-spacing:1px}
   .sch-shift.al{background:#047857;color:#fff;border:1px solid #047857;font-weight:700;letter-spacing:1px}
   .sch-shift.ph{background:#6d28d9;color:#fff;border:1px solid #6d28d9;font-weight:700;letter-spacing:1px}
   .sch-shift.em{background:#dc2626;color:#fff;border:1px solid #dc2626;font-weight:700;letter-spacing:1px}
@@ -5308,6 +5309,7 @@ const FOH_STATUS_META = {
   off:     { label: 'OFF', bg: 'off' },
   wo:      { label: 'WO',  bg: 'wo' },
   sl:      { label: 'SL',  bg: 'sl' },
+  ul:      { label: 'UL',  bg: 'ul' },
   al:      { label: 'AL',  bg: 'al' },
   ph:      { label: 'PH',  bg: 'ph' },
   em:      { label: 'EM',  bg: 'em' },
@@ -5318,7 +5320,7 @@ const FOH_STATUS_META = {
 // Status colours for PRINT — mirror the on-screen .sch-shift.<bg> backgrounds (print
 // can't read the CSS classes). Keep in sync with the .sch-shift.* rules in the stylesheet.
 const FOH_STATUS_PRINT_COLOR = {
-  off:'#7f1d1d', wo:'#1d4ed8', sl:'#d97706', al:'#047857',
+  off:'#7f1d1d', wo:'#1d4ed8', sl:'#d97706', ul:'#475569', al:'#047857',
   ph:'#6d28d9', em:'#dc2626', tr:'#0f766e', cat:'#c2410c',
 };
 
@@ -7033,6 +7035,7 @@ async function chkShowHistory(){
         <option value="off">Day Off</option>
         <option value="wo">Week Off (WO)</option>
         <option value="sl">Sick Leave (SL)</option>
+        <option value="ul">Unpaid Leave (UL)</option>
         <option value="al">Annual Leave (AL)</option>
         <option value="ph">Public Holiday (PH)</option>
         <option value="em">Emergency (EM)</option>
