@@ -29,7 +29,10 @@ var STOCK_EMAIL_CC = ['amohamed@robertos.ae','mpetrosino@robertos.ae','jballout@
 // employee/roster record (so the holder never appears on the FOH schedule). Used
 // by Francesco + shared with the cost controller as an admin code. Beta: security
 // deferred, so this lives client-side. Counts are attributed to this label.
-var STOCK_SUPER = { '1212': 'Stock Take Admin', '0000': 'Cost Controller' };
+var STOCK_SUPER = { '1212': 'Stock Take Admin', '0000': 'Cost Controller', '2468': 'Stock Take Supervisor' };
+// Destructive actions (Clear all counts, Upload/replace the month's list) are
+// limited to these admin codes so a regular counter can't wipe a live count.
+function stIsSuper(){ return !!(stUser && STOCK_SUPER[stUser.emp_id]); }
 
 // Previous-month reference (the grey "Last month: …" line + last-month closing
 // total) is BUILT but hidden for now. Flip to true to switch it back on — planned
@@ -219,14 +222,23 @@ function stSignOut(){ stUser = null; stRender(); }
 async function stSetQty(itemId, value){
   if(!stUser) return;
   var prev = stCounts[itemId] ? Object.assign({}, stCounts[itemId]) : null;
-  var qty = value === '' ? null : Number(value);
   var it = stItems.find(function(x){ return x.id===itemId; });
   var unit = it ? stItemUnit(it) : null;
+  // normalise: trim + accept a decimal comma ("4,5" -> "4.5"). Only a BLANK box
+  // clears the count; garbage (letters, "4,5,6", negatives) is rejected WITHOUT
+  // touching the saved number — never silently delete a real count.
+  var raw = (value==null?'':String(value)).trim().replace(',', '.');
   var res;
-  if(qty===null || isNaN(qty) || qty < 0){
+  if(raw === ''){
     delete stCounts[itemId];
     res = await sb.from('stock_take_counts').delete().eq('item_id', itemId);
   } else {
+    var qty = Number(raw);
+    if(isNaN(qty) || qty < 0){
+      toast('"'+value+'" is not a valid number — count left unchanged.', true);
+      stUpdateRowUI(itemId);   // put the saved value back in the box
+      return res || {};
+    }
     stCounts[itemId] = { qty:qty, unit:unit, counted_by:stUser.emp_id, counted_by_name:stUser.name };
     var row = { item_id:itemId, venue_id:STOCK_VENUE, dept:stDept, month:stMonth,
                 qty:qty, unit:unit, counted_by:stUser.emp_id, counted_by_name:stUser.name,
@@ -250,8 +262,9 @@ async function stSetQty(itemId, value){
 async function stAddQty(itemId, value){
   if(!stUser) return;
   var addBox = document.getElementById('st-add-'+itemId);
-  var delta = Number(value);
-  if(value==='' || isNaN(delta) || delta===0){ if(addBox) addBox.value=''; return; }
+  var raw = (value==null?'':String(value)).trim().replace(',', '.');   // accept "2,5"
+  var delta = Number(raw);
+  if(raw==='' || isNaN(delta) || delta===0){ if(addBox) addBox.value=''; return; }
   var it = stItems.find(function(x){ return x.id===itemId; });
   var unit = it ? stItemUnit(it) : null;
   var prev = stCounts[itemId] ? Object.assign({}, stCounts[itemId]) : null;
@@ -367,9 +380,11 @@ function stRender(){
       '<div class="st-title">'+stEsc(stDeptLabel())+' Stock Take</div>'+
       '<div class="st-sub">No month loaded yet</div>'+
       stGateHtml()+
-      (stUser
+      (stIsSuper()
         ? '<div style="padding:14px"><button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload this month\'s list (.xls)</button></div>'
-        : '<div class="st-nodata">Enter your employee ID, then upload this month\'s list from the cost controller.</div>');
+        : stUser
+          ? '<div class="st-nodata">No list for this month yet — ask the cost controller or an admin (code 1212 / 0000 / 2468) to upload it.</div>'
+          : '<div class="st-nodata">Enter your employee ID, then ask an admin to upload this month\'s list.</div>');
     return;
   }
   var monLabel = new Date(stMonth+'-01T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
@@ -391,7 +406,7 @@ function stRender(){
       '<input class="st-input" id="st-search" placeholder="Search items…" value="'+stEsc(stSearch)+'" oninput="stOnSearch(this.value)" style="flex:1;min-width:140px">'+
       '<select class="st-select" id="st-cat" onchange="stOnCat(this.value)">'+cats+'</select>'+
       '<label class="st-onlycount"><input type="checkbox" id="st-onlycount" '+(stOnlyCounted?'checked':'')+' onchange="stToggleOnlyCounted(this.checked)"> Counted only</label>'+
-      (stUser?'<button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload month</button>':'')+
+      (stIsSuper()?'<button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload month</button>':'')+
     '</div>'+
     '<div class="st-catbar"><span id="st-catlabel">'+(stCatFilter?stEsc(stCatFilter):'All categories')+'</span>'+
       '<span class="st-muted">category total <b id="st-catsub">'+stMoney(stCategoryTotal())+'</b></span></div>'+
@@ -399,8 +414,10 @@ function stRender(){
         '<button class="st-btn" onclick="stReviewSend()">Email to Aung</button>'+
         '<button class="st-btn" onclick="stExportExcel()">Download Excel</button>'+
         '<button class="st-btn" onclick="stPrint()">Print</button>'+
-        '<button class="st-btn danger" onclick="stClearAllCounts()">Clear all counts</button>'+
+        (stIsSuper()?'<button class="st-btn danger" onclick="stClearAllCounts()">Clear all counts</button>':'')+
       '</div>' : '')+
+    (stUser && stVoiceSupported() ? '<button class="st-btn" style="margin:8px 14px 0;width:calc(100% - 28px);background:#410207;color:#f5ede0;height:46px;font-size:15px;flex:none" onclick="stVoiceStart()">🎤 Count by voice</button>' : '')+
+    (stUser?'<div style="padding:4px 14px 0;font-size:12px;color:#8a7a55;line-height:1.4">Type the <b>total</b> you counted in the white box. Use the green <b>+ add</b> box to add onto a count someone already started (e.g. a second person or the store-room).'+(stVoiceSupported()?' Or tap <b>🎤 Count by voice</b> and say the item and how many.':'')+'</div>':'')+
     '<div id="st-rows"></div>'+
     '<button class="st-addbtn" onclick="stShowAdd()">+ Add missing item</button>';
 
@@ -492,6 +509,7 @@ async function stSetDept(dept){
 // wipe EVERY quantity entered for this dept+month (all counters) — confirmed first
 async function stClearAllCounts(){
   if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  if(!stIsSuper()){ toast('Only an admin code (1212 / 0000 / 2468) can clear all counts.', true); return; }
   if(!stCountedCount()){ toast('Nothing counted yet.'); return; }
   if(!confirm('Clear ALL counts for '+stDeptLabel()+' — '+stMonth+'?\n\nThis erases every quantity entered this month — by everyone — and cannot be undone. The item list stays.')) return;
   var res=await sb.from('stock_take_counts').delete().eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',stMonth);
@@ -678,6 +696,7 @@ function stGuessMonth(rows){
 }
 function stShowUpload(){
   if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  if(!stIsSuper()){ toast('Only an admin code (1212 / 0000 / 2468) can upload/replace the month\'s list.', true); return; }
   var old=document.getElementById('st-up-modal'); if(old) old.remove();
   var box=document.createElement('div');
   box.id='st-up-modal'; box.className='st-modal';
@@ -788,6 +807,158 @@ async function stOpen(){
   stSubscribe();
   stLoading = false;
   stRender();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// VOICE COUNT (hands-free) — say "item + quantity", e.g. "Grey Goose four".
+// ANDROID-ONLY: uses the Web Speech API (webkitSpeechRecognition), which Apple
+// does NOT support in web apps — so the 🎤 button only renders where it works
+// (feature-detected in stRender). iPhone users keep the keyboard mic.
+// SAFETY: it NEVER saves on its own — it always shows a confirm card where the
+// person checks/edits the item + quantity first (a mishear can't silently log to
+// the wrong item). The quantity ADDS to the running count via the atomic +add.
+// ══════════════════════════════════════════════════════════════════════════
+function stVoiceSupported(){ return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window); }
+
+var ST_ONES={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+var ST_TENS={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+var ST_UNITS={bottles:1,bottle:1,btl:1,each:1,kg:1,kilo:1,kilos:1,piece:1,pieces:1,pcs:1,pc:1,unit:1,units:1,case:1,cases:1,box:1,boxes:1,can:1,cans:1,gram:1,grams:1,litre:1,litres:1,liter:1,liters:1,ltr:1,glass:1,glasses:1};
+function stIsNumWord(t){ return (t in ST_ONES) || (t in ST_TENS) || t==='point' || /^\d+(\.\d+)?$/.test(t); }
+function stIntWords(tokens){
+  if(!tokens.length) return null;
+  if(tokens.length===1 && /^\d+$/.test(tokens[0])) return parseInt(tokens[0],10);
+  var total=0, any=false;
+  for(var k=0;k<tokens.length;k++){ var w=tokens[k];
+    if(w in ST_TENS){ total+=ST_TENS[w]; any=true; }
+    else if(w in ST_ONES){ total+=ST_ONES[w]; any=true; }
+    else if(/^\d+$/.test(w)){ total+=parseInt(w,10); any=true; }
+    else if(w==='a'||w==='an'){ /* skip filler */ }
+    else return null;
+  }
+  return any?total:null;
+}
+function stPhraseToNumber(tokens){
+  if(!tokens || !tokens.length) return null;
+  var pIdx=tokens.indexOf('point');
+  if(pIdx>=0){
+    var iv=stIntWords(tokens.slice(0,pIdx));
+    var dec=tokens.slice(pIdx+1).map(function(x){ return (x in ST_ONES)?ST_ONES[x]:(/^\d$/.test(x)?+x:null); });
+    if(dec.some(function(x){return x===null;})) return null;
+    return (iv||0) + (dec.length?parseFloat('0.'+dec.join('')):0);
+  }
+  if(tokens.length===1 && /^\d+(\.\d+)?$/.test(tokens[0])) return parseFloat(tokens[0]);
+  return stIntWords(tokens);
+}
+// pull a quantity + an item-name out of a spoken phrase (handles either order)
+function stVoiceExtract(transcript){
+  var s=(transcript||'').toLowerCase();
+  s=s.replace(/\band a half\b/g,' point five').replace(/\band a quarter\b/g,' point two five').replace(/\band three quarters\b/g,' point seven five').replace(/\bhalf\b/g,' point five');
+  s=s.replace(/[,]/g,' ');
+  var toks=s.split(/\s+/).filter(Boolean).filter(function(t){ return !ST_UNITS[t]; });
+  var qty=null, name='';
+  // trailing number run
+  var st=toks.length; while(st>0 && stIsNumWord(toks[st-1])) st--;
+  var run=toks.slice(st);
+  if(run.length){
+    var hasPoint=run.indexOf('point')>=0 || run.some(function(x){return /\d\.\d/.test(x);});
+    var tensOnes=run.length===2 && (run[0] in ST_TENS) && (run[1] in ST_ONES);
+    if(run.length===1 || hasPoint || tensOnes){ qty=stPhraseToNumber(run); name=toks.slice(0,st).join(' '); }
+    else { qty=stPhraseToNumber([run[run.length-1]]); name=toks.slice(0,toks.length-1).join(' '); }  // protect names with numbers (e.g. "Macallan 12")
+  } else {
+    // maybe number-first ("four grey goose")
+    var ls=0; while(ls<toks.length && stIsNumWord(toks[ls])) ls++;
+    if(ls>0 && ls<toks.length){ qty=stPhraseToNumber(toks.slice(0,ls)); name=toks.slice(ls).join(' '); }
+    else name=toks.join(' ');
+  }
+  return { qty:qty, name:name.trim() };
+}
+// normalise an item name for matching (drop the trailing " -code", punctuation)
+function stVoiceNorm(s){ return String(s||'').toLowerCase().replace(/\s+-\s*\w+\s*$/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+// best item candidates for a spoken name (top 4), within the current dept's list
+function stVoiceMatch(query){
+  var q=stVoiceNorm(query); if(!q) return [];
+  var qt=q.split(' ').filter(function(t){ return t.length>1; }); if(!qt.length) qt=[q];
+  var scored=[];
+  stItems.forEach(function(it){
+    var n=stVoiceNorm(it.name); if(!n) return;
+    var hit=0; qt.forEach(function(t){ if(n.indexOf(t)>=0) hit++; });
+    var score=hit/qt.length;
+    if(n.indexOf(q)>=0) score+=0.5;
+    if(n.split(' ')[0]===qt[0]) score+=0.15;
+    if(score>=0.5) scored.push({it:it,score:score});
+  });
+  scored.sort(function(a,b){ return b.score-a.score; });
+  return scored.slice(0,4).map(function(x){ return x.it; });
+}
+
+var stRec=null;
+var stVoiceCands=[];
+function stVoiceStart(){
+  if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast('Voice needs Android Chrome. On iPhone, tap a box and use the keyboard mic.', true); return; }
+  var old=document.getElementById('st-voice-modal'); if(old) old.remove();
+  try{ if(stRec) stRec.abort(); }catch(e){}
+  stVoiceShowListening();
+  stRec=new SR(); stRec.lang='en-GB'; stRec.interimResults=false; stRec.maxAlternatives=1;
+  stRec.onresult=function(e){ var t=((e.results[0]&&e.results[0][0]&&e.results[0][0].transcript)||'').trim(); stVoiceHandle(t); };
+  stRec.onerror=function(e){ stVoiceCloseListening();
+    if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('Allow microphone access to use voice.', true);
+    else if(e.error==='no-speech') toast('Didn\'t catch that — tap 🎤 and try again.', true);
+    else toast('Voice error: '+e.error, true); };
+  stRec.onend=function(){ stVoiceCloseListening(); };
+  try{ stRec.start(); }catch(err){ stVoiceCloseListening(); toast('Could not start voice — try again.', true); }
+}
+function stVoiceCancel(){ try{ if(stRec) stRec.abort(); }catch(e){} stVoiceCloseListening(); }
+function stVoiceShowListening(){
+  var old=document.getElementById('st-listen-modal'); if(old) old.remove();
+  var b=document.createElement('div'); b.id='st-listen-modal'; b.className='st-modal';
+  b.innerHTML='<div class="st-modal-box" style="text-align:center" onclick="event.stopPropagation()">'+
+    '<div style="font-size:42px;line-height:1">🎤</div>'+
+    '<div style="font-weight:700;color:#410207;margin:8px 0 4px">Listening…</div>'+
+    '<div style="font-size:12px;color:#8a7a55;margin-bottom:14px">Say the item and how many<br>e.g. "Grey Goose four"</div>'+
+    '<button class="st-btn" style="flex:none" onclick="stVoiceCancel()">Cancel</button></div>';
+  document.body.appendChild(b);
+}
+function stVoiceCloseListening(){ var m=document.getElementById('st-listen-modal'); if(m) m.remove(); }
+function stVoiceHandle(transcript){
+  stVoiceCloseListening();
+  var ex=stVoiceExtract(transcript);
+  stVoiceCands=stVoiceMatch(ex.name);
+  stVoiceShowConfirm(transcript, ex.qty, stVoiceCands);
+}
+// the CONFIRM card — nothing saves until the person taps Add here
+function stVoiceShowConfirm(heard, qty, cands){
+  var old=document.getElementById('st-voice-modal'); if(old) old.remove();
+  var opts = cands.length
+    ? cands.map(function(it,i){ var c=stCounts[it.id]; var now=(c&&c.qty!=null)?(' — now '+c.qty):''; return '<option value="'+i+'">'+stEsc(it.name)+now+'</option>'; }).join('')
+    : '<option value="-1">No match — close and search by hand</option>';
+  var qv = (qty==null||isNaN(qty)) ? '' : qty;
+  var b=document.createElement('div'); b.id='st-voice-modal'; b.className='st-modal';
+  b.innerHTML='<div class="st-modal-box" onclick="event.stopPropagation()">'+
+    '<div style="font-weight:700;color:#410207;margin-bottom:4px">Check before saving</div>'+
+    '<div style="font-size:12px;color:#8a7a55;margin-bottom:12px">Heard: "'+stEsc(heard)+'"</div>'+
+    '<label style="font-size:12px;color:#8a7a55">Item</label>'+
+    '<select id="st-voice-item" class="st-select" style="width:100%;height:40px;margin:4px 0 12px">'+opts+'</select>'+
+    '<label style="font-size:12px;color:#8a7a55">Add this many</label>'+
+    '<input id="st-voice-qty" class="st-input" inputmode="decimal" value="'+qv+'" placeholder="how many" style="width:100%;height:40px;margin:4px 0 14px">'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'+
+      '<button class="st-btn" style="flex:none" onclick="document.getElementById(\'st-voice-modal\').remove()">Cancel</button>'+
+      '<button class="st-btn" style="flex:none" onclick="stVoiceStart()">🎤 Try again</button>'+
+      '<button class="st-btn" style="flex:none;background:#410207;color:#f5ede0" onclick="stVoiceAdd()">Add</button>'+
+    '</div></div>';
+  document.body.appendChild(b);
+}
+function stVoiceAdd(){
+  var sel=document.getElementById('st-voice-item'); if(!sel) return;
+  var i=parseInt(sel.value,10);
+  if(isNaN(i) || i<0 || !stVoiceCands[i]){ toast('No item picked — close and search by hand.', true); return; }
+  var qty=parseFloat(((document.getElementById('st-voice-qty').value||'').trim()).replace(',', '.'));
+  if(isNaN(qty) || qty<=0){ toast('Enter how many to add.', true); return; }
+  var it=stVoiceCands[i];
+  var m=document.getElementById('st-voice-modal'); if(m) m.remove();
+  stAddQty(it.id, qty);                 // atomic +add path (server sums, realtime fans out)
+  toast('✓ Added '+qty+' to '+it.name);
 }
 
 // ── FOH tab integration ──────────────────────────────────────────────────
