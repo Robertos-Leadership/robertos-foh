@@ -448,7 +448,12 @@ function stRender(){
           ? '<button class="st-btn" onclick="stUnlockMonth()">🔓 Unlock this month</button>'
           : '<button class="st-btn" onclick="stLockMonth()">🔒 Lock this month</button>') : '')+
       '</div>' : '')+
-    (stUser && !stIsLocked() ?'<div style="padding:4px 14px 0;font-size:12px;color:#8a7a55;line-height:1.4">Type the <b>total</b> you counted in the white box. Use the green <b>+ add</b> box to add onto a count someone already started (e.g. a second person or the store-room).</div>':'')+
+    (stUser && !stIsLocked() && stVoiceSupported() ? '<div style="display:flex;gap:8px;margin:8px 14px 0">'+
+        '<button class="st-btn" style="flex:1;background:#410207;color:#f5ede0;height:46px;font-size:15px" onclick="stVoiceStart()">🎤 Count by voice</button>'+
+        '<select class="st-select" style="flex:none;height:46px" title="Voice language — set it to the section you are counting" onchange="stVoiceLang=this.value">'+
+          ['en-GB','fr-FR','it-IT'].map(function(L){ var lbl={'en-GB':'EN','fr-FR':'FR','it-IT':'IT'}[L]; return '<option value="'+L+'"'+(stVoiceLang===L?' selected':'')+'>'+lbl+'</option>'; }).join('')+
+        '</select></div>' : '')+
+    (stUser && !stIsLocked() ?'<div style="padding:4px 14px 0;font-size:12px;color:#8a7a55;line-height:1.4">Type the <b>total</b> you counted in the white box. Use the green <b>+ add</b> box to add onto a count someone already started (e.g. a second person or the store-room).'+(stVoiceSupported()?' Or tap <b>🎤 Count by voice</b> and say the item and how many.':'')+'</div>':'')+
     '<div id="st-rows"></div>'+
     '<button class="st-addbtn" onclick="stShowAdd()">+ Add missing item</button>';
 
@@ -868,6 +873,205 @@ async function stOpen(){
   stSubscribe();
   stLoading = false;
   stRender();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// VOICE COUNT (hands-free) — say "item + quantity", e.g. "Grey Goose four".
+// ANDROID-ONLY: uses the Web Speech API (webkitSpeechRecognition), which Apple
+// does NOT support in web apps — so the 🎤 button only renders where it works
+// (feature-detected in stRender). iPhone users keep the keyboard mic.
+// SAFETY: it NEVER saves on its own — it always shows a confirm card where the
+// person checks/edits the item + quantity first (a mishear can't silently log to
+// the wrong item). The quantity ADDS to the running count via the atomic +add.
+// ══════════════════════════════════════════════════════════════════════════
+function stVoiceSupported(){ return ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window); }
+
+var ST_ONES={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+var ST_TENS={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+var ST_UNITS={bottles:1,bottle:1,btl:1,each:1,kg:1,kilo:1,kilos:1,piece:1,pieces:1,pcs:1,pc:1,unit:1,units:1,case:1,cases:1,box:1,boxes:1,can:1,cans:1,gram:1,grams:1,litre:1,litres:1,liter:1,liters:1,ltr:1,glass:1,glasses:1};
+function stIsNumWord(t){ return (t in ST_ONES) || (t in ST_TENS) || t==='point' || /^\d+(\.\d+)?$/.test(t); }
+function stIntWords(tokens){
+  if(!tokens.length) return null;
+  if(tokens.length===1 && /^\d+$/.test(tokens[0])) return parseInt(tokens[0],10);
+  var total=0, any=false;
+  for(var k=0;k<tokens.length;k++){ var w=tokens[k];
+    if(w in ST_TENS){ total+=ST_TENS[w]; any=true; }
+    else if(w in ST_ONES){ total+=ST_ONES[w]; any=true; }
+    else if(/^\d+$/.test(w)){ total+=parseInt(w,10); any=true; }
+    else if(w==='a'||w==='an'){ /* skip filler */ }
+    else return null;
+  }
+  return any?total:null;
+}
+function stPhraseToNumber(tokens){
+  if(!tokens || !tokens.length) return null;
+  var pIdx=tokens.indexOf('point');
+  if(pIdx>=0){
+    var iv=stIntWords(tokens.slice(0,pIdx));
+    var dec=tokens.slice(pIdx+1).map(function(x){ return (x in ST_ONES)?ST_ONES[x]:(/^\d$/.test(x)?+x:null); });
+    if(dec.some(function(x){return x===null;})) return null;
+    return (iv||0) + (dec.length?parseFloat('0.'+dec.join('')):0);
+  }
+  if(tokens.length===1 && /^\d+(\.\d+)?$/.test(tokens[0])) return parseFloat(tokens[0]);
+  return stIntWords(tokens);
+}
+// pull a quantity + an item-name out of a spoken phrase (handles either order)
+function stVoiceExtract(transcript){
+  var s=(transcript||'').toLowerCase();
+  s=s.replace(/\band a half\b/g,' point five').replace(/\band a quarter\b/g,' point two five').replace(/\band three quarters\b/g,' point seven five').replace(/\bhalf\b/g,' point five');
+  s=s.replace(/[,]/g,' ');
+  var toks=s.split(/\s+/).filter(Boolean).filter(function(t){ return !ST_UNITS[t]; });
+  var qty=null, name='';
+  // trailing number run
+  var st=toks.length; while(st>0 && stIsNumWord(toks[st-1])) st--;
+  var run=toks.slice(st);
+  if(run.length){
+    var hasPoint=run.indexOf('point')>=0 || run.some(function(x){return /\d\.\d/.test(x);});
+    var tensOnes=run.length===2 && (run[0] in ST_TENS) && (run[1] in ST_ONES);
+    if(run.length===1 || hasPoint || tensOnes){ qty=stPhraseToNumber(run); name=toks.slice(0,st).join(' '); }
+    else { qty=stPhraseToNumber([run[run.length-1]]); name=toks.slice(0,toks.length-1).join(' '); }  // protect names with numbers (e.g. "Macallan 12")
+  } else {
+    // maybe number-first ("four grey goose")
+    var ls=0; while(ls<toks.length && stIsNumWord(toks[ls])) ls++;
+    if(ls>0 && ls<toks.length){ qty=stPhraseToNumber(toks.slice(0,ls)); name=toks.slice(ls).join(' '); }
+    else name=toks.join(' ');
+  }
+  return { qty:qty, name:name.trim() };
+}
+// normalise an item name for matching (drop the trailing " -code", punctuation)
+// normalise + DROP ACCENTS so a French/Italian name spoken in English still
+// matches: château->chateau, gewürztraminer->gewurztraminer, espadón->espadon.
+function stVoiceNorm(s){
+  s=String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return s.replace(/\s+-\s*\w+\s*$/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+// tiny edit-distance (capped) so a near-mishear still matches (montalchino~montalcino)
+function stLev(a,b){ var m=a.length,n=b.length; if(Math.abs(m-n)>3) return 9; var d=[],i,j; for(i=0;i<=m;i++)d[i]=[i]; for(j=0;j<=n;j++)d[0][j]=j; for(i=1;i<=m;i++)for(j=1;j<=n;j++){ var c=a.charAt(i-1)===b.charAt(j-1)?0:1; d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);} return d[m][n]; }
+// loose phonetic key so a sound-alike transcription still matches:
+// "sassicaia" and "sasi kaya" both reduce to "sasikaia".
+function stPhon(s){
+  s=stVoiceNorm(s).replace(/[0-9]/g,'').replace(/\s+/g,'');
+  s=s.replace(/ck/g,'k').replace(/q/g,'k').replace(/c/g,'k').replace(/x/g,'ks').replace(/ph/g,'f').replace(/z/g,'s').replace(/y/g,'i').replace(/h/g,'');
+  return s.replace(/(.)\1+/g,'$1');
+}
+function stTokenHit(qt, nts, n){
+  if(n.indexOf(qt)>=0) return true;                                        // substring
+  var pq=stPhon(qt);
+  for(var i=0;i<nts.length;i++){ var w=nts[i];
+    if(w.length>=4 && qt.length>=4 && (w.indexOf(qt)===0||qt.indexOf(w)===0)) return true;   // prefix either way
+    if(qt.length>=4 && stLev(qt,w)<=Math.max(1,Math.floor(qt.length/4))) return true;        // close mishear
+    if(pq.length>=3){ var pw=stPhon(w);                                                       // sound-alike
+      if(pw.length>=3 && (pw.indexOf(pq)>=0 || pq.indexOf(pw)===0 || stLev(pq,pw)<=1)) return true; }
+  }
+  return false;
+}
+// best item candidates for a spoken name, within the current dept's list
+function stVoiceMatch(query){
+  var q=stVoiceNorm(query); if(!q) return [];
+  var qt=q.split(' ').filter(function(t){ return t.length>1; }); if(!qt.length) qt=[q];
+  var scored=[];
+  stItems.forEach(function(it){
+    var n=stVoiceNorm(it.name); if(!n) return; var nts=n.split(' ');
+    var hit=0; qt.forEach(function(t){ if(stTokenHit(t,nts,n)) hit++; });
+    var score=hit/qt.length;
+    if(n.indexOf(q)>=0) score+=0.5;
+    if(nts[0]===qt[0]) score+=0.15;
+    if(score>=0.5) scored.push({it:it,score:score});
+  });
+  scored.sort(function(a,b){ return b.score-a.score; });
+  return scored.slice(0,30).map(function(x){ return x.it; });   // show ALL matches (e.g. every "juice"), not just the top few
+}
+
+var stRec=null, stVFinal='', stVInterim='', stVDone=false, stVoiceMode='full', stVoiceLang='en-GB';
+var stVoiceCands=[];
+// mode 'full' = item + quantity in one go; mode 'qty' = just the number, into the
+// already-open confirm card (so you can say the product first, then the quantity).
+function stVoiceStart(mode){
+  if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  if(stIsLocked()){ toast('This month is locked — counts can no longer be changed.', true); return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast('Voice needs Android Chrome. On iPhone, tap a box and use the keyboard mic.', true); return; }
+  stVoiceMode = (mode==='qty') ? 'qty' : 'full';
+  if(stVoiceMode!=='qty'){ var old=document.getElementById('st-voice-modal'); if(old) old.remove(); }  // qty mode keeps the confirm card open
+  try{ if(stRec) stRec.abort(); }catch(e){}
+  stVFinal=''; stVInterim=''; stVDone=false;
+  stVoiceShowListening(stVoiceMode);
+  // continuous + interim: don't rush the speaker; show live text; act only on Done
+  stRec=new SR(); stRec.lang=stVoiceLang; stRec.continuous=true; stRec.interimResults=true; stRec.maxAlternatives=1;
+  stRec.onresult=function(e){
+    stVFinal=''; stVInterim='';
+    for(var i=0;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) stVFinal+=r[0].transcript+' '; else stVInterim+=r[0].transcript; }
+    var el=document.getElementById('st-listen-text'); if(el) el.textContent=(stVFinal+stVInterim).trim()||'…';
+  };
+  stRec.onerror=function(e){ if(e.error==='aborted') return; stVDone=true; stVoiceCloseListening();
+    if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('Allow microphone access to use voice.', true);
+    else if(e.error==='no-speech') toast('Didn\'t catch anything — tap 🎤 and try again.', true);
+    else toast('Voice error: '+e.error, true); };
+  stRec.onend=function(){ if(stVDone) return; stVDone=true; stVoiceCloseListening(); var t=(stVFinal+' '+stVInterim).trim(); if(t) stVoiceRoute(t); };
+  try{ stRec.start(); }catch(err){ stVoiceCloseListening(); toast('Could not start voice — try again.', true); }
+}
+function stVoiceStop(){ if(stVDone) return; stVDone=true; var t=(stVFinal+' '+stVInterim).trim(); try{ if(stRec) stRec.stop(); }catch(e){} stVoiceCloseListening(); if(t) stVoiceRoute(t); else toast('Didn\'t catch anything — tap 🎤 and try again.', true); }
+function stVoiceRoute(t){ if(stVoiceMode==='qty') stVoiceFillQty(t); else stVoiceHandle(t); }
+function stVoiceFillQty(transcript){
+  var ex=stVoiceExtract(transcript); var q=ex.qty;
+  if(q==null){ var n=parseFloat(String(transcript).replace(/[^0-9.]/g,'')); if(!isNaN(n)) q=n; }
+  if(q==null || isNaN(q)){ toast('Didn\'t catch a number — say just the quantity, e.g. "twenty four".', true); return; }
+  var box=document.getElementById('st-voice-qty'); if(box) box.value=q;
+}
+function stVoiceCancel(){ stVDone=true; try{ if(stRec) stRec.abort(); }catch(e){} stVoiceCloseListening(); }
+function stVoiceShowListening(mode){
+  var old=document.getElementById('st-listen-modal'); if(old) old.remove();
+  var sub = (mode==='qty') ? 'Say just the quantity, e.g. "twenty four", then tap <b>Done</b>.' : 'Say the item and how many, then tap <b>Done</b>.';
+  var b=document.createElement('div'); b.id='st-listen-modal'; b.className='st-modal';
+  b.innerHTML='<div class="st-modal-box" style="text-align:center" onclick="event.stopPropagation()">'+
+    '<div style="font-size:42px;line-height:1">🎤</div>'+
+    '<div style="font-weight:700;color:#410207;margin:8px 0 4px">Listening… take your time</div>'+
+    '<div style="font-size:12px;color:#8a7a55;margin-bottom:8px">'+sub+'</div>'+
+    '<div id="st-listen-text" style="min-height:22px;font-size:15px;color:#2a1a10;background:#f7f1e6;border-radius:8px;padding:8px;margin-bottom:12px">…</div>'+
+    '<div style="display:flex;gap:8px;justify-content:center"><button class="st-btn" style="flex:none" onclick="stVoiceCancel()">Cancel</button>'+
+    '<button class="st-btn" style="flex:none;background:#410207;color:#f5ede0" onclick="stVoiceStop()">Done</button></div></div>';
+  document.body.appendChild(b);
+}
+function stVoiceCloseListening(){ var m=document.getElementById('st-listen-modal'); if(m) m.remove(); }
+function stVoiceHandle(transcript){
+  stVoiceCloseListening();
+  var ex=stVoiceExtract(transcript);
+  stVoiceCands=stVoiceMatch(ex.name);
+  stVoiceShowConfirm(transcript, ex.qty, stVoiceCands);
+}
+// the CONFIRM card — nothing saves until the person taps Add here
+function stVoiceShowConfirm(heard, qty, cands){
+  var old=document.getElementById('st-voice-modal'); if(old) old.remove();
+  var opts = cands.length
+    ? cands.map(function(it,i){ var c=stCounts[it.id]; var now=(c&&c.qty!=null)?(' — now '+c.qty):''; return '<option value="'+i+'">'+stEsc(it.name)+now+'</option>'; }).join('')
+    : '<option value="-1">No match — close and search by hand</option>';
+  var qv = (qty==null||isNaN(qty)) ? '' : qty;
+  var b=document.createElement('div'); b.id='st-voice-modal'; b.className='st-modal';
+  b.innerHTML='<div class="st-modal-box" onclick="event.stopPropagation()">'+
+    '<div style="font-weight:700;color:#410207;margin-bottom:4px">Check before saving</div>'+
+    '<div style="font-size:12px;color:#8a7a55;margin-bottom:12px">Heard: "'+stEsc(heard)+'"</div>'+
+    '<label style="font-size:12px;color:#8a7a55">Item'+(cands.length>1?' — '+cands.length+' matches, pick the right one':'')+'</label>'+
+    '<select id="st-voice-item" class="st-select" style="width:100%;height:40px;margin:4px 0 12px">'+opts+'</select>'+
+    '<label style="font-size:12px;color:#8a7a55">Add this many</label>'+
+    '<div style="display:flex;gap:8px;margin:4px 0 14px"><input id="st-voice-qty" class="st-input" inputmode="decimal" value="'+qv+'" placeholder="how many" style="flex:1;height:40px">'+
+      '<button class="st-btn" style="flex:none" onclick="stVoiceStart(\'qty\')">🎤 Say number</button></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'+
+      '<button class="st-btn" style="flex:none" onclick="document.getElementById(\'st-voice-modal\').remove()">Cancel</button>'+
+      '<button class="st-btn" style="flex:none" onclick="stVoiceStart()">🎤 Try again</button>'+
+      '<button class="st-btn" style="flex:none;background:#410207;color:#f5ede0" onclick="stVoiceAdd()">Add</button>'+
+    '</div></div>';
+  document.body.appendChild(b);
+}
+function stVoiceAdd(){
+  var sel=document.getElementById('st-voice-item'); if(!sel) return;
+  var i=parseInt(sel.value,10);
+  if(isNaN(i) || i<0 || !stVoiceCands[i]){ toast('No item picked — close and search by hand.', true); return; }
+  var qty=parseFloat(((document.getElementById('st-voice-qty').value||'').trim()).replace(',', '.'));
+  if(isNaN(qty) || qty<=0){ toast('Enter how many to add.', true); return; }
+  var it=stVoiceCands[i];
+  var m=document.getElementById('st-voice-modal'); if(m) m.remove();
+  stAddQty(it.id, qty);                 // atomic +add path (server sums, realtime fans out)
+  toast('✓ Added '+qty+' to '+it.name);
 }
 
 // ── FOH tab integration ──────────────────────────────────────────────────

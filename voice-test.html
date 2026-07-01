@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Stock Take — Voice Test (sandbox)</title>
+<style>
+  :root{--vino:#410207;--cream:#f5ede0;--gold:#c9a84c;--sabbia:#e8ddc9;--muted:#8a7a55;}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#faf6ef;color:#2a1a10}
+  .wrap{max-width:680px;margin:0 auto;padding:16px 16px 80px}
+  .banner{background:#fff7e6;border:1px solid #f0d9a0;color:#7a5a00;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:14px;line-height:1.45}
+  h1{font-family:Georgia,serif;color:var(--vino);font-size:22px;margin:6px 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:14px}
+  .mic{width:100%;height:56px;border:none;border-radius:12px;background:var(--vino);color:var(--cream);font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px}
+  .mic:active{opacity:.9}
+  .typerow{display:flex;gap:8px;margin-bottom:8px}
+  .typerow input{flex:1;height:44px;border:1px solid var(--gold);border-radius:10px;padding:0 12px;font-size:15px}
+  .typerow button{height:44px;border:1px solid var(--gold);background:#fff;color:var(--vino);border-radius:10px;padding:0 14px;font-weight:600;cursor:pointer}
+  .hint{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+  .hint b{color:var(--vino)}
+  .counted{margin-top:8px;border-top:1px solid var(--sabbia);padding-top:10px}
+  .counted h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 8px}
+  .crow{display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px solid #eee5d4;font-size:14px}
+  .crow b{color:var(--vino)}
+  .empty{color:var(--muted);font-size:13px;font-style:italic}
+  .clearbtn{margin-top:10px;height:38px;border:1px solid #d98a8a;color:#7a1218;background:#fff;border-radius:9px;padding:0 14px;font-weight:600;cursor:pointer}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px}
+  .box{background:#fff;border-radius:14px;padding:18px;width:100%;max-width:380px}
+  .box h3{margin:0 0 4px;color:var(--vino)}
+  .box .heard{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .box label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  .box select,.box input{width:100%;height:42px;border:1px solid var(--gold);border-radius:10px;padding:0 10px;font-size:15px;margin-bottom:12px}
+  .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .row button{height:42px;border-radius:10px;padding:0 16px;font-weight:600;cursor:pointer;border:1px solid var(--gold);background:#fff;color:var(--vino)}
+  .row .add{background:var(--vino);color:var(--cream);border-color:var(--vino)}
+  .listening{text-align:center}
+  .listening .big{font-size:46px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">🧪 <b>TEST SANDBOX.</b> This page uses the <b>full beverage list (884 items)</b> and saves only on this screen — it is <b>not connected to any database</b>. Press Add as much as you like; nothing reaches the real stock take. Voice works in <b>Chrome</b> (laptop or Android). On iPhone the mic button won't appear — type a phrase instead.</div>
+
+  <h1>Voice count — try it</h1>
+  <div class="sub">Say or type the item and how many, e.g. "Grey Goose four".</div>
+
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <button class="mic" id="micBtn" style="flex:1;margin-bottom:0">🎤 Count by voice</button>
+    <select id="langSel" title="Voice language — set it to the section you're counting" style="flex:none;height:56px;border:1px solid var(--gold);border-radius:12px;padding:0 10px;font-size:15px;background:#fff;color:var(--vino);font-weight:600">
+      <option value="en-GB">EN</option><option value="fr-FR">FR</option><option value="it-IT">IT</option>
+    </select>
+  </div>
+
+  <div class="typerow">
+    <input id="typed" placeholder='or type: "macallan twelve three"' inputmode="text">
+    <button id="typedGo">Test</button>
+  </div>
+  <div class="hint">Try: <b>"grey goose four"</b> · <b>"hennessy two"</b> · <b>"bombay sapphire six"</b> · <b>"macallan twelve three"</b> · <b>"corona twenty four"</b> · <b>"juice orange four point five"</b></div>
+
+  <div class="counted">
+    <h2>Counted on this test page</h2>
+    <div id="countedList"><div class="empty">Nothing yet — try the mic or type a phrase.</div></div>
+    <button class="clearbtn" id="clearBtn" style="display:none">Clear test list</button>
+  </div>
+</div>
+
+<script>
+// ── sample item list (real names, sample only) ────────────────────────────
+var TEST_NAMES = [
+"Amaro Lucano 70Cl -99830001",
+"Aperol 70Cl -108206",
+"Branca Menta 70Cl -15284",
+"Campari 1Ltr -0613",
+"Campari Cask 1Ltr -28298",
+"Carpano Antica Formula 1Ltr -99210001",
+"Cinzano Rosso 1Ltr -0602",
+"Cynar 1Ltr -108216",
+"Dolin Vermouth Rouge 75Cl -99210007",
+"Fernet Branca 75Cl -172112",
+"Frangelico 75Cl -9630",
+"Jagermeister 70Cl -91310002",
+"Lillet Blanc 75Cl -13049",
+"Lillet Rose 75Cl -19699",
+"Mancino Bianco 75Cl -91090282",
+"Mancino Rosso Vermouth 75Cl -91090283",
+"Mancino Secco 75Cl -91090281",
+"Martini Bianco Vermouth 1Ltr -14443",
+"Martini Extra Dry Vermouth 1Ltr -14445",
+"Martini Fiero 75Cl -30122",
+"Martini Rosato 1Ltr -14413",
+"Martini Rosso 1Ltr -14444",
+"Moscato Frontera W-W 75Cl -14844",
+"P31 Aperitivo Green 70Cl -30175",
+"Pernod 1Ltr -1705",
+"Ricard 1Ltr -1706",
+"Rinomato 1Ltr -91090286",
+"Skinos Mastiha 1Ltr -13537",
+"The Bitter Truth Grapefruit 200ml -99250004",
+"RB Amafi Lemon Campari (PA)",
+"RB Apple Elderflower Cordial (PA)",
+"RB Aria Di Cafe (PA)",
+"RB Artemisia Tincture (PA)",
+"RB Basil Olive Oil Essence (PA)",
+"RB Bergamont Cordial (PA)",
+"RB Bergamount Aromatic Spray (PA)",
+"RB Blood Orange Cordial (PA)",
+"RB Brera Crepusculo (PA)",
+"RB Cask Rested Vermouth (PA)",
+"RB Coffee Fat Washed Rum (PA)",
+"RB Fico Amaro (PA)",
+"RB Foamer (PA)",
+"RB Garden Soda (PA)",
+"RB Garden Syrup (PA)",
+"RB Grapefruit Cordial (PA)",
+"RB Kiwi Syrup (PA)",
+"RB Limoncello (PA)",
+"RB Margarita (PA)",
+"RB Mi To Mo (PA)",
+"RB Negroni Regular (PA)",
+"RB Old Fashion Base (PA)",
+"RB Ottagono (PA)",
+"RB Robertini (PA)",
+"RB Rosemary Grape Cordial (PA)",
+"RB Saline Solution (PA)",
+"RB Sugar Syrup (PA)",
+"RF Comp Cookies Each (PA)",
+"Birra Moretti Beer (24x33 Cl) -9835",
+"Corona Beer Bot (24x35.5Cl) -90170039",
+"Heineken Beer Bot (24x33Cl) -6768-11",
+"Peroni Beer Bot (24x33Cl) -90060009",
+"Peroni Keg 30Ltr -90060011",
+"Savanna Cider Bottles (24x33Cl) -11789",
+"Thatchers Gold Beer Bottle (6X50Cl) -42832",
+"Armagnac Castarede VSOP 10 Year 70Cl -E037910",
+"Hennessy Paradi Imperial 70Cl -13693",
+"Hennessy Paradis 70Cl -82316D",
+"Hennessy VS 70Cl -0125",
+"Hennessy VSOP 70Cl -7637",
+"Hennessy XO 70Cl -8320",
+"Klipdrift 75Cl -8660",
+"Marc De Cote-Rotie M Chapoutier 1998 70Cl -2736998",
+"Marc De LErmitage M Chapoutier 1998 70Cl -2736898",
+"Martell Cordon Blue RF 70Cl -8887",
+"Martell VSOP 70Cl -0114",
+"Martell Xo Cognac RF 70Cl -8888",
+"Metaxa 12 Stars 70Cl -90820166",
+"Remy Martin VSOP 1Ltr",
+"Remy Martin XO 70Cl -90820004",
+"St Remy Napolean Brandy 70Cl -90820009",
+"Torres 15 Brandy 70Cl -30302",
+"Armand De Brignac Brut Champ 75Cl -35499",
+"Armand De Brignac Rose Champ 75Cl -35500",
+"Bollinger Rose Champ 75Cl -95470009",
+"Bollinger Special Cuvee NV Champ 75Cl -95470018",
+"Bruno Paillard Blanc de Blancs Grand Cru Champ 75Cl -39616",
+"Bruno Paillard Brut Premiere Rose 75Cl -39620",
+"Champagne Boizel B de Noir Champ 75Cl -20678",
+"Champagne Carbon Brut NV Luminous Champ 75Cl -95660001",
+"Champagne Carbon Bugatti EB01 2002 Champ 75Cl -95660007",
+"Champagne Carbon Bugatti EB02 2006 S-W 75Cl -95660013",
+"Champagne Carbon Gold Blanc 2012 S-W 75Cl -95660006",
+"Dom Perignon Basquiat LMTD 75Cl -45499",
+"Dom Perignon Blanc P2 75Cl -17753D",
+"Dom Perignon Champ 75Cl -0810600",
+"Dom Perignon Rose Luminous 75Cl -13942",
+"Henriot Blanc de Blancs NV Champ 75Cl -99100006",
+"Krug Grande Cuvee Naked 75Cl -E0010-6",
+"Krug Rose Champ 75Cl -E0012-6",
+"Laurent Perrier Blanc de Blancs NV Champ 75Cl -95910051",
+"Laurent Perrier Brut NV Champ 75Cl -95910019",
+"Laurent Perrier Brut Rose 75Cl -95910001",
+"Laurent Perrier Grand Siecle Champ 75Cl -95910002",
+"Laurent Perrier Ultra Brut NV Champ 75Cl -95910004",
+"Louis Roederer Brut Premier Champ 75Cl -95700001",
+"Louis Roederer Cristal 2012 Rose 75Cl -95700031",
+"Louis Roederer Cristal Champ 75Cl -95700002",
+"Moet and Chandon Imperial Champ 75Cl -0830",
+"Mumm Rose Champ 75Cl -14476",
+"Nicolas Feulliatte Champagne Champ 75Cl -96920032",
+"Perrier Jouet Belle Epoque Brut Champ 75Cl -14480",
+"Perrier Jouet Belle Epoque Rose 75Cl -21971",
+"Perrier Jouet Blason Rose NV Champ 75Cl -14479",
+"Perrier Jouet Grand Brut NV Champ 75Cl -11297",
+"Pol Roger Brut NV Champ 75Cl -96820002",
+"Ruinart Blanc De Blancs Champ 75Cl -85246",
+"Ruinart Brut Champ 75Cl -85216",
+"Taittinger Brut Reserve NV Champ 75Cl -95650029",
+"Taittinger Brut Réserve NV Champ 37.5cl -95650022",
+"Taittinger Comtes De Blanc Champ 75Cl -95650016",
+"Taittinger Prestige Rose NV Champ 75Cl -95650033",
+"Telmont Reserve Brut NV Champ 75Cl -90820250",
+"Intellect Crema Cafe Blend (Coffee) 1Kg",
+"Intellect Prima Cafe Blend (Coffee) 1Kg",
+"Milk Full Cream 2 Ltr",
+"Milk Low Fat 2 Ltr",
+"Tea Chamomile Cooler Teabag (1x100x2gm) -Avantcha",
+"Tea Jasmine Organic Teabag (1x100x2.5gm) -Avantcha",
+"Sauce Tabasco 2 Oz -Tabasco",
+"Cinnamon Stick 1Kg",
+"Clove Whole 1Kg",
+"Fig Dried 1Kg",
+"Honey Acacia 950gm",
+"Honey Australia 500gm",
+"Malic Acid 500gm",
+"Olive Green Pitted 5Kg",
+"Sauce LP Worcestershire 290ml -UK",
+"Sea Salt Maldon 1.4Kg -Uk",
+"Sugar Brown Dark 500gm",
+"Sugar Caster -Tate & Lyle (10x500gm)",
+"Sugar Demarara 500gm",
+"Sugar Granulated SIS Fine 2Kg",
+"Verjuice 75Cl -France",
+"Liquid Egg White 1Kg",
+"Apple Green -S.Africa",
+"Figs -Holland",
+"Grapefruit Pink -S.Africa",
+"Grapes White Seedless",
+"Orange Navels For Table -USA",
+"Passion Fruit -Africa",
+"Peach -Australia",
+"Raspberry 125gm",
+"Strawberry -USA",
+"Puree Orange Blood 1Kg -Boiron",
+"Puree Passion Fruit -Boiron",
+"Puree Passion Fruit -Ponthier",
+"Puree Peach White -Boiron",
+"Puree Peach White -Ponthier",
+"Puree Raspberry -Boiron",
+"Puree Raspberry -Ponthier",
+"Puree Strawberry -Boiron",
+"Puree Strawberry -Ponthier",
+"Beefeater Gin Pink NRF 75Cl -27051",
+"Bloom Gin 70Cl -25167",
+"Bombay Sapphire 75Cl -5840",
+"Gin Mare 70Cl -17995",
+"Gordon Dry Gin 70Cl -90730323",
+"Gordons Pink 70Cl -90730328",
+"Hendricks Gin 70Cl -90580115",
+"Hendricks Orbium 70Cl -90580100",
+"Kinobi Gin 70Cl -31813",
+"London Gin No.1 70Cl -18418",
+"London Gin No.3 70Cl -13079",
+"Malfy Arancia 75Cl -31810",
+"Malfy Limone 75Cl -31808",
+"Malfy Originale 75Cl -31807",
+"Malfy Rosa 75Cl -31809",
+"Monkey 47 50Cl -20842",
+"Monkey 47 Sloe 50Cl -31811",
+"Plymouth Gin 70Cl -97066",
+"Roku Gin 70Cl -90720151",
+"Sipsmith London Dry Gin 70Cl -90720142",
+"Tanqueray 10 75Cl -90730068",
+"Tanqueray Gin 70Cl -90730327",
+"Tanquery Flor De Sevilla 1Ltr -90730311",
+"Tanquery Malacca 1Ltr -90730282",
+"Tanquery Rangpur 1Ltr -90730280",
+"The Botanist Gin 70Cl -90820142",
+"Nonino Amaro Quintessentia 70Cl -96400037",
+"Nonino Grappa Moscato 70Cl -96400027",
+"Nonino Grappa Oak Char 70Cl -96400031",
+"Rosemary Loose Cyprus",
+"Juice Apple Green Fresh 1.5Ltr",
+"Juice Grapefruit Fresh (1.5 Ltr)",
+"Juice Lemon Fresh (1.5 Ltr)",
+"Juice Lemonade Fresh (1.5 Ltr)",
+"Juice Lime Fresh (1.5 Ltr)",
+"Juice Orange Fresh (1.5 Ltr)",
+"Juice Pineapple Fresh (1.5 Ltr)",
+"Juice Watermelon Fresh (1.5 Ltr)",
+"Juice Apple (12x1Ltr) -Lacnor",
+"Juice Cranberry (12x1Ltr) -Ocean Spray",
+"Juice Orange (12x1Ltr) -Lacnor",
+"Juice Pineapple (12x1Ltr) -Lacnor",
+"Juice Tomato (12x1Ltr) -Lacnor",
+"Juice Tomato Al Ain Milliat 1Ltr -French",
+"Amaretto Di Sarono 1Ltr -31750",
+"Amaretto Di Sarono 70Cl -0631",
+"Amaro Montenegro 1Ltr -32724",
+"Angostura Bitters 20Cl -0618",
+"Angostura Orange Bitters 10Cl -16861",
+"Baileys Original 75Cl -99520011",
+"Benedictine 75Cl -0635",
+"Cartron Triple Sec 70Cl -100136",
+"Cartron Watermelon 70Cl -100186",
+"Chambord 70Cl -7841",
+"Cherry Heering 70Cl -99190056",
+"Chinato Cocchi 50Cl -37671",
+"Cointreau 70Cl -90820002",
+"Cordial Caffe Anniversario 70Cl -99830003",
+"Dk Marasquin 70Cl -99190026",
+"Drambuie 75Cl -90580042",
+"Fior di Limoncello 70Cl -98680044",
+"Grand Marnier 70Cl -0668",
+"Green Chartreuse 70Cl -7844",
+"Italicus Rosolio Di Bergamotto 70Cl -22697",
+"Kahlua 70Cl -35914",
+"La Fee Absinthe Parisienne 70Cl -16687",
+"Limoncetta Di Sorrento 50Cl -99830002",
+"Maraschino Luxardo 70Cl -27590",
+"Midori Melon 70Cl -90840001",
+"Molinari Sambucca Extra 70CL -12071",
+"Mozard Black Chocolate 70Cl -11885",
+"Nixta Corn Liqueur 75Cl -31398",
+"Pisco Oro 70Cl -91090520",
+"Sambucca Isolabella White 70Cl -110316",
+"Southern Comfort 1Ltr -06810",
+"St Germain 70Cl -11626",
+"Suze 70Cl -27677",
+"The Bitter Plum La Fee 15Cl -99530175",
+"The Bitter Truth Celery 20Cl -99250001",
+"The Bitter Truth Creole 20Cl -99250003",
+"The Bitter Truth Elixier Liqueur 50Cl -99250013",
+"The Bitter Truth Golden Falerum Liqueur 50Cl -99250014",
+"The Bitter Truth Pimento Dram 50Cl -99250015",
+"Alie Ammiraglia Frescobaldi Rose 1.5Ltr -95300101",
+"Armand de Brignac Ace of Spade Brut Champ 1.5Ltr -35493",
+"Bruno Paillard Extra Brut Champ 1.5Ltr -39614",
+"Catena Zapata Malbec Argen Rebirth R-W 1.5Ltr -96230147",
+"Chablis Grand Regnard 2021 W-W 1.5Ltr -95190022",
+"Chateau Batailley Grand Cru Clasé 2013 R-W 1.5Ltr -95420084",
+"Chateau Canon Magnum R-W 1.5Ltr -1794912",
+"Chateau Minuty M de Minuty Rose 1.5Ltr -21177",
+"Dom Perignon Luminous Magnum 2009 Champ 1.5Ltr -12497",
+"Gaja Pieve Santa Restituta Montalcino R-W 1.5Ltr -96460126",
+"Gaja Promis R-W 1.5Ltr -96460141",
+"Giuseppe Ceretto Cortese Magnum 2022 W-W 1.5Ltr -3616922",
+"Jacquesson Cuvee 746 Extra Brut Nv Champ 1.5Ltr -98110006",
+"La Scolca Gavi de Gavi Black Label W-W 1.5Ltr -15981",
+"Laurent Perrier Brut Champ 3Ltr -95910010",
+"Laurent Perrier Brut Rose Magnum 1.5Ltr -95910049",
+"Lucente Magnum R-W 1.5Ltr -95300093",
+"Penfolds Magill Estate Shiraz 1998 R-W 1.5Ltr -95935071",
+"Perrier Jouet Belle Epoque 1.5Ltr -33962",
+"Ruinart Brut Blanc De Blanc 1.5Ltr -15938",
+"Sito Moresco Langhe Gaja 2017 R-W 1.5Ltr -96460171",
+"NA Biere des Amis 0.0% (12x330ml) -101240",
+"NA Peroni Nastro Azzurro 0.0% (24x33Cl) -101770",
+"NA Tanqueray Alcohol Free Spirit 70Cl -101803",
+"NA Vintense Prestige 0,0% S-W 75Cl -10009",
+"NA Warner's Pink Berry 0.0% 50Cl -101666",
+"NA Wilfred's Non Alcoholic Aperitif 50Cl -101336",
+"ZNA Caleno Dark and Spicy 50Cl -101582-SLE",
+"ZNA Crossip Dandy Smoke Spirit  50Cl -10196",
+"ZNA Crossip Pure Hibiscus 50Cl -10195",
+"ZNA Crossip Spirit Fresh Citrus 50Cl -10194",
+"Olive Oil Extra Virgin 500ml -Dono Dorato Oil",
+"Acide Citric 1Kg -Louis Francois",
+"Cherry Amarena 2.75Kg -Brover",
+"Pectin 1Kg -Louis Francois",
+"Texturas Metil 300gm",
+"Fine Tawny Taylor’s Fine P/W 75Cl -95080004",
+"Grahams Late Bottled Vintage Port 75Cl -1299212",
+"Harvey Bristol Cream 75Cl -0460",
+"Lustau Emilio Pedro Ximenez San Emilio Sherry 75Cl -96710018",
+"Solera Gran Reserva Oloroso Eugenia 50Cl -96710009",
+"Taylors 10Yrs 75Cl -95080006",
+"Taylors 20Yrs 75Cl -95080008",
+"Taylors 40Yrs 75Cl -95080009",
+"Tio Pepe 75Cl -0487",
+"Casillero del Diablo Rose 75Cl -20286",
+"Castiglioni Rosato Frescobaldi Tenuta Rose 75Cl -95300019",
+"Chateau D.Esclans Garrus 2013 Rose 75Cl -12137",
+"Chateau Minuty M de Minuty Rose 75Cl -10839",
+"Chateau de Selle Cotes Domaine Ott Rose 75Cl - 95700011",
+"Cuvee Serpolet Henri Fabre Rose 75Cl -95538085",
+"Dolce and Gabbana Rosa Donnafugata  Rose 75Cl -95720992",
+"Marius Rose 75Cl -15408",
+"Mas La Chevaliere Pays dOc Laroche Rose 75Cl -95170043",
+"Mirabeau Rose 75Cl -15028",
+"Pink as Flamingos Boutnot Rose 75Cl -98260130",
+"Pinot Grigio Italia Rose 75Cl -95720766",
+"Rocca di Montemassi Syrosa Toscana IGT Rose 75Cl -20208",
+"Rose Anjou Chemin Sables Sauvion Rose 75Cl -95270008",
+"Sancerre Rose Jolivet Rose 75Cl -8052",
+"Torres Sangre De Toro Rose 75Cl -20760",
+"Whispering Angel Rose 75Cl -11922",
+"Amaro Di Angostura 70Cl -19633",
+"Angostura 1824 70Cl -109976",
+"Angostura 1919 8YO 70Cl -109966",
+"Angostura 5 Year Old 70Cl -109996",
+"Appleton 21 YR 70Cl -86876",
+"Appleton State Rum 12 YO 70Cl -11592",
+"Bacardi Superior 1Ltr -0151",
+"Bacardi Superior 75Cl -0148",
+"Cachaca Capucana 70Cl -24931",
+"Cachasa 51 70Cl -6754",
+"Capt Morgan Dark 75Cl -90570051",
+"Capt Morgan Spiced 75Cl -90570049",
+"Capt Morgan White Rum 70Cl -90730308",
+"Facundo Eximo 75 Cl",
+"Facundo Exquisito 75 Cl",
+"Havana Club 7 Years 70Cl -13256",
+"Havana Club Maximo 50Cl -10105",
+"Kraken Spiced Rum 70Cl -99420001",
+"Malibu 75Cl -25067",
+"Matusalem 23YO Gran Reserva 70Cl -99500024",
+"Matusalem Gran Reserva 15YO 75Cl -97680015",
+"Matusalem Insolito 70Cl -97680012",
+"Matusalem Platino 70Cl -97680014",
+"Pyrat XO 75Cl -8674",
+"Ron Zacapa 23Yrs 75Cl -90730128",
+"Ron Zacapa XO 75Cl -90730129",
+"Sailor Jerry Rum 70Cl -90580031",
+"Coconut Water Can (12x250ml) -Thailand",
+"Coconut Water Can (24x250ml) -MoonBird",
+"Coke Bottle (24x290Ml)",
+"Coke Zero Bottle (24x290Ml)",
+"Double Dutch Cucumber Watermelon Soda (24x200ml) -1001328",
+"Double Dutch Double Lemon (24x200ml) -1001336",
+"Double Dutch Ginger Ale (24x200ml) -1001329",
+"Double Dutch Ginger Spicy (24x200ml) -1001330",
+"Double Dutch Pink Grapefruit Soda (24x200ml) -1001331",
+"Double Dutch Soda Water (24x200ml) -1001326",
+"Double Dutch Tonic Elderflower (24x200ml) -1001332",
+"Double Dutch Tonic Water Bottles (24x200ml) -1001327",
+"Fanta Orange Bottle (24x250Ml)",
+"Fentiman's Ginger Ale (24x200Ml)",
+"Fentiman's Ginger Beer (24x200Ml)",
+"Fentiman's Soda Water (24x200Ml)",
+"Fentiman's Tonic Water (24x200Ml)",
+"Fentimans Pink Grapefruit Soda (24x200Ml)",
+"Ice Cubes (3.67x3.67x13.25 cm)",
+"Ice Cubes (6x6x6)",
+"Red Bull Regular Can (24x250Ml)",
+"Red Bull Sugar Free Can (24x250Ml)",
+"Soda Water Can Schweppes (24x300Ml)",
+"Sprite Bottle (24x250Ml)",
+"Tonic Water Can Schweppes (24x300Ml)",
+"Ca Del Bosco Prestige Cuvee S-W 75Cl -98960001",
+"Conte Fosco Brut S/W 75Cl -98680025",
+"Da Luca Prosecco DOC S/W 75Cl -95160021",
+"Ferrari Brut Rose S-W 75Cl -99200002",
+"Ferrari Brut S-W 75Cl -99200001",
+"Ferrari Giulio Riserva Fondatore 2008 S-W 75Cl -99200007",
+"Ferrari Perle 2017 S-W 75Cl -99200005",
+"Ferrari Perle Nero Riserva S-W 75Cl -99200009",
+"Gran Ventino Brut Sparkling S/W 75Cl -39852",
+"Nino Franco Prosecco Rustico S-W 75Cl -95720366",
+"Organic Prosecco Doc Alberto Nani S/W 75Cl -98950024",
+"Perrier Jouet Blanc de Blancs S-W 75Cl -36228",
+"Pop It Now Prosecco Spumante S-W 75Cl -98950027",
+"Prosecco DOC, Amore di Amanti 75Cl -98950019",
+"Prosecco Valdo Millesimato S-W 75Cl -95720585",
+"Salici Prosecco Valdobbiadene Spumante S-W 75Cl -75886",
+"Tenuta Montenisa Cuvee Royale Franciac Brut S-W 75Cl -26430",
+"Valdo Elevantum Prosecco Rose 75Cl -95720997",
+"Zonin 1821 Prosecco Brut DOC S-W 75Cl -87416",
+"Bols Creme De Cacao Brown 70Cl",
+"Cartron Cacao Blanc 70Cl -100226",
+"Cartron Cacao Brown 70Cl -100216",
+"Cartron Cassis 70Cl -100066",
+"Cartron Creme De Banane 70Cl -100196",
+"Cartron Curacao Bleu 70Cl -100146",
+"Cartron De Mure 70Cl -100086",
+"Cartron De Violette 70Cl",
+"Cartron Peche 70Cl -100076",
+"Cartron Peppermint Green 70Cl -100496",
+"Cartron Pomme Verte 70Cl -100156",
+"Cartron Vanille 70 Cl -100256",
+"DK Apricot Brandy 70Cl -99190003",
+"DK Blackberry 70Cl -99190004",
+"DK Cream Cassis 70Cl -99190014",
+"DK Crem Cacao White 70Cl -99190012",
+"DK Grapefruit 70Cl -99190023",
+"DK Parfait Amour 70Cl -99190028",
+"DK Passion Fruit 70Cl -99190029",
+"Fireball Cinnamon Whisky 75Cl -41208",
+"Jinro Plum Soju 36Cl -31685",
+"Pimms No.1 75Cl -90540001",
+"Syrup ElderFlower Cordial 500ml Belvoir",
+"The Bitter Mint 15Cl -99530178",
+"Yuzu Sake Kouchi 30Cl -99520256",
+"Barolo Chinato Batasiolo Sweet 50Cl -95490013",
+"Bila Haut Banyuls Terra Vinyas Sweet 50Cl -E011198-6",
+"Elysium Blk Muscat Quady 2013 Sweet 37.5Cl -90810001",
+"Inniskillin Icewine Sweet 37.5Cl -96010184",
+"Sauvignon LateHarvest SantaCarolina Sweet 50Cl -96290024",
+"Syrup Agave Nectar Real 500ml",
+"Syrup Agave Organic Sunny Via 980g -Maxico",
+"Syrup Almond Mixer 1 Ltr",
+"Syrup Basil Vedrenne 1Ltr -France",
+"Syrup Coconut 1Ltr -Vedrenne France",
+"Syrup Elder Flower 1Ltr Vedrenne",
+"Syrup Elder Flower Giffard 1Ltr",
+"Syrup Sugarcane 1Ltr Vedrenne",
+"Syrup Vanilla Giffard 1Ltr",
+"1800 Silver 75Cl -96260013",
+"Altos Reposado 70Cl -15758",
+"Astral Tequila Blanco 75Cl -90730530",
+"Avion Reposado 70Cl -31817",
+"Avion Reserva 44 1.75Ltr -33117",
+"Avion Reserva 44 70Cl -31815",
+"Avion Reserva 44 Cristalino 70Cl -37831",
+"Casamigos Anejo 70Cl -90730339",
+"Casamigos Blanco 70Cl -90730337",
+"Casamigos Reposado 70Cl -90730338",
+"Clase Azul Anejo 70Cl -91090604",
+"Clase Azul Plata 70Cl -91090601",
+"Clase Azul Reposado 70Cl -91090602",
+"Del Maguey Tobala Mezcal 70Cl -15535",
+"Del Maguey Vida Mezcal 70Cl -28224",
+"Del Maguey Village Chichicapa 70Cl -31818",
+"Don Julia 1942 75Cl -90730111",
+"Don Julia 1942 Magnum 1.75Cl -90730309",
+"Don Julia Blanco 75Cl -90730088",
+"Don Julio Anejo 75Cl -90730087",
+"Don Julio Reposado 75Cl - 90730084",
+"Don Julio Ultima Reserva 75Cl -90730378",
+"Herradura Reposado 70Cl -16953",
+"Jose Cuervo Especial Silver 75Cl -96260003-75 Cl",
+"Komos Anejo Cristalino 75Cl -32606",
+"Komos Extra Anejo 75Cl -34837",
+"Komos Reposado Rosa 75Cl -32607",
+"Lobos 1707 Joven 75Cl -36195",
+"Mezcal Amaras Espadin 70CL -35998",
+"Mezcal Derrumbes Michoacan 75CL -40004",
+"Mezcal Verde Amaras Espadín 70Cl -35997",
+"Mijenta Blanco 75Cl -40585",
+"Mijenta Reposado 70Cl -37678",
+"Ojo De Tigre Blanco 75Cl -33118",
+"Olmeca Tequila Blanco 70Cl -35552",
+"Patron Anejo 75Cl -8030",
+"Patron El Alto 75Cl -44113",
+"Patron El Cielo 70Cl -41254",
+"Patron Reposado 75Cl -9784",
+"Patron Silver 75Cl -10111",
+"Patron Xo Cafe 75Cl -97856",
+"Se Busca Anejo 70Cl -90660087",
+"Se Busca Mezcal Joven 70Cl -90660085",
+"Se Busca Resposado 70Cl -90660086",
+"Siete Leguas Tequila Anejo 70CL -41316",
+"Siete Leguas Tequila Blanco 70Cl -41314",
+"Siete Leguas Tequila Reposado 70CL -41315",
+"AU 1865 Reserve Carmenere 2013 R/W 75Cl -2208",
+"AU Chateau Latour 1er Cru Pauillac 2003 R/W 75Cl -78050803",
+"AU M/C Barolo Chinato 50Cl -4578",
+"AU Mas de Daumas Gassac R/W 75Cl -15810",
+"BL Beaujolais Villages Georges Duboeuf R/W 75Cl -95320003",
+"BL Cabernet Sauvignon Alamos Catena R/W 75Cl -96230013",
+"BL Cabernet Sauvignon Errazuriz Aconcagua R-W 75Cl -5892",
+"BL Celeste Miguel Torres R/W 75Cl -89956",
+"BL Chateau Ksara Rouge R/W 75Cl -95720416",
+"BL Chateau Mot Redon Lirac R/W 75Cl -95730004",
+"BL Cordillera Carignan R-W 75Cl -21895",
+"BL Costera Argiolas R-W 75Cl -15082",
+"BL Cote du Rhone Blanc Abeilles Colombo W-W 75Cl -95990045",
+"BL Dark Horse Cabernet Sauvignon R/W 75Cl -20418",
+"BL Dark Horse Merlot R/W 75Cl -20776",
+"BL Dark Horse Sauvignon Blanc W/W 75Cl -20777",
+"BL Gavi La Luciano Araldica R-W 75Cl -95720753",
+"BL Ixsir Altitudes White W/W 75Cl -17200",
+"BL J Moreau and Fils Pinot Noir Pays  France R-W 75Cl -20224",
+"BL Matua Valley Pinot Noir R-W 75Cl -95930196",
+"BL Montepulciano Lupi Reali R-W 75Cl-99300012",
+"BL Navajas Tinto Rioja R/W 75Cl -96450002",
+"BL Norton Privada R/W 75Cl -95600001",
+"BL Pablo Old Vine Garnacha R/W 75Cl -15035",
+"BL Pinot Gris Mud House W/W 75Cl -96010238",
+"BL Pinot Noir Casillero del Diablo Reserve R/W 75Cl -12879",
+"BL Pinot Noir Tyrells Old Winery R/W 75Cl -96580005",
+"BL Recenati Yonathan White W-W 75Cl -30128",
+"BL Sabourin Sauvignon Blanc W/W 75Cl -11532",
+"BL Sauvignon Blanc Dourthe Reserve W/W 75Cl -11879",
+"BL Sauvignon Blanc Santa Carolina Reserve W/W 75Cl -96290049",
+"BL Shiraz, Bin 50 Lindeman R/W 75Cl -95930049",
+"BL Shiraz, Two Hands Gnarly Dudes R/W 75Cl -19818",
+"BL Suite Petit Chronic Cellars R/W 75Cl -26966",
+"BL Tension La Riberaa Malbec-Petit verdot R/W 75Cl -26228",
+"BL Wild Rock Pinot Noir R/W 75Cl -11900",
+"BLAmarone della Valpolicel Luigi Righetti R/W 75Cl -95250049",
+"BLSemillon-Sauvignon,Red Label Wolf Blass W/W 75Cl -95930559",
+"RU Barolo Vigneto Garretti La Spinetta R/W 75Cl",
+"RU Caro Cabernet Malbec R/W 75Cl",
+"RU Dark Horse Sauvignon Blanc W/W 75Cl",
+"RU Joseph Phelps Insignia R/W 75Cl",
+"RU Le Dix Los Vascos R/W 75Cl",
+"RU Pinot Noir Valley Willakenzie R/W 75Cl",
+"RU Porcupine Ridge Merlot R/W 75Cl",
+"RU Riesling Eddystone Point W/W 75Cl",
+"RU SC Neblus Assemblage R/W 75Cl",
+"RU Sunset Rose Chateau Ksara Rose 75Cl",
+"Touraine EglantineSauvignonBlanc  Fils W-W 75Cl -95270026",
+"ZZZCAT Campolieti Valpolicella Ripasso Luigi Righetti 75Cl",
+"Basil Loose -Holland",
+"Basil in Pot -GCC",
+"Bergamot -Italy",
+"Celery -Australia",
+"Cucumber Long -Holland",
+"Ginger -China",
+"Lemon -Africa",
+"Lime -USA",
+"Mint Leaves -Cyprus",
+"Beluga Gold 70Cl -91090200",
+"Beluga Nobel 1.5Ltr -91090204",
+"Beluga Nobel 70Cl -91090199",
+"Belvedere 1.75Ltr -99923",
+"Belvedere 10 Luminos 70Cl -41246",
+"Belvedere 10 Magnum 1.75Ltr -45274",
+"Belvedere 1Ltr",
+"Belvedere 75Cl -7837",
+"Ciroc Vodka 75Cl -90730191",
+"Grey Goose 1.5Ltr -85026",
+"Grey Goose 75Cl -7838",
+"Ketel One 75Cl -90730123",
+"Stoli Vanil 75Cl -90660005",
+"Stolichnaya Premium 75Cl -90660016",
+"Zubrowka Vodka 1ltr -17269",
+"Filette Sparkling Water Glass Bottles (12x750ml)",
+"Filette Still Water Glass Bottles (12x750ml)",
+"Perrier Water Natural Glass (24x330Ml)",
+"SBO Sparkling Prestige Water Glass (12x750ml)",
+"Absinthe 55 70Cl -99270025",
+"Ancnoc 22YO 70Cl -19023",
+"Ardbeg Maly 10YO 70Cl -6594",
+"Ardmore Portwood 70Cl -90720065",
+"Aultmore 12YO 75Cl -18653",
+"Badnoch Adela 15YO 70Cl -27507",
+"Berrys Benriach 1996 18YO 46% 70Cl -18517",
+"Berrys Bunnahabhain 1990 23YO 54.3% 70Cl -18507",
+"Berrys Caperdonich 1994 20YO 46% 70Cl -18519",
+"Berrys Glen Garioch 1989 24YO 7857 46% 70Cl -18512",
+"Bulleit Rye 1Ltr -90730204",
+"Bunnahabhain 25YO 70Cl -15999",
+"Cao Ila 12 Yrs 75Cl -90730074",
+"Chivas Regal  XV 15Yrs 75Cl -26241",
+"Chivas Regal 12 Yrs 75Cl -3298",
+"Chivas Regal 18 Yrs 75Cl -76756",
+"Chivas Regal 25 Yrs 70Cl -9968",
+"Chivas Regal Extra 13 Yrs Bourbon 70Cl -31801",
+"Chivas Regal Extra 13 Yrs Sherry 70Cl -31803",
+"Chivas Ultis 75Cl -20594",
+"Craigelachie 13YO 70Cl -18652",
+"Dalmore Cigar Malt 70Cl -13516",
+"Dewars White Label 75Cl -01680",
+"Gentleman Jack 75Cl -5386",
+"Glenfiddich 12 Yrs 70Cl -90580116",
+"Glenfiddich 15Yrs 70Cl -90580117",
+"Glenfiddich 18Yrs 70Cl -90580118",
+"Glenfiddich 21Yrs 70Cl -90580025",
+"Glenfiddich 23YO Grand Cru 70Cl -90580099",
+"Glengoyne 25YO 70Cl -16916",
+"Glenlivet 12Yrs 75Cl -7938",
+"Glenlivet 15YO French Oak Reserve 70Cl -88896",
+"Glenlivet 25Yrs 70Cl -10098",
+"Glenmorangie 10Yrs 75Cl -13394",
+"Glenmorangie 12Yrs 70Cl -13394-12GB",
+"Glenmorangie Lasanta 75Cl -13076",
+"Glenmorangie Nectar DOr 70Cl -13220",
+"Glenmorangie Quintia Ruban 70Cl -13221",
+"Glenrothes 1976 Bottled 2015 39YO 70Cl -19452",
+"Hankey Bannister 40YO 70Cl -19032",
+"Hibiki Harmony 70Cl -90720133",
+"High West Rye 70Cl -96010475",
+"Highland Park 25 YO 70Cl -11149",
+"J Walker Blue Label King George V 75Cl -90730332",
+"J/Walker Black Label 1.5Ltr -90730242",
+"J/Walker Black Label 1Ltr -99520003",
+"J/Walker Black Label 70Cl -90730340",
+"J/Walker Blue Label 75Cl -99520071",
+"J/Walker Double Black 75Cl -90730156",
+"J/Walker Gold Reserve 75Cl -90730153",
+"J/Walker Red Label 70Cl -90730325",
+"Jack Daniels 75Cl -5883",
+"Jack Daniels Single Barrel 75Cl -74086",
+"John Jameson 75Cl -0215",
+"Kamiki Original 50Cl -27581",
+"Kavalan Solist Ex Sherry Cask 70Cl -13993",
+"Kavalan Soloist Fino Sherry Cask 70Cl -15628",
+"Lagavulin 16Yrs 70Cl -90730163",
+"Laphroaig 10YO 70Cl -90720067",
+"Macallan 12YO Double Cask 70Cl -20807",
+"Macallan 12YO Sherry Cask 70Cl -11529",
+"Macallan 15YO Double Cask 70Cl -28730",
+"Macallan 18YO Double Cask 70Cl -30004",
+"Macallan 18YO Sherry Cask 70Cl -12102",
+"Macallan 18YO Triple Cask 70Cl -25176",
+"Makers Mark Whisky 75Cl -91270001",
+"Michters US*1 Kentucky Bourbon Straight 70Cl -31082",
+"Michters US*1 Kentucky Rye Straight 70Cl -31083",
+"Miyagikyo Single Malt 70Cl -20064",
+"Monkey Shoulder 70Cl -90580029",
+"Nikka Barrel Whisky 50Cl -11186",
+"Nikka Super Nikka 70Cl -20740",
+"Red Breast 12 Years 70Cl -11128",
+"Royal Salute 70Cl -17857",
+"Springbank 12YO 70Cl -13095",
+"Talisker Storm 70Cl -90730205",
+"Tullamore Dew 75Cl -90580037",
+"Umiki Ocean Fused Japanese Whiskey 75Cl -30435",
+"Woodford Reserve 75Cl -76106",
+"Woodford Reserve Rye 75Cl -30764",
+"Yoichi Single Malt 70Cl -20063",
+"Berri Estate Rose 5Ltr -96010340",
+"Enrique Foster Ique Malbec R-W 75Cl -95720697",
+"Finca Mirador Malbec, Achaval Ferrer R-W 75Cl -90660093",
+"Malbec Fuzion Shiraz R/W 75Cl -11578",
+"Norton Malbel Coleccion Bodega R-W 75Cl -95600002",
+"Terrazas De Los Andes Grand Malbec 2019 R-W 75Cl -30723",
+"Zuccardi Q Malbec R-W 75Cl -12023",
+"19 Crimes Shiraz R/W 75Cl -95930587",
+"Cabernet Shiraz Bin 389 Penfolds 2018 R-W 75Cl -95930462",
+"Penfold Grange R-W 75Cl -95930465",
+"Shiraz Bin 28 Penfolds 2018 R-W 75Cl -95930414",
+"Casillero de Diablo Cabernet Sauvignon Rsv R-W 75Cl -7676",
+"Casillero del Diablo Carmenere R/W 75Cl -12880",
+"Don Melchor 2020 R-W 75Cl -7231620",
+"Escudo Rojo Gran Reserva R/W 75Cl -75006",
+"Montes Alpha Cabernet Sauvignon R-W 75Cl -95350007",
+"Montes Purple Angel 2017 R-W 75Cl -95350149",
+"Terrunyo Carmenere R-W 75Cl -12878",
+"Alter Ego Palmer 2019 R-W 75Cl -97140069",
+"Bonnes Mares Grand Cru 2018 R-W 75Cl -1321918",
+"CNDP D.de La Janasse Pape R-W 75Cl -98090002",
+"Cabernet Franc Petit Bourgeois Rouge R-W 75Cl -98070006",
+"Ch Calon Segur Grand Cru Classe 2015 R-W 75Cl -96591191",
+"Ch Cos dEstournel 2011 R-W 75Cl -E042811",
+"Ch Le Petit Haut Lafitte Smith Haut 2021 R-W 75Cl -96591128",
+"Ch Leoville Barton 2015 R-W 75Cl -E043215",
+"Ch Sociando Mallet 2010 R-W 75Cl -1092710",
+"Chambolle Musigny Domaine Roux 2021 R-W 75Cl -4260721",
+"Chassagne Mont Red Concis Des Champ Chauve R-W 75Cl -3351118",
+"Chateau Batailley 2016 R-W 75Cl -95420089",
+"Chateau Belgrave 2015 R-W 75Cl -1183515",
+"Chateau Belgrave 2016 R-W 75Cl -1183516",
+"Chateau Beychevelle 4ème Grand Cru 2015 R-W 75Cl -96590814",
+"Chateau Canon 1er Grand cru Classe 2011 R-W 75Cl -96591061",
+"Chateau Cantemerle 2013 R-W 75Cl -850513",
+"Chateau Certan De May 2012 R-W 75Cl -1312312",
+"Chateau De Pez Cru Bourgeois Exceptionnel R-W 75Cl -95700043",
+"Chateau Figeac 2005 R-W 75Cl -847205",
+"Chateau Haut-Bailly Grand Cru Classé R-W 75Cl -96590904",
+"Chateau Margaux 1er Grand Cru 1998 R-W 75Cl -96591010",
+"Chateau Montrose 2eme Grand Cru Classe R-W 75Cl -96591031",
+"Chateau Palmer 3eme GrandCru Classe 2010 R-W 75Cl -96590905",
+"Chateau Pavie 1er Grand Cru Class 2010 R-W 75Cl -96590873",
+"Chateau Pibran R-W 75Cl -96591062",
+"Chateau Pichon Lalande 2014 R-W 75Cl -E44314",
+"Chateau Rauzan Segla 2008 R-W 75Cl -96590790",
+"Chateauneuf-du-Pape Rouge Mont-Redon R-W 75Cl -95730001",
+"Cote Rotie Guigal R-W 75Cl -95030001",
+"Cotes Du Rhone Guigal R-W 75Cl -95030002",
+"Domaine Faivley Nuit St. Goerge Porets R-W 75Cl -2262221",
+"Domaine Perdrix Bourgogne Rouge 2022 R-W 75Cl -1967522",
+"Domaine Romanee-Conti, Romanee-Saint-Vivant 2011 R-W 75CL",
+"Dugat Gevrey Chambertin Vieille Domaine R-W 75Cl -1972018",
+"Echezeaux GC Domai Julien and Fils 2022 R-W 75Cl -3462722",
+"Echo De Lynch Bages R-W 75Cl -1312214",
+"Gigondas E.Guigal R-W 75Cl -95030003",
+"Haut Brion 2007 R-W 75Cl -968207",
+"Joseph Drouhin Rouge Clos d Mouches 2017 R-W 75Cl -10245617",
+"Le Saint-Estephe De Cos Labory R-W 75Cl -95270044",
+"Lions de Batailley Chateau 2016 R-W 75Cl -95420085",
+"Louis Latour Aloxe-Corton 2017 R-W 75Cl - 95200076",
+"Maison Freres Tourettes Hermitage 2017 R-W 75Cl -99180343",
+"Mas La Chevaliere Pinot Noir Laroche R/W 75Cl -95170074",
+"Mercurey Chateau de Chamirey R-W 75Cl -2514921",
+"Mercurey Vasee Domaine Levert Barault R-W 75Cl -3351319",
+"Pauillac de Batailley Château 2018 R-W 75Cl -95420083",
+"Pavillon Rouge Chateaux Margaux 2003 R-W 75Cl -96591064",
+"Petrus 1982 R-W 75Cl -E045282",
+"Petrus 1996 R-W 75Cl -E045296-6",
+"Pommard Jarolliere Domaine Pousse dOr R-W 75Cl -2152117",
+"Reserve de la Comtesse 2014 R-W 75Cl -729214",
+"Sarget 2019 R-W 75Cl -E040720",
+"Vosne Romanee Fontaine 2012  Anne F.Gros R-W 75Cl -19583EP",
+"Aglianico IGT Mastroberardino R/W 75Cl -95720879",
+"Amarone dal Forno 2017 R-W 75Cl -96591184",
+"Baccolo Apassimento IGT Cent’Anni R-W 75Cl -99300008",
+"Barbaresco DOCG Tulin Giorgio Pelissero R-W 75Cl -3608821",
+"Barolo Briccolina DOCG Beni di Batasiolo R-W 75Cl -95490011",
+"Barolo Docg Ravera Vietti 2019 R-W 75Cl -1930319",
+"Barolo Massolino 2018 R-W 75Cl -99740001",
+"Barolo Massolino Reserva 2016 R-W 75Cl -99740003",
+"Barolo Prunotto Bussia R-W 75Cl -75696",
+"Biserno Pino Ludovico Antinori Biserno R-W 75Cl -96840013",
+"Brunello Riserva Biondi Santi 2010 R-W -1363210",
+"Cannonau di Sardegna Sartiglia Contini R-W 75Cl -99360007",
+"Casamatta Rosso 2019 75Cl -2500419",
+"Casanova Di Neri Brunello Nuova 2020 R-W 75Cl -1848020",
+"Castello di Albola Chianti Classico R-W 75Cl -17601",
+"Colore Bibi Graetz R-W 75Cl -2500520",
+"Concerto Fonterutoli 2016 R-W 75Cl -2405416-SI",
+"Cusumano Benuara R-W 75Cl -35310",
+"Dolfi Wineries Artorius 2018 R-W 75Cl -3400418",
+"Feudo Butera Amira Nero D Avola 2018 R-W 75Cl -E0162",
+"Fontanafredda Barolo Serralunga DAlba R-W 75Cl -40563",
+"Foradori IGT R/W 75Cl -95720858",
+"Gaja Barbaresco R-W 75Cl -96460058",
+"Gaja Brunello Restituta R-W 75Cl -96460065",
+"Gaja CaMarcanda Bolgheri 2015 R-W 75Cl -96460129",
+"Gaja Dagromis 2016 R-W 75Cl -96460042",
+"Gaja Magari R-W 75Cl -96460022",
+"Gaja Promis R-W 75Cl -96460084",
+"Imeneus 2010 R-W 75Cl -1596510",
+"Ipsus Mazzei 2015 R-W 75Cl -2783415",
+"L Bruno de Venti Fattorie Dolfi 2011 R-W 75Cl -1596611",
+"La Badiola Chianti Classico Gran Sel 2019 R-W 75Cl -3068620",
+"Lacryma Christi Rosso Mastroberardino R-W 75Cl -95720803",
+"Luce Toscana IGT Luce Della Vite R-W 75Cl -96590968",
+"Lungarotti Sangiovese R-W 75Cl -31017",
+"Masseria Altemura Petravia Puglia Igt New R-W 75Cl -41886",
+"Massetino 2019 R-W 75Cl -96590845",
+"Masseto 2017 R-W 75Cl -1307017",
+"Messorio 2019 R-W 75Cl -1917119",
+"Montevertine Montevertine 2021 R-W 75Cl -1899921",
+"Nero d’Avola Da Luca R/W 75Cl -95160012",
+"Oreno 2008 R-W 75Cl -1260408",
+"Ornellaia Le Volte dell Ornellaia 2023 R-W 75Cl -2064223",
+"Paleo Rosso 2019 R-W 75Cl -1916619",
+"Peppoli Chianti Classico R-W 75Cl -91246",
+"Pio Cesare Barbaresco R-W 75Cl -27671",
+"Pio Cesare Barbera DAlba R-W 75Cl -27668",
+"Radici Taurasi Mastroberadino R-W 75Cl -95720623",
+"Refosco La Roncaia R-W 75Cl -98990013",
+"San Leonardo R-W 75Cl -98990001",
+"Sassicaia 2006 R-W 75Cl -E050606-6",
+"Sassicaia 2018 R-W 75Cl -E050618",
+"Sassicaia 2019 R-W 75Cl -E050619",
+"Scrio Le Macchiole 2013 R-W 75Cl -1916913",
+"Siepi 2017 R-W 75Cl -E041817",
+"Sito Moresco Langhe DOP Gaja R-W 75Cl -96460083",
+"Syrah Sallier de Latour R-W 75Cl -99380004",
+"Tenuta Belguardo Maremma 2018 R-W 75Cl -E041218",
+"Tenuta Mahtani La Brama IGT Toscana Rosso R-W 75Cl -35978",
+"Tignanello 2020 R-W 75Cl -712420",
+"Turriga Argiolas Isola Nuraghi IGT R-W 75Cl -15083",
+"Valpolicella Ripasso Superiore Speri R-W 75Cl -98020019",
+"Vicoregio 36 R-W 75Cl -3068520",
+"Ziggurat Montefalco Rosso Tenute Lunelli R-W 75Cl -99200016",
+"Zonin Montepulciano D'Abruzzo R/W 75Cl -8736",
+"Zonin Valpolicella Ripasso R-W 75Cl",
+"Reserve Du Couvent Chateau Ksara  R-W 75Cl -95720379",
+"Burn Cottage Moonlight Race Pinot Noir R-W 75Cl -2042316",
+"Cloudy Bay Pinot Noir R-W 75Cl -E0391",
+"Pinot Noir Dog Point R-W 75Cl -97670011",
+"St.Hugo Cabernet Sauvignon R-W 75Cl -14470",
+"Golan Heights Yarden Cabernet Sauvignon R-W 75Cl -91090798",
+"Ataraxia Serenity R-W 75Cl -30887",
+"Journeys End The Huntsman SMV R-W 75Cl -21168",
+"Kadette Kanonkop R-W 75Cl -96040005",
+"Kanonkop Pinotage R-W 75Cl -96040007",
+"Meerlust Rubicon R-W 75Cl -96070007",
+"Trilogy Warwick Estate R-W 75Cl -95720490",
+"Alion 2020 R-W 75Cl -2519920",
+"Arzuaga Tinto Reserva R-W 75Cl -97120009",
+"La Montesa R-W 75Cl -97100001",
+"Les Terrasses Alvaro Palacios R-W 75Cl -97100003",
+"Mas Petit Tinto Pares Balta R/W 75Cl -98980003",
+"Unico Vega Sicilia 2012 R-W 75Cl -E013612",
+"Dominus 2015 R-W 75Cl -E051215",
+"La Crema Pinot Noir R-W 75Cl -96640025",
+"Opus One 2014 R-W 75Cl -730214",
+"Peter Michael Au Paradis Cabernet Sauvignon R-W -1673012",
+"Robert Mondavi Cabernet Sauvignon R-W 75Cl -96010101",
+"Screaming Eagle Second Flight R-W 75Cl -1568515",
+"Seghesio Old Vine Zinfendel R-W 75Cl -97480010",
+"The Prisoner Red Blend R-W 75Cl -96010353",
+"Catena Mendoza Chardonnay W-W 75Cl",
+"Chardonnay Alamos Catena W/W 75Cl -96230010",
+"Chardonnay Maxs Penfolds W-W 75Cl -95930585",
+"Pewsey Vale Riesling W-W 75Cl -96390201",
+"Gruner Veltliner Kamptal Domai Gobelburg W-W 75Cl -99220027",
+"Casillero del diablo Chardonnay Reserve W/W 75Cl -7234",
+"Chardonnay El Pacto Santa Carolina W-W 75Cl -96290076",
+"Blanc de Blancs Mireille Domaine Ott W-W 75Cl -95700009",
+"Bourgogne Aligote Dom Angerville 2019 W-W 75Cl -2883319",
+"Bourgogne Benjamin Leroux 2021 W-W 75Cl -2456821",
+"Chablis 1Er Cru Vaulorent 2021 W-W 75Cl -3059521",
+"Chablis Cru Vaillons Raoul Gautherin 2023 W-W 75Cl -4248023",
+"Chablis Domaine Drouhin Vaudon W-W 75Cl -12272",
+"Chablis Grand Cru Les Vaudewirs Dom 2020 W-W 75Cl -3614220",
+"Chateauneuf-du-Pape Blanc, Mont-Redon W/W 75Cl -95730002",
+"Chevallier Montrachet Pousse 2017 W-W 75Cl -2643417",
+"Clarendelle Blanc Domaine Dillon W-W 75Cl -97070127",
+"Condrieu E.Guigal W-W 75Cl -95030005",
+"Domaine de Montille Meursault Perrieres W-W 75Cl -2456222",
+"Gewurztraminer Hugel et Fils W-W 75Cl -95230002",
+"J Girardin Chassagne Montrachet 1ER Cru W-W 75Cl -3881722",
+"J.Moreau and Fils Petit Chablis Biodynamic W/W 75Cl-7385",
+"M.Chapoutier Cotes Du Rhone Blanc Belleruche W-W 75Cl -11918",
+"Macon AuxBois dAllier Domaine Cordier W-W 75Cl  -98410036",
+"Mas La Chevaliere Chardonnay Laroche W/W 75Cl -95170050",
+"Montille Puligny Montrachet Les Cailleret W-W 75Cl -2024922",
+"Muscadet Sur Lie Domaine de Bois Bruley W-W 75Cl -7278",
+"Phillipe Chavy Meursault Les Narvaux W-W 75Cl -3480722",
+"Pinot Gris Tradition Hugel et Fils W-W 75Cl -95230012",
+"Pouilly Fuiss Vieilles Vignes Cordier W-W 75Cl -98410002",
+"Pouilly Fume Baron De L Ladoucette W-W 75Cl -95190006",
+"Puligny Montrachet Domaine Joseph Drouhin W-W 75Cl -20623",
+"Riesling Beyer 2013 Eichberg Grand Cru W-W 75Cl -96930014",
+"Vincent Girardin Batard Montrachet 2018 W-W 75Cl -97350093",
+"Vincent Girardin Cuvee Saint Vincent W-W 75Cl -97350115",
+"Vincent Girardin Meursault Charme-Dessus W-W 75Cl -97350100",
+"William Fevre Chablis W-W 75Cl -8179",
+"Assyrtiko, Papagiannakos W/W 75Cl -98260128",
+"Loosen Kabinett Blue State W-W 75Cl -98000010",
+"Loosen Wehlener Auslese W-W 75Cl -98000014",
+"Riesling Dr Loosen QBA W/W 75Cl -95900016",
+"Tesch Unplugged Riesling W/W 75Cl -E0168",
+"Albarino Reserva Bodega Garzon W-W 75Cl -99660002",
+"Alteni di Brassica Langhe DOP Gaja W-W 75Cl -96460132",
+"Anthilia Donnafugata W-W 75Cl -95548759",
+"Arneis Roero Beni di Batisiolo W-W 75Cl -95490006",
+"Bramito Della Sala Cervo Antinori W-W 75Cl -19442",
+"Brancott Estate Sauvignon Blanc W-W 75Cl -14464",
+"Chardonnay Langhe Massolino W-W 75Cl -99740004",
+"Ciello Bianco Terroirs Cave Pyrene W-W 75Cl -98260167",
+"Corte Giara Pinot Grigio Delle Venezie IGT W/W 75Cl -7300",
+"Dreams Jermann Chardonnay W-W 75Cl -98130002",
+"Eclisse La Roncaia W-W 75Cl -98990014",
+"Emotivo Pinot Grigio Lombardy IGT W-W 75Cl -11956",
+"Fantinel BorgoTesis Sauvignon Blanc W-W 75Cl-98990007",
+"Gaja Rossj Bass Chardonnay W-W 75Cl -96460155",
+"Gaja Vistamare W-W 75Cl -96460093",
+"Greco di Tufo Docg Mastroberardino W-W 75Cl -95720806",
+"Grillo Tasca Alnerita W-W 75Cl -99380002",
+"Jermann Pinot Grigio W-W 75Cl -98130001",
+"Jermann Vintage Tunina W-W 75Cl -98130009",
+"La Scolca Gavi de Gavi Black Label W-W 75Cl -15136",
+"Leone DAlmerita Tasca W-W 75Cl -99380006",
+"Lugana Riserva Sergio Zenato W-W 75Cl -15124",
+"Lungarotti Chardonnay W-W 75Cl -31016",
+"Marco Felluga Friulano W-W 75Cl -99360013",
+"Mastro Fiano W-W 75Cl -95720829",
+"Monterotondo Commune Gavi Villa Sparina W-W 75Cl -91120323",
+"Pecorino Terre Vellodoro Umani Ronchi W-W 75Cl -91090524",
+"Pinot Grigio attems W-W 75Cl -95300009",
+"Pio Cesare Langhe Chardonnay Piodilei W-W 75Cl -27666",
+"Ribolla Gialla Vigneti Helena Fantinel W-W 75Cl -98990016",
+"Riesling San Leonardo W-W 75Cl -98990035",
+"Sauvignon Blanc Russiz Superiore W-W 75Cl -99360119",
+"Sauvignon Blanc Winkl Terlano W-W 75Cl -98040002",
+"Soave Bolla Retro W-W 75Cl -95280018",
+"Soave PRA Monte Grande W-W 75Cl -98260133",
+"Soave PRA Otto W-W 75Cl -98260131",
+"Terlano Vorberg Pinot Bianco W-W 75Cl -98040033",
+"Tomaresca Chardonnay W-W 75Cl - 98786",
+"Verdicchio dei Castelli di Jesi Ronchi W-W 75Cl -91090523",
+"Vermentino di Sardegna Tyrsos Contini W-W 75Cl -99360003",
+"Villa Antinori Bianco Toscana W/W 75Cl -6906",
+"Zizola Azisa 2022 W-W 75Cl -3082622",
+"Cloudy Bay Sauvignon Blanc W-W 75Cl -E0393",
+"Craggy Range Te Muna Road Sauvignon Blanc W-W 75Cl -11559",
+"Greywacke Pinot Gris 2014 W-W 75Cl -99180337",
+"Rapaura Rohe Blind River Sauvignon Blanc W-W 75Cl -40219",
+"Sauvignon Blanc Babydoll Yealands W/W 75Cl -99090010",
+"Bico Amarelo Vinho Verde Esporao W-W 75Cl - 95680011",
+"Chardonnay Hamilton Russell Vineyards W-W 75Cl -96510001",
+"Chenin Blanc Fish Hoek W-W 75Cl -96010182",
+"Chenin Blanc Simonsig W-W 75Cl -96030001",
+"Ken Forrester Old Vine Rsv Chenin Blanc W/W 75Cl -106486",
+"Gessami Gramona W-W 75Cl -97520025",
+"Chronic Stone Fox W-W 75Cl -26969"
+];
+var stItems = TEST_NAMES.map(function(n,i){ return { id:'t'+i, name:n }; });
+var stCounts = {};   // id -> qty  (test only)
+
+// ── voice parser + matcher (copied from the app's stock-take.js) ──────────
+var ST_ONES={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+var ST_TENS={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+var ST_UNITS={bottles:1,bottle:1,btl:1,each:1,kg:1,kilo:1,kilos:1,piece:1,pieces:1,pcs:1,pc:1,unit:1,units:1,case:1,cases:1,box:1,boxes:1,can:1,cans:1,gram:1,grams:1,litre:1,litres:1,liter:1,liters:1,ltr:1,glass:1,glasses:1};
+function stIsNumWord(t){ return (t in ST_ONES)||(t in ST_TENS)||t==='point'||/^\d+(\.\d+)?$/.test(t); }
+function stIntWords(tokens){
+  if(!tokens.length) return null;
+  if(tokens.length===1 && /^\d+$/.test(tokens[0])) return parseInt(tokens[0],10);
+  var total=0, any=false;
+  for(var k=0;k<tokens.length;k++){ var w=tokens[k];
+    if(w in ST_TENS){ total+=ST_TENS[w]; any=true; }
+    else if(w in ST_ONES){ total+=ST_ONES[w]; any=true; }
+    else if(/^\d+$/.test(w)){ total+=parseInt(w,10); any=true; }
+    else if(w==='a'||w==='an'){}
+    else return null;
+  }
+  return any?total:null;
+}
+function stPhraseToNumber(tokens){
+  if(!tokens||!tokens.length) return null;
+  var pIdx=tokens.indexOf('point');
+  if(pIdx>=0){
+    var iv=stIntWords(tokens.slice(0,pIdx));
+    var dec=tokens.slice(pIdx+1).map(function(x){ return (x in ST_ONES)?ST_ONES[x]:(/^\d$/.test(x)?+x:null); });
+    if(dec.some(function(x){return x===null;})) return null;
+    return (iv||0)+(dec.length?parseFloat('0.'+dec.join('')):0);
+  }
+  if(tokens.length===1 && /^\d+(\.\d+)?$/.test(tokens[0])) return parseFloat(tokens[0]);
+  return stIntWords(tokens);
+}
+function stVoiceExtract(transcript){
+  var s=(transcript||'').toLowerCase();
+  s=s.replace(/\band a half\b/g,' point five').replace(/\band a quarter\b/g,' point two five').replace(/\band three quarters\b/g,' point seven five').replace(/\bhalf\b/g,' point five');
+  s=s.replace(/[,]/g,' ');
+  var toks=s.split(/\s+/).filter(Boolean).filter(function(t){return !ST_UNITS[t];});
+  var qty=null,name='';
+  var st=toks.length; while(st>0 && stIsNumWord(toks[st-1])) st--;
+  var run=toks.slice(st);
+  if(run.length){
+    var hasPoint=run.indexOf('point')>=0||run.some(function(x){return /\d\.\d/.test(x);});
+    var tensOnes=run.length===2&&(run[0] in ST_TENS)&&(run[1] in ST_ONES);
+    if(run.length===1||hasPoint||tensOnes){ qty=stPhraseToNumber(run); name=toks.slice(0,st).join(' '); }
+    else { qty=stPhraseToNumber([run[run.length-1]]); name=toks.slice(0,toks.length-1).join(' '); }
+  } else {
+    var ls=0; while(ls<toks.length && stIsNumWord(toks[ls])) ls++;
+    if(ls>0 && ls<toks.length){ qty=stPhraseToNumber(toks.slice(0,ls)); name=toks.slice(ls).join(' '); }
+    else name=toks.join(' ');
+  }
+  return {qty:qty,name:name.trim()};
+}
+function stVoiceNorm(s){
+  s=String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');   // drop accents: château->chateau
+  return s.replace(/\s+-\s*\w+\s*$/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+function stLev(a,b){ var m=a.length,n=b.length; if(Math.abs(m-n)>3) return 9; var d=[],i,j; for(i=0;i<=m;i++)d[i]=[i]; for(j=0;j<=n;j++)d[0][j]=j; for(i=1;i<=m;i++)for(j=1;j<=n;j++){ var c=a.charAt(i-1)===b.charAt(j-1)?0:1; d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);} return d[m][n]; }
+function stPhon(s){
+  s=stVoiceNorm(s).replace(/[0-9]/g,'').replace(/\s+/g,'');
+  s=s.replace(/ck/g,'k').replace(/q/g,'k').replace(/c/g,'k').replace(/x/g,'ks').replace(/ph/g,'f').replace(/z/g,'s').replace(/y/g,'i').replace(/h/g,'');
+  return s.replace(/(.)\1+/g,'$1');
+}
+function stTokenHit(qt, nts, n){
+  if(n.indexOf(qt)>=0) return true;
+  var pq=stPhon(qt);
+  for(var i=0;i<nts.length;i++){ var w=nts[i];
+    if(w.length>=4 && qt.length>=4 && (w.indexOf(qt)===0||qt.indexOf(w)===0)) return true;
+    if(qt.length>=4 && stLev(qt,w)<=Math.max(1,Math.floor(qt.length/4))) return true;
+    if(pq.length>=3){ var pw=stPhon(w);
+      if(pw.length>=3 && (pw.indexOf(pq)>=0 || pq.indexOf(pw)===0 || stLev(pq,pw)<=1)) return true; }
+  }
+  return false;
+}
+function stVoiceMatch(query){
+  var q=stVoiceNorm(query); if(!q) return [];
+  var qt=q.split(' ').filter(function(t){return t.length>1;}); if(!qt.length) qt=[q];
+  var scored=[];
+  stItems.forEach(function(it){
+    var n=stVoiceNorm(it.name); if(!n) return; var nts=n.split(' ');
+    var hit=0; qt.forEach(function(t){ if(stTokenHit(t,nts,n)) hit++; });
+    var score=hit/qt.length;
+    if(n.indexOf(q)>=0) score+=0.5;
+    if(nts[0]===qt[0]) score+=0.15;
+    if(score>=0.5) scored.push({it:it,score:score});
+  });
+  scored.sort(function(a,b){return b.score-a.score;});
+  return scored.slice(0,30).map(function(x){return x.it;});
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────
+var rec=null, cands=[], vFinal='', vInterim='', vDone=false, vMode='full';
+var vLang=(function(){ try{ return localStorage.getItem('stVoiceLang')||'en-GB'; }catch(e){ return 'en-GB'; } })();
+function supported(){ return ('SpeechRecognition' in window)||('webkitSpeechRecognition' in window); }
+if(!supported()){ document.getElementById('micBtn').textContent='🎤 Voice not available on this device — type below'; document.getElementById('micBtn').style.opacity=.6; }
+(function(){ var ls=document.getElementById('langSel'); if(ls){ ls.value=vLang; ls.onchange=function(){ vLang=this.value; try{ localStorage.setItem('stVoiceLang',vLang); }catch(e){} }; } })();
+
+document.getElementById('micBtn').onclick=startVoice;
+function startVoice(mode){
+  if(!supported()){ alert('Voice needs Chrome (laptop or Android). On iPhone, type a phrase in the box instead.'); return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  vMode = (mode==='qty') ? 'qty' : 'full';
+  if(vMode!=='qty'){ var oc=document.getElementById('confModal'); if(oc) oc.remove(); }  // qty mode keeps the confirm card
+  try{ if(rec) rec.abort(); }catch(e){}
+  vFinal=''; vInterim=''; vDone=false;
+  showListening(vMode);
+  // continuous + interim: keep listening (no rush), show live text, act only on Done
+  rec=new SR(); rec.lang=vLang; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
+  rec.onresult=function(e){
+    vFinal=''; vInterim='';
+    for(var i=0;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) vFinal+=r[0].transcript+' '; else vInterim+=r[0].transcript; }
+    var el=document.getElementById('listenText'); if(el) el.textContent=(vFinal+vInterim).trim()||'…';
+  };
+  rec.onerror=function(e){ if(e.error==='aborted') return; vDone=true; closeListening(); if(e.error==='not-allowed'||e.error==='service-not-allowed') alert('Allow microphone access to use voice.'); else if(e.error==='no-speech') alert('Didn\'t catch anything — tap the mic and try again.'); };
+  rec.onend=function(){ if(vDone) return; vDone=true; closeListening(); var t=(vFinal+' '+vInterim).trim(); if(t) voiceRoute(t); };
+  try{ rec.start(); }catch(err){ closeListening(); alert('Could not start voice — try again.'); }
+}
+function voiceStop(){ if(vDone) return; vDone=true; var t=(vFinal+' '+vInterim).trim(); try{ if(rec) rec.stop(); }catch(e){} closeListening(); if(t) voiceRoute(t); else alert('Didn\'t catch anything — tap the mic and try again.'); }
+function voiceRoute(t){ if(vMode==='qty') fillQty(t); else handle(t); }
+function fillQty(transcript){
+  var ex=stVoiceExtract(transcript); var q=ex.qty;
+  if(q==null){ var n=parseFloat(String(transcript).replace(/[^0-9.]/g,'')); if(!isNaN(n)) q=n; }
+  if(q==null||isNaN(q)){ alert('Didn\'t catch a number — say just the quantity, e.g. "twenty four".'); return; }
+  var box=document.getElementById('cQty'); if(box) box.value=q;
+}
+function voiceCancelListen(){ vDone=true; try{ if(rec) rec.abort(); }catch(e){} closeListening(); }
+document.getElementById('typedGo').onclick=function(){ var v=document.getElementById('typed').value.trim(); if(v) handle(v); };
+document.getElementById('typed').addEventListener('keydown',function(e){ if(e.key==='Enter'){ var v=this.value.trim(); if(v) handle(v); } });
+document.getElementById('clearBtn').onclick=function(){ stCounts={}; renderCounted(); };
+
+function handle(transcript){
+  closeListening();
+  var ex=stVoiceExtract(transcript);
+  cands=stVoiceMatch(ex.name);
+  showConfirm(transcript, ex.qty, cands);
+}
+function showListening(mode){
+  var old=document.getElementById('listenModal'); if(old) old.remove();
+  var sub=(mode==='qty')?'Say just the quantity, e.g. "twenty four", then tap <b>Done</b>.':'Say the item and how many, then tap <b>Done</b>.';
+  var b=document.createElement('div'); b.id='listenModal'; b.className='modal';
+  b.innerHTML='<div class="box listening"><div class="big">🎤</div>'+
+    '<div style="font-weight:700;color:#410207;margin:8px 0 4px">Listening… take your time</div>'+
+    '<div style="font-size:12px;color:#8a7a55;margin-bottom:8px">'+sub+'</div>'+
+    '<div id="listenText" style="min-height:22px;font-size:15px;color:#2a1a10;background:#f7f1e6;border-radius:8px;padding:8px;margin-bottom:12px">…</div>'+
+    '<div class="row" style="justify-content:center"><button onclick="voiceCancelListen()">Cancel</button>'+
+    '<button class="add" onclick="voiceStop()">Done</button></div></div>';
+  document.body.appendChild(b);
+}
+function closeListening(){ var m=document.getElementById('listenModal'); if(m) m.remove(); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showConfirm(heard, qty, list){
+  var old=document.getElementById('confModal'); if(old) old.remove();
+  var opts=list.length ? list.map(function(it,i){ var c=stCounts[it.id]; var now=(c!=null)?(' — now '+c):''; return '<option value="'+i+'">'+esc(it.name)+now+'</option>'; }).join('') : '<option value="-1">No match found</option>';
+  var qv=(qty==null||isNaN(qty))?'':qty;
+  var b=document.createElement('div'); b.id='confModal'; b.className='modal';
+  b.innerHTML='<div class="box"><h3>Check before saving</h3><div class="heard">Heard: "'+esc(heard)+'"</div>'+
+    '<label>Item'+(list.length>1?' — '+list.length+' matches, pick one':'')+'</label><select id="cItem">'+opts+'</select>'+
+    '<label>Add this many</label><div style="display:flex;gap:8px;margin-bottom:12px"><input id="cQty" inputmode="decimal" value="'+qv+'" placeholder="how many" style="flex:1;margin-bottom:0">'+
+    '<button onclick="startVoice(\'qty\')" style="flex:none;border:1px solid var(--gold);background:#fff;color:var(--vino);border-radius:10px;padding:0 12px;font-weight:600;cursor:pointer">🎤 Say number</button></div>'+
+    '<div class="row"><button onclick="document.getElementById(\'confModal\').remove()">Cancel</button>'+
+    '<button onclick="micFromConfirm()">🎤 Try again</button>'+
+    '<button class="add" onclick="doAdd()">Add</button></div></div>';
+  document.body.appendChild(b);
+}
+function micFromConfirm(){ var m=document.getElementById('confModal'); if(m) m.remove(); document.getElementById('micBtn').click(); }
+function doAdd(){
+  var sel=document.getElementById('cItem'); var i=parseInt(sel.value,10);
+  if(isNaN(i)||i<0||!cands[i]){ alert('No item picked.'); return; }
+  var qty=parseFloat((document.getElementById('cQty').value||'').trim().replace(',','.'));
+  if(isNaN(qty)||qty<=0){ alert('Enter how many to add.'); return; }
+  var it=cands[i];
+  stCounts[it.id]=(stCounts[it.id]||0)+qty;       // +add (test only, in memory)
+  var m=document.getElementById('confModal'); if(m) m.remove();
+  renderCounted();
+}
+function renderCounted(){
+  var el=document.getElementById('countedList');
+  var ids=Object.keys(stCounts).filter(function(k){return stCounts[k]>0;});
+  document.getElementById('clearBtn').style.display = ids.length?'inline-block':'none';
+  if(!ids.length){ el.innerHTML='<div class="empty">Nothing yet — try the mic or type a phrase.</div>'; return; }
+  el.innerHTML=ids.map(function(id){ var it=stItems.find(function(x){return x.id===id;}); return '<div class="crow"><span>'+esc(it.name)+'</span><b>'+stCounts[id]+'</b></div>'; }).join('');
+}
+</script>
+</body>
+</html>
