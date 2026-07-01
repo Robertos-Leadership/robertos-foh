@@ -33,6 +33,9 @@ var STOCK_SUPER = { '1212': 'Stock Take Admin', '0000': 'Cost Controller', '2468
 // Destructive actions (Clear all counts, Upload/replace the month's list) are
 // limited to these admin codes so a regular counter can't wipe a live count.
 function stIsSuper(){ return !!(stUser && STOCK_SUPER[stUser.emp_id]); }
+// Locking/unlocking a finalized month is Aung's call alone (his code, 0000) —
+// not shared with the other admin codes, so it can't be triggered by mistake.
+function stCanLock(){ return !!(stUser && stUser.emp_id==='0000'); }
 
 // Previous-month reference (the grey "Last month: …" line + last-month closing
 // total) is BUILT but hidden for now. Flip to true to switch it back on — planned
@@ -49,7 +52,8 @@ var stCounts  = {};          // item_id -> { qty, unit, counted_by, counted_by_n
 var stUser    = null;        // { emp_id, name }  (null until signed in; persists across dept switch)
 var stSearch  = '';
 var stCatFilter = '';
-var stOnlyCounted = false;   // "Counted only" tickbox
+var stCountFilter = '';      // '' | 'counted' | 'uncounted' — which items to show
+var stSortBy = '';           // '' | 'value' — highest value first, to spot mis-entries fast
 var stUnitSel = {};          // item_id -> chosen unit (for 2-unit items)
 var stChannel = null;
 var stLoading = false;
@@ -197,6 +201,14 @@ function stSubscribe(){
       })
     .on('postgres_changes', { event:'*', schema:'public', table:'stock_take_items', filter:'month=eq.'+stMonth },
       function(){ if(stActive()){ stLoadItems().then(function(){ if(stActive()) stSafeRenderRows(); }); } })
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'stock_take_sheets', filter:'month=eq.'+stMonth },
+      function(payload){
+        // an admin locked/unlocked this sheet on another device — freeze/unfreeze here too, instantly
+        var r = payload.new; if(!r || r.dept!==stDept || !stSheet || r.id!==stSheet.id) return;
+        var wasLocked = !!stSheet.locked;
+        stSheet = r;
+        if(!!r.locked!==wasLocked && stActive()) stRender();
+      })
     .subscribe();
 }
 
@@ -221,6 +233,7 @@ function stSignOut(){ stUser = null; stRender(); }
 // ── write one item's count (upsert / delete on empty), optimistic + rollback ──
 async function stSetQty(itemId, value){
   if(!stUser) return;
+  if(stIsLocked()){ toast('This month is locked — counts can no longer be changed.', true); stUpdateRowUI(itemId); return; }
   var prev = stCounts[itemId] ? Object.assign({}, stCounts[itemId]) : null;
   var it = stItems.find(function(x){ return x.id===itemId; });
   var unit = it ? stItemUnit(it) : null;
@@ -261,6 +274,7 @@ async function stSetQty(itemId, value){
 // optimistically, then trust the server's returned running total. ──
 async function stAddQty(itemId, value){
   if(!stUser) return;
+  if(stIsLocked()){ toast('This month is locked — counts can no longer be changed.', true); var b=document.getElementById('st-add-'+itemId); if(b) b.value=''; return; }
   var addBox = document.getElementById('st-add-'+itemId);
   var raw = (value==null?'':String(value)).trim().replace(',', '.');   // accept "2,5"
   var delta = Number(raw);
@@ -293,18 +307,24 @@ async function stAddQty(itemId, value){
 // ── derived ──
 function stFilteredItems(){
   var q = stSearch.toLowerCase();
-  return stItems.filter(function(it){
+  var out = stItems.filter(function(it){
     if(stCatFilter && it.item_group !== stCatFilter) return false;
-    if(stOnlyCounted){ var c=stCounts[it.id]; if(!c||c.qty==null) return false; }
+    var c=stCounts[it.id], counted = !!(c && c.qty!=null);
+    if(stCountFilter==='counted' && !counted) return false;
+    if(stCountFilter==='uncounted' && counted) return false;
     if(q && it.name.toLowerCase().indexOf(q)===-1 && String(it.code||'').indexOf(q)===-1) return false;
     return true;
   });
+  if(stSortBy==='value') out = out.slice().sort(function(a,b){ return stLineValue(b)-stLineValue(a); });
+  return out;
 }
 function stCats(){ return Array.from(new Set(stItems.map(function(i){ return i.item_group||'Other'; }))); }
 function stLineValue(it){ var c = stCounts[it.id]; if(!c||c.qty==null) return 0; return stItemPrice(it)*Number(c.qty); }
 function stGrandTotal(){ var t=0; stItems.forEach(function(it){ t+=stLineValue(it); }); return t; }
 function stCountedCount(){ var n=0; stItems.forEach(function(it){ var c=stCounts[it.id]; if(c&&c.qty!=null) n++; }); return n; }
 function stCategoryTotal(){ var t=0; stItems.forEach(function(it){ if(!stCatFilter||it.item_group===stCatFilter) t+=stLineValue(it); }); return t; }
+// once the cost controller finalizes a month, it's locked — no more entering/adjusting/clearing counts
+function stIsLocked(){ return !!(stSheet && stSheet.locked); }
 
 // ── self-contained CSS (no dependency on FOH's own button/card classes) ──
 function stInjectCss(){
@@ -329,7 +349,6 @@ function stInjectCss(){
     '.st-label{font-size:11px;color:#8a7a55;text-transform:uppercase;letter-spacing:1px;margin-top:2px}'+
     '.st-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px 2px}'+
     '.st-input,.st-select{height:38px;border:1px solid #c9a84c;border-radius:8px;padding:0 10px;font-size:14px;background:#fff}'+
-    '.st-onlycount{display:flex;align-items:center;gap:6px;font-size:13px;color:#7a6a55;white-space:nowrap}'+
     '.st-catbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 2px;font-size:13px}'+
     '.st-catbar b{color:#410207}'+
     '.st-muted{font-size:12px;color:#8a7a55}'+
@@ -349,6 +368,7 @@ function stInjectCss(){
     '.st-prev{margin-top:3px;font-size:11px;color:#9a8a6a;font-style:italic}'+
     '.st-prevtotal{padding:6px 14px 0;font-size:12px;color:#8a7a55}'+
     '.st-prevtotal b{color:#410207}'+
+    '.st-lockbanner{margin:10px 14px 0;padding:10px 12px;background:#f3eee6;border:1px solid #c9a84c;border-radius:10px;font-size:13px;color:#5a4a2a;line-height:1.4}'+
     '.st-qtywrap{justify-self:center;display:flex;flex-direction:column;align-items:center;gap:4px}'+
     '.st-qty{width:76px;height:38px;text-align:center;border:1px solid #c9a84c;border-radius:8px;font-size:16px;background:#fff}'+
     '.st-add{width:76px;height:30px;text-align:center;border:1px dashed #1d7a4a;border-radius:8px;font-size:13px;color:#1d7a4a;background:#f3faf5}'+
@@ -396,6 +416,7 @@ function stRender(){
     deptBar +
     '<div class="st-title">'+stEsc(stDeptLabel())+' Stock Take · '+stEsc(monLabel)+'</div>'+
     '<div class="st-sub">'+stItems.length+' items · shared live · tap a quantity to count</div>'+
+    (stIsLocked() ? '<div class="st-lockbanner">🔒 This month is <b>locked</b>'+(stSheet.locked_by_name?' by '+stEsc(stSheet.locked_by_name):'')+' — counts can no longer be entered, added to, or cleared. Email/Excel/Print still work.</div>' : '')+
     stGateHtml()+
     '<div class="st-cards">'+
       '<div class="st-card dark"><div class="st-num" id="st-grand">'+stMoney(stGrandTotal())+'</div><div class="st-label">Counted value (all)</div></div>'+
@@ -405,7 +426,15 @@ function stRender(){
     '<div class="st-toolbar">'+
       '<input class="st-input" id="st-search" placeholder="Search items…" value="'+stEsc(stSearch)+'" oninput="stOnSearch(this.value)" style="flex:1;min-width:140px">'+
       '<select class="st-select" id="st-cat" onchange="stOnCat(this.value)">'+cats+'</select>'+
-      '<label class="st-onlycount"><input type="checkbox" id="st-onlycount" '+(stOnlyCounted?'checked':'')+' onchange="stToggleOnlyCounted(this.checked)"> Counted only</label>'+
+      '<select class="st-select" id="st-countfilter" onchange="stOnCountFilter(this.value)">'+
+        '<option value=""'+(stCountFilter===''?' selected':'')+'>All items</option>'+
+        '<option value="counted"'+(stCountFilter==='counted'?' selected':'')+'>Counted only</option>'+
+        '<option value="uncounted"'+(stCountFilter==='uncounted'?' selected':'')+'>Not counted yet</option>'+
+      '</select>'+
+      '<select class="st-select" id="st-sortby" onchange="stOnSort(this.value)">'+
+        '<option value=""'+(stSortBy===''?' selected':'')+'>List order</option>'+
+        '<option value="value"'+(stSortBy==='value'?' selected':'')+'>Highest value first</option>'+
+      '</select>'+
       (stIsSuper()?'<button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload month</button>':'')+
     '</div>'+
     '<div class="st-catbar"><span id="st-catlabel">'+(stCatFilter?stEsc(stCatFilter):'All categories')+'</span>'+
@@ -414,14 +443,17 @@ function stRender(){
         '<button class="st-btn" onclick="stReviewSend()">Email to Aung</button>'+
         '<button class="st-btn" onclick="stExportExcel()">Download Excel</button>'+
         '<button class="st-btn" onclick="stPrint()">Print</button>'+
-        (stIsSuper()?'<button class="st-btn danger" onclick="stClearAllCounts()">Clear all counts</button>':'')+
+        (stIsSuper() && !stIsLocked() ?'<button class="st-btn danger" onclick="stClearAllCounts()">Clear all counts</button>':'')+
+        (stCanLock() ? (stIsLocked()
+          ? '<button class="st-btn" onclick="stUnlockMonth()">🔓 Unlock this month</button>'
+          : '<button class="st-btn" onclick="stLockMonth()">🔒 Lock this month</button>') : '')+
       '</div>' : '')+
-    (stUser && stVoiceSupported() ? '<div style="display:flex;gap:8px;margin:8px 14px 0">'+
+    (stUser && !stIsLocked() && stVoiceSupported() ? '<div style="display:flex;gap:8px;margin:8px 14px 0">'+
         '<button class="st-btn" style="flex:1;background:#410207;color:#f5ede0;height:46px;font-size:15px" onclick="stVoiceStart()">🎤 Count by voice</button>'+
         '<select class="st-select" style="flex:none;height:46px" title="Voice language — set it to the section you are counting" onchange="stVoiceLang=this.value">'+
           ['en-GB','fr-FR','it-IT'].map(function(L){ var lbl={'en-GB':'EN','fr-FR':'FR','it-IT':'IT'}[L]; return '<option value="'+L+'"'+(stVoiceLang===L?' selected':'')+'>'+lbl+'</option>'; }).join('')+
         '</select></div>' : '')+
-    (stUser?'<div style="padding:4px 14px 0;font-size:12px;color:#8a7a55;line-height:1.4">Type the <b>total</b> you counted in the white box. Use the green <b>+ add</b> box to add onto a count someone already started (e.g. a second person or the store-room).'+(stVoiceSupported()?' Or tap <b>🎤 Count by voice</b> and say the item and how many.':'')+'</div>':'')+
+    (stUser && !stIsLocked() ?'<div style="padding:4px 14px 0;font-size:12px;color:#8a7a55;line-height:1.4">Type the <b>total</b> you counted in the white box. Use the green <b>+ add</b> box to add onto a count someone already started (e.g. a second person or the store-room).'+(stVoiceSupported()?' Or tap <b>🎤 Count by voice</b> and say the item and how many.':'')+'</div>':'')+
     '<div id="st-rows"></div>'+
     '<button class="st-addbtn" onclick="stShowAdd()">+ Add missing item</button>';
 
@@ -432,31 +464,33 @@ function stRenderRows(){
   var c = document.getElementById('st-rows'); if(!c) return;
   var items = stFilteredItems();
   if(!items.length){ c.innerHTML = '<div class="st-nodata">No items match your search.</div>'; return; }
-  var locked = !stUser;
+  var disabled = !stUser || stIsLocked();   // no user signed in, OR this month is finalized/locked
+  var flat = stSortBy==='value';   // sorted-by-value is a flat ranked list — category dividers would be meaningless, show the category inline instead
   var html = '';
   var lastCat = null;
   items.forEach(function(it){
     var cat = it.item_group||'Other';
-    if(cat!==lastCat){ html += '<div class="st-cat">'+stEsc(cat)+'</div>'; lastCat = cat; }
+    if(!flat && cat!==lastCat){ html += '<div class="st-cat">'+stEsc(cat)+'</div>'; lastCat = cat; }
     var c2 = stCounts[it.id];
     var qv = (c2&&c2.qty!=null) ? c2.qty : '';
     var multi = Array.isArray(it.units) && it.units.length>1;
     var unitCtl = multi
-      ? '<select class="st-unit" '+(locked?'disabled':'')+' onchange="stPickUnit(\''+it.id+'\',this.value)">'+
+      ? '<select class="st-unit" '+(disabled?'disabled':'')+' onchange="stPickUnit(\''+it.id+'\',this.value)">'+
         it.units.map(function(u){ return '<option value="'+stEsc(u.unit)+'"'+(stItemUnit(it)===u.unit?' selected':'')+'>'+stEsc(u.unit)+' · '+stMoney(u.price)+'</option>'; }).join('')+'</select>'
       : '<span class="st-muted">'+stEsc(it.unit||'')+' · '+stMoney(stItemPrice(it))+'</span>';
     html +=
-      '<div class="st-row'+(locked?' locked':'')+'" id="st-row-'+it.id+'">'+
+      '<div class="st-row'+(disabled?' locked':'')+'" id="st-row-'+it.id+'">'+
         '<div class="st-main">'+
           '<div class="st-namecol">'+
             '<div class="st-name">'+stEsc(it.name)+(it.is_added?'<span class="st-tag">added</span>':'')+'</div>'+
+            (flat?'<div class="st-muted" style="margin-top:1px">'+stEsc(cat)+'</div>':'')+
             '<div class="st-meta">'+unitCtl+'</div>'+
             stPrevText(it)+
           '</div>'+
           '<div class="st-qtywrap">'+
-            '<input class="st-qty" inputmode="decimal" placeholder="0" value="'+qv+'" '+(locked?'disabled':'')+
+            '<input class="st-qty" inputmode="decimal" placeholder="0" value="'+qv+'" '+(disabled?'disabled':'')+
               ' onfocus="stFocusRow(\''+it.id+'\',true)" onblur="stFocusRow(\''+it.id+'\',false)" onchange="stSetQty(\''+it.id+'\',this.value)">'+
-            '<input class="st-add" id="st-add-'+it.id+'" inputmode="decimal" placeholder="+ add" '+(locked?'disabled':'')+
+            '<input class="st-add" id="st-add-'+it.id+'" inputmode="decimal" placeholder="+ add" '+(disabled?'disabled':'')+
               ' title="Add what you just found — it sums onto the count" onfocus="stFocusRow(\''+it.id+'\',true)" onblur="stFocusRow(\''+it.id+'\',false)" onchange="stAddQty(\''+it.id+'\',this.value)">'+
           '</div>'+
           '<span class="st-line" id="st-line-'+it.id+'">'+stMoney(stLineValue(it))+'</span>'+
@@ -499,7 +533,8 @@ function stRenderTotals(){
 var stSearchTimer=null;
 function stOnSearch(v){ stSearch=v; clearTimeout(stSearchTimer); stSearchTimer=setTimeout(stRenderRows,120); }
 function stOnCat(v){ stCatFilter=v; stRenderRows(); stRenderTotals(); }
-function stToggleOnlyCounted(v){ stOnlyCounted=!!v; stRenderRows(); }
+function stOnCountFilter(v){ stCountFilter=v; stRenderRows(); }
+function stOnSort(v){ stSortBy=v; stRenderRows(); }
 function stFocusRow(itemId, on){ var r=document.getElementById('st-row-'+itemId); if(r) r.classList.toggle('active', on); }
 function stPickUnit(itemId, unit){ stUnitSel[itemId]=unit; stUpdateRowUI(itemId); stRenderTotals(); if(stCounts[itemId]&&stCounts[itemId].qty!=null) stSetQty(itemId, stCounts[itemId].qty); }
 
@@ -510,10 +545,35 @@ async function stSetDept(dept){
   await stOpen();
 }
 
+// ── lock / unlock a finalized month: once locked, nobody can enter, add-to,
+// clear, add-missing-item, or re-upload over this dept+month. Email/Excel/Print
+// still work so the cost controller can re-send the final numbers any time. ──
+async function stLockMonth(){
+  if(!stCanLock()){ toast('Only Aung\'s code (0000) can lock a month.', true); return; }
+  if(!stSheet){ return; }
+  if(!confirm('Lock '+stDeptLabel()+' — '+stMonth+'?\n\nNobody will be able to enter, add, or clear counts until an admin unlocks it again.')) return;
+  var res=await sb.from('stock_take_sheets').update({ locked:true, locked_by:stUser.emp_id, locked_by_name:stUser.name, locked_at:new Date().toISOString() }).eq('id', stSheet.id);
+  if(res.error){ toast('Could not lock: '+res.error.message, true); return; }
+  stSheet.locked=true; stSheet.locked_by_name=stUser.name;
+  stRender();
+  toast('🔒 '+stDeptLabel()+' '+stMonth+' is now locked.');
+}
+async function stUnlockMonth(){
+  if(!stCanLock()){ toast('Only Aung\'s code (0000) can unlock a month.', true); return; }
+  if(!stSheet){ return; }
+  if(!confirm('Unlock '+stDeptLabel()+' — '+stMonth+'?\n\nCounts can be entered, added to, or cleared again until it is re-locked.')) return;
+  var res=await sb.from('stock_take_sheets').update({ locked:false }).eq('id', stSheet.id);
+  if(res.error){ toast('Could not unlock: '+res.error.message, true); return; }
+  stSheet.locked=false;
+  stRender();
+  toast('🔓 '+stDeptLabel()+' '+stMonth+' unlocked.');
+}
+
 // wipe EVERY quantity entered for this dept+month (all counters) — confirmed first
 async function stClearAllCounts(){
   if(!stUser){ toast('Enter your employee ID first.', true); return; }
   if(!stIsSuper()){ toast('Only an admin code (1212 / 0000 / 2468) can clear all counts.', true); return; }
+  if(stIsLocked()){ toast('This month is locked — unlock it first to clear counts.', true); return; }
   if(!stCountedCount()){ toast('Nothing counted yet.'); return; }
   if(!confirm('Clear ALL counts for '+stDeptLabel()+' — '+stMonth+'?\n\nThis erases every quantity entered this month — by everyone — and cannot be undone. The item list stays.')) return;
   var res=await sb.from('stock_take_counts').delete().eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',stMonth);
@@ -526,6 +586,7 @@ async function stClearAllCounts(){
 // ── add a missing item (anyone signed in) ──
 function stShowAdd(){
   if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  if(stIsLocked()){ toast('This month is locked — no items can be added.', true); return; }
   var old=document.getElementById('st-add-modal'); if(old) old.remove();
   var box=document.createElement('div');
   box.id='st-add-modal'; box.className='st-modal';
@@ -776,8 +837,9 @@ async function stHandleUpload(){
   }
 }
 async function stApplyUpload(month, items, filename){
-  var existing=await sb.from('stock_take_sheets').select('id').eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',month).limit(1);
+  var existing=await sb.from('stock_take_sheets').select('id,locked').eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',month).limit(1);
   if(existing.data && existing.data.length){
+    if(existing.data[0].locked) throw new Error(month+' is LOCKED — an admin must unlock it before it can be replaced.');
     if(!confirm('A '+stDeptLabel()+' stock take for '+month+' already exists. Replacing it clears any counts already entered for that month. Continue?')) throw new Error('cancelled');
   }
   // supabase-js never throws — check each destructive step's .error and abort
@@ -926,6 +988,7 @@ var stVoiceCands=[];
 // already-open confirm card (so you can say the product first, then the quantity).
 function stVoiceStart(mode){
   if(!stUser){ toast('Enter your employee ID first.', true); return; }
+  if(stIsLocked()){ toast('This month is locked — counts can no longer be changed.', true); return; }
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast('Voice needs Android Chrome. On iPhone, tap a box and use the keyboard mic.', true); return; }
   stVoiceMode = (mode==='qty') ? 'qty' : 'full';
