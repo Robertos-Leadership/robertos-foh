@@ -49,7 +49,8 @@ var stCounts  = {};          // item_id -> { qty, unit, counted_by, counted_by_n
 var stUser    = null;        // { emp_id, name }  (null until signed in; persists across dept switch)
 var stSearch  = '';
 var stCatFilter = '';
-var stOnlyCounted = false;   // "Counted only" tickbox
+var stCountFilter = '';      // '' | 'counted' | 'uncounted' — which items to show
+var stSortBy = '';           // '' | 'value' — highest value first, to spot mis-entries fast
 var stUnitSel = {};          // item_id -> chosen unit (for 2-unit items)
 var stChannel = null;
 var stLoading = false;
@@ -293,12 +294,16 @@ async function stAddQty(itemId, value){
 // ── derived ──
 function stFilteredItems(){
   var q = stSearch.toLowerCase();
-  return stItems.filter(function(it){
+  var out = stItems.filter(function(it){
     if(stCatFilter && it.item_group !== stCatFilter) return false;
-    if(stOnlyCounted){ var c=stCounts[it.id]; if(!c||c.qty==null) return false; }
+    var c=stCounts[it.id], counted = !!(c && c.qty!=null);
+    if(stCountFilter==='counted' && !counted) return false;
+    if(stCountFilter==='uncounted' && counted) return false;
     if(q && it.name.toLowerCase().indexOf(q)===-1 && String(it.code||'').indexOf(q)===-1) return false;
     return true;
   });
+  if(stSortBy==='value') out = out.slice().sort(function(a,b){ return stLineValue(b)-stLineValue(a); });
+  return out;
 }
 function stCats(){ return Array.from(new Set(stItems.map(function(i){ return i.item_group||'Other'; }))); }
 function stLineValue(it){ var c = stCounts[it.id]; if(!c||c.qty==null) return 0; return stItemPrice(it)*Number(c.qty); }
@@ -329,7 +334,6 @@ function stInjectCss(){
     '.st-label{font-size:11px;color:#8a7a55;text-transform:uppercase;letter-spacing:1px;margin-top:2px}'+
     '.st-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px 2px}'+
     '.st-input,.st-select{height:38px;border:1px solid #c9a84c;border-radius:8px;padding:0 10px;font-size:14px;background:#fff}'+
-    '.st-onlycount{display:flex;align-items:center;gap:6px;font-size:13px;color:#7a6a55;white-space:nowrap}'+
     '.st-catbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 2px;font-size:13px}'+
     '.st-catbar b{color:#410207}'+
     '.st-muted{font-size:12px;color:#8a7a55}'+
@@ -405,7 +409,15 @@ function stRender(){
     '<div class="st-toolbar">'+
       '<input class="st-input" id="st-search" placeholder="Search items…" value="'+stEsc(stSearch)+'" oninput="stOnSearch(this.value)" style="flex:1;min-width:140px">'+
       '<select class="st-select" id="st-cat" onchange="stOnCat(this.value)">'+cats+'</select>'+
-      '<label class="st-onlycount"><input type="checkbox" id="st-onlycount" '+(stOnlyCounted?'checked':'')+' onchange="stToggleOnlyCounted(this.checked)"> Counted only</label>'+
+      '<select class="st-select" id="st-countfilter" onchange="stOnCountFilter(this.value)">'+
+        '<option value=""'+(stCountFilter===''?' selected':'')+'>All items</option>'+
+        '<option value="counted"'+(stCountFilter==='counted'?' selected':'')+'>Counted only</option>'+
+        '<option value="uncounted"'+(stCountFilter==='uncounted'?' selected':'')+'>Not counted yet</option>'+
+      '</select>'+
+      '<select class="st-select" id="st-sortby" onchange="stOnSort(this.value)">'+
+        '<option value=""'+(stSortBy===''?' selected':'')+'>List order</option>'+
+        '<option value="value"'+(stSortBy==='value'?' selected':'')+'>Highest value first</option>'+
+      '</select>'+
       (stIsSuper()?'<button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload month</button>':'')+
     '</div>'+
     '<div class="st-catbar"><span id="st-catlabel">'+(stCatFilter?stEsc(stCatFilter):'All categories')+'</span>'+
@@ -428,11 +440,12 @@ function stRenderRows(){
   var items = stFilteredItems();
   if(!items.length){ c.innerHTML = '<div class="st-nodata">No items match your search.</div>'; return; }
   var locked = !stUser;
+  var flat = stSortBy==='value';   // sorted-by-value is a flat ranked list — category dividers would be meaningless, show the category inline instead
   var html = '';
   var lastCat = null;
   items.forEach(function(it){
     var cat = it.item_group||'Other';
-    if(cat!==lastCat){ html += '<div class="st-cat">'+stEsc(cat)+'</div>'; lastCat = cat; }
+    if(!flat && cat!==lastCat){ html += '<div class="st-cat">'+stEsc(cat)+'</div>'; lastCat = cat; }
     var c2 = stCounts[it.id];
     var qv = (c2&&c2.qty!=null) ? c2.qty : '';
     var multi = Array.isArray(it.units) && it.units.length>1;
@@ -445,6 +458,7 @@ function stRenderRows(){
         '<div class="st-main">'+
           '<div class="st-namecol">'+
             '<div class="st-name">'+stEsc(it.name)+(it.is_added?'<span class="st-tag">added</span>':'')+'</div>'+
+            (flat?'<div class="st-muted" style="margin-top:1px">'+stEsc(cat)+'</div>':'')+
             '<div class="st-meta">'+unitCtl+'</div>'+
             stPrevText(it)+
           '</div>'+
@@ -494,7 +508,8 @@ function stRenderTotals(){
 var stSearchTimer=null;
 function stOnSearch(v){ stSearch=v; clearTimeout(stSearchTimer); stSearchTimer=setTimeout(stRenderRows,120); }
 function stOnCat(v){ stCatFilter=v; stRenderRows(); stRenderTotals(); }
-function stToggleOnlyCounted(v){ stOnlyCounted=!!v; stRenderRows(); }
+function stOnCountFilter(v){ stCountFilter=v; stRenderRows(); }
+function stOnSort(v){ stSortBy=v; stRenderRows(); }
 function stFocusRow(itemId, on){ var r=document.getElementById('st-row-'+itemId); if(r) r.classList.toggle('active', on); }
 function stPickUnit(itemId, unit){ stUnitSel[itemId]=unit; stUpdateRowUI(itemId); stRenderTotals(); if(stCounts[itemId]&&stCounts[itemId].qty!=null) stSetQty(itemId, stCounts[itemId].qty); }
 
