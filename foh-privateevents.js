@@ -961,7 +961,7 @@ function peRenderQuick(){
     '<div class="pe-tot-row"><span>Total pieces</span><b>'+tt.pieces+'</b></div>'+
     '<div class="pe-tot-row"><span>Total price</span><b>AED '+peMoney(tt.price)+'</b></div>'+
     '<div class="pe-tot-row" style="border-top:1px solid #DCC9B2;margin-top:4px;padding-top:7px"><span>Price / guest</span><b>'+(tt.perGuest!=null&&tt.guests?('AED '+peMoney(tt.perGuest)):'\u2014')+'</b></div>'+
-    '<div class="pe-tot-row"><span>Distinct dishes</span><b>'+tt.distinct+'</b></div>';
+    '<div class="pe-tot-row"><span>Different dishes on the menu</span><b>'+tt.distinct+'</b></div>';
   if(tt.distinct>15) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Above the 15-dish kitchen cap \u2014 reduce variety</div>';
   else if(tt.distinct>10) h += '<div class="pe-flag" style="color:#7A5500">\u25b2 Within range \u2014 confirm lead time with the kitchen</div>';
   if(tt.pcsPerGuest!=null && tt.pieces>0){
