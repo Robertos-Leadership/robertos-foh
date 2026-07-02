@@ -383,15 +383,15 @@ if ('serviceWorker' in navigator) {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 28px clamp(20px, 5vw, 48px);
-    max-width: 860px;
+    padding: 24px clamp(20px, 5vw, 48px);
+    max-width: 1070px;
     margin: 0 auto;
     width: 100%;
   }
   .landing-brand {
-    width: min(150px, 40vw);
+    width: min(140px, 40vw);
     height: auto;
-    margin-bottom: 16px;
+    margin-bottom: 10px;
   }
   .landing-home-btn {
     position: absolute;
@@ -423,12 +423,12 @@ if ('serviceWorker' in navigator) {
   }
   .landing-title {
     font-family: 'Playfair Display', serif;
-    font-size: clamp(30px, 4.5vw, 44px);
+    font-size: clamp(26px, 3.5vw, 34px);
     font-weight: 400;
     color: var(--vino-dark);
     line-height: 0.98;
     letter-spacing: 0;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     max-width: 760px;
   }
   .landing-title span {
@@ -436,11 +436,10 @@ if ('serviceWorker' in navigator) {
     font-style: italic;
   }
   .landing-sub {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-mid);
-    line-height: 1.8;
-    max-width: 480px;
-    margin-bottom: 16px;
+    line-height: 1.5;
+    margin: 0;
     letter-spacing: 0;
   }
   .landing-divider {
@@ -452,9 +451,16 @@ if ('serviceWorker' in navigator) {
   .module-grid {
     display: flex;
     flex-direction: column;
-    max-width: 800px;
+    max-width: 1010px;
     width: 100%;
   }
+  .module-cols { display: flex; gap: 14px; align-items: stretch; }
+  .module-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .module-col .module-section { padding: 6px 0 0; }
+  .module-card.module-tall { flex: 1; display: flex; flex-direction: column; }
+  .module-tall .module-body { flex: 1; display: flex; flex-direction: column; }
+  .module-tall .module-stat { margin-top: auto; }
+  @media (max-width: 900px) { .module-cols { flex-direction: column; } .module-col .module-section { padding: 10px 0 0; } }
   .landing-titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .landing-date { font-size: 11px; color: #8B7355; white-space: nowrap; }
   .module-section {
@@ -2141,7 +2147,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.24</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.25</div>
   </div>
 
   <!-- main scroll area -->
@@ -2221,12 +2227,12 @@ if ('serviceWorker' in navigator) {
   <div class="landing-content">
     <img class="landing-brand" src="robertos-logo-burgundy.svg" alt="Roberto's">
     <div class="landing-kicker">Management Module</div>
-    <div class="landing-titlerow"><div class="landing-title"><span>Management</span></div><div class="landing-date" id="hub-date"></div></div>
-    <div class="landing-sub">Daily reports, activations, revenue &amp; events — everything for running Roberto's DIFC.</div>
-    <div class="landing-divider"></div>
+    <div class="landing-titlerow"><div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;min-width:0"><div class="landing-title"><span>Management</span></div><div class="landing-sub">Daily reports, activations, revenue &amp; events.</div></div><div class="landing-date" id="hub-date"></div></div>
+    <div class="landing-divider" style="margin-top:8px"></div>
     <div class="module-grid">
+      <div class="module-cols">
+      <div class="module-col">
       <div class="module-section" id="sec-daily">Tonight &amp; every day</div>
-      <div class="module-duo">
         <div class="module-card" id="mod-card-operations" onclick="enterApp('operations')" style="--acc:#C9A84C;">
           <div class="module-band">
             <span class="module-ico"><span class="module-mono">C</span></span>
@@ -2250,8 +2256,8 @@ if ('serviceWorker' in navigator) {
           </div>
         </div>
       </div>
+      <div class="module-col">
       <div class="module-section" id="sec-business">Business</div>
-      <div class="module-duo">
         <div class="module-card" id="mod-card-revenue" onclick="enterApp('revenue')" style="--acc:#4E6B51;">
           <div class="module-band">
             <span class="module-ico"><span class="module-mono">R</span></span>
@@ -2275,10 +2281,9 @@ if ('serviceWorker' in navigator) {
           </div>
         </div>
       </div>
-      <!-- Events (private events desk) — hidden until the module ships; the section
-           label and card are pre-built so launching it is a one-line display toggle. -->
+      <div class="module-col" id="col-privateevents">
       <div class="module-section" id="sec-privateevents" style="display:none;">Events</div>
-      <div class="module-card" id="mod-card-privateevents" onclick="enterApp('privateevents')" style="--acc:#8A9A5B; display:none;">
+      <div class="module-card module-tall" id="mod-card-privateevents" onclick="enterApp('privateevents')" style="--acc:#8A9A5B; display:none;">
         <div class="module-band">
           <span class="module-ico"><span class="module-mono">E</span></span>
           <div class="module-name">Events</div>
@@ -2288,6 +2293,8 @@ if ('serviceWorker' in navigator) {
           <div class="module-desc">Quotations, canap&eacute; menus &amp; function sheets &mdash; private events desk.</div>
           <div class="module-stat" id="hubstat-privateevents"></div>
         </div>
+      </div>
+      </div>
       </div>
       <div class="module-card module-admin" id="mod-card-admin" onclick="enterApp('admin')" style="display:none;">
         <span class="module-ico"><span class="module-mono">A</span></span>
@@ -2677,6 +2684,8 @@ function applyFohAccess(){
   if(s2) s2.style.display = (!fohBlocked('revenue') || !fohBlocked('stocktake')) ? '' : 'none';
   var s3=document.getElementById('sec-privateevents');
   if(s3) s3.style.display = fohBlocked('privateevents') ? 'none' : '';
+  var col3=document.getElementById('col-privateevents');
+  if(col3) col3.style.display = fohBlocked('privateevents') ? 'none' : '';
   var hd=document.getElementById('hub-date');
   if(hd) hd.textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   try{ fohLoadHubStats(); }catch(e){}
@@ -2723,13 +2732,14 @@ async function fohLoadHubStats(){
     }
   }catch(e){}
   try{
-    var pe = await sb.from('events_desk').select('event_date,status').in('status',['draft','sent','confirmed','deposit']).limit(200);
+    var pe = await sb.from('events_desk').select('event_date,status,client_name,company').in('status',['draft','sent','confirmed','deposit']).limit(200);
     if(!pe.error && pe.data){
       var openN = pe.data.length;
       var future = pe.data.filter(function(x){ return x.event_date && String(x.event_date).slice(0,10) >= localISO(new Date()); })
         .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
       var nxt = future.length ? new Date(String(future[0].event_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) : null;
-      setStat('privateevents', openN?'#A88930':'#8B7355', openN ? (openN+' open quotation'+(openN>1?'s':'')+(nxt?' \u00b7 next event '+nxt:'')) : 'No open quotations');
+      var who = future.length ? (future[0].client_name || future[0].company || '') : '';
+      setStat('privateevents', openN?'#A88930':'#8B7355', openN ? (openN+' open quotation'+(openN>1?'s':'')+(nxt?' \u00b7 next '+nxt+(who?' \u00b7 '+who.slice(0,24):''):'')) : 'No open quotations');
     }
   }catch(e){}
   try{
