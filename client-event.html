@@ -31,6 +31,9 @@
   .btn:disabled{opacity:.55}
   .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
   .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+  .gbox{margin:16px 22px 0;background:#F3E9DA;border-radius:10px;padding:12px 14px}
+  .pr{font-size:11px;color:#400207;font-family:Arial,sans-serif;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.3}
+  body.nogc .sect{opacity:.35;pointer-events:none}
 </style>
 </head>
 <body>
@@ -41,6 +44,9 @@
 var FN_BASE = 'https://paoaivwtkzujmrgrfjuq.supabase.co/functions/v1/event-client-menu';
 var token = new URLSearchParams(location.search).get('t') || '';
 var picked = {};
+var guestCount = 0;
+function allowedDishes(g){ return g>=30 ? 15 : (g>=20 ? 8 : (g>=15 ? 5 : 0)); }
+function pickedCount(){ return Object.keys(picked).filter(function(k){ return picked[k]; }).length; }
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function el(id){ return document.getElementById(id); }
@@ -69,6 +75,10 @@ function render(data){
     '<div class="sub">'+(open?'Our canapé selection — pick your favourites':'Canapé selection for your event')+'</div>'+
     (open ? '<div class="sub2">Tick what you like and send it to us — Valentina will take care of the rest.</div>'
           : '<div class="sub2">'+esc([ev.client_name||ev.company, dt, ev.area].filter(Boolean).join(' · '))+(ev.guests?' · '+ev.guests+' guests':'')+'</div>');
+  if(!open && ev.guests) guestCount = Number(ev.guests)||0;
+  h += '<div class="gbox"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">How many guests will you be? <span style="color:#A5876B">(canapé events start from 15)</span></div>'+
+    '<input class="fld" id="cl-gcount" type="number" min="15" placeholder="Number of guests" value="'+(guestCount||'')+'" oninput="onGuests(this.value)" style="margin-bottom:4px">'+
+    '<div id="cl-allow" style="font-size:12.5px;color:#400207;font-family:Arial,sans-serif;min-height:17px"></div></div>';
   groups.forEach(function(g){
     var list = (data.dishes||[]).filter(function(d){ return d.serve===g[0]; });
     if(!list.length) return;
@@ -76,8 +86,9 @@ function render(data){
       list.map(function(d){
         return '<div class="dish'+(picked[d.id]?' on':'')+'" data-id="'+d.id+'" data-g="'+g[0]+'" onclick="toggle(this)">'+
           '<span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'+
-          '<span><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
-          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span></div>';
+          '<span style="flex:1"><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
+          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span>'+
+          (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+'<br><span style="font-size:9px">per piece</span></span>':'')+'</div>';
       }).join('')+'</div>';
   });
   if(open){
@@ -85,8 +96,7 @@ function render(data){
       '<input class="fld" id="cl-name" placeholder="Your name" maxlength="120">'+
       '<div style="display:flex;gap:8px"><input class="fld" id="cl-phone" placeholder="Phone" maxlength="40" style="flex:1">'+
       '<input class="fld" id="cl-email" placeholder="Email" maxlength="120" style="flex:1.4"></div>'+
-      '<div style="display:flex;gap:8px"><input class="fld" id="cl-date" type="date" title="Event date (optional)" style="flex:1">'+
-      '<input class="fld" id="cl-guests" type="number" placeholder="Guests (approx.)" style="flex:1"></div></div>';
+      '<input class="fld" id="cl-date" type="date" title="Event date (optional)"></div>';
   }
   h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">Anything we should know? Allergies, favourites, the occasion…</div>'+
        '<textarea id="cl-note" maxlength="900">'+esc(data.selection&&data.selection.note||'')+'</textarea></div>';
@@ -94,13 +104,40 @@ function render(data){
        '<div class="ft">Valentina will come back to you to confirm availability and final details.<br>'+
        'D dairy · E egg · H homemade · N nuts · R raw · S shellfish · V vegetarian</div></div>';
   el('card').innerHTML = h;
-  counts();
+  document.body.classList.toggle('nogc', guestCount < 15);
+  onGuests(String(guestCount||''));
 }
 
 function toggle(node){
   var id = node.getAttribute('data-id');
+  if(!picked[id]){
+    if(guestCount < 15){ alert('First tell us how many guests you will be (minimum 15).'); return; }
+    var cap = allowedDishes(guestCount);
+    if(pickedCount() >= cap){ alert('With '+guestCount+' guests you can pick up to '+cap+' different canapés — untick one first, or increase the guest number.'); return; }
+  }
   picked[id] = !picked[id];
   node.classList.toggle('on', picked[id]);
+  counts();
+}
+function onGuests(v){
+  guestCount = parseInt(v,10)||0;
+  var al = el('cl-allow');
+  var cap = allowedDishes(guestCount);
+  if(al){
+    if(!guestCount) al.textContent = '';
+    else if(guestCount < 15) al.textContent = 'Canapé events start from 15 guests.';
+    else al.textContent = 'Lovely — with '+guestCount+' guests you can pick up to '+cap+' different canapés.';
+  }
+  document.body.classList.toggle('nogc', guestCount < 15);
+  var over = pickedCount() - cap;
+  if(over > 0){
+    Object.keys(picked).forEach(function(k){
+      if(over > 0 && picked[k]){ picked[k] = false; over--; }
+    });
+    document.querySelectorAll('.dish.on').forEach(function(n){
+      if(!picked[n.getAttribute('data-id')]) n.classList.remove('on');
+    });
+  }
   counts();
 }
 function counts(){
@@ -109,18 +146,25 @@ function counts(){
     var n = document.querySelectorAll('.dish.on[data-g="'+g+'"]').length;
     c.textContent = n ? n+' selected' : 'tap to choose';
   });
+  var al = el('cl-allow');
+  if(al && guestCount >= 15){
+    var cap = allowedDishes(guestCount);
+    al.textContent = pickedCount()+' of '+cap+' canapés picked — '+guestCount+' guests.';
+  }
 }
 async function send(){
   var ids = Object.keys(picked).filter(function(k){ return picked[k]; });
   if(!ids.length){ alert('Pick at least one canapé first.'); return; }
-  var payload = { dish_ids:ids, note:(el('cl-note')||{}).value||'' };
+  if(guestCount < 15){ alert('First tell us how many guests you will be (minimum 15).'); return; }
+  var cap = allowedDishes(guestCount);
+  if(ids.length > cap){ alert('With '+guestCount+' guests you can pick up to '+cap+' different canapés.'); return; }
+  var payload = { dish_ids:ids, note:(el('cl-note')||{}).value||'', guests:guestCount };
   if(token){ payload.t = token; }
   else {
     payload.name = (el('cl-name')||{}).value||'';
     payload.phone = (el('cl-phone')||{}).value||'';
     payload.email = (el('cl-email')||{}).value||'';
     payload.event_date = (el('cl-date')||{}).value||'';
-    payload.guests = (el('cl-guests')||{}).value||'';
     if(!payload.name.trim()){ alert('Please tell us your name.'); return; }
     if(!payload.phone.trim() && !payload.email.trim()){ alert('Please leave a phone number or email so we can reach you.'); return; }
   }
