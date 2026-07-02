@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Roberto's — Canapé selection</title>
+<style>
+  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
+  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .sub{font-size:14px;color:#8A6A4F;text-align:center}
+  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
+  .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
+  .sect-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .sect-h b{font-size:15px;color:#400207;font-weight:normal}
+  .cnt{font-size:11px;color:#A5876B;font-family:Arial,sans-serif}
+  .dish{display:flex;gap:11px;align-items:flex-start;padding:8px 0;cursor:pointer}
+  .box{width:17px;height:17px;border-radius:4px;border:1px solid #C9AD96;background:#FBF7F1;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+  .dish.on .box{background:#400207;border-color:#400207}
+  .box svg{width:11px;height:11px;stroke:#E8D9C7;stroke-width:3;fill:none;opacity:0}
+  .dish.on .box svg{opacity:1}
+  .nm{font-size:13.5px}.nm .cd{font-size:10.5px;color:#A5876B}
+  .ds{font-size:12px;color:#8A6A4F}
+  .note{margin:18px 22px 0}
+  .note textarea{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:64px;resize:vertical}
+  .btnrow{padding:20px 22px 26px}
+  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer}
+  .btn:disabled{opacity:.55}
+  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card">
+  <div class="msg">Loading your menu…</div>
+</div></div>
+<script>
+var FN_BASE = 'https://paoaivwtkzujmrgrfjuq.supabase.co/functions/v1/event-client-menu';
+var token = new URLSearchParams(location.search).get('t') || '';
+var picked = {};
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function el(id){ return document.getElementById(id); }
+
+function fail(msg){
+  el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>';
+}
+
+async function load(){
+  if(!token) return fail('This link is incomplete — please use the link exactly as it was sent to you.');
+  try{
+    var r = await fetch(FN_BASE + '?t=' + encodeURIComponent(token));
+    var data = await r.json();
+    if(!r.ok || data.error) return fail(data.error || 'This link is no longer available.');
+    render(data);
+  }catch(e){ fail('Could not load the menu — please check your connection and reopen the link.'); }
+}
+
+function render(data){
+  var ev = data.event || {};
+  (data.preselected||[]).forEach(function(id){ picked[id] = true; });
+  if(data.selection && data.selection.dish_ids) (data.selection.dish_ids).forEach(function(id){ picked[id] = true; });
+  var groups = [['Cold','Cold canapés'],['Hot','Hot canapés'],['Dessert','Dolci']];
+  var dt = ev.event_date ? new Date(ev.event_date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) : '';
+  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+    '<div class="sub">Canapé selection for your event</div>'+
+    '<div class="sub2">'+esc([ev.client_name||ev.company, dt, ev.area].filter(Boolean).join(' · '))+(ev.guests?' · '+ev.guests+' guests':'')+'</div>';
+  groups.forEach(function(g){
+    var list = (data.dishes||[]).filter(function(d){ return d.serve===g[0]; });
+    if(!list.length) return;
+    h += '<div class="sect"><div class="sect-h"><b>'+g[1]+'</b><span class="cnt" id="cnt-'+g[0]+'"></span></div>'+
+      list.map(function(d){
+        return '<div class="dish'+(picked[d.id]?' on':'')+'" data-id="'+d.id+'" data-g="'+g[0]+'" onclick="toggle(this)">'+
+          '<span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'+
+          '<span><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
+          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span></div>';
+      }).join('')+'</div>';
+  });
+  h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">Anything we should know? Allergies, favourites, the occasion…</div>'+
+       '<textarea id="cl-note" maxlength="900">'+esc(data.selection&&data.selection.note||'')+'</textarea></div>';
+  h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send selection to Roberto’s</button>'+
+       '<div class="ft">Valentina will come back to you to confirm availability and final details.<br>'+
+       'D dairy · E egg · H homemade · N nuts · R raw · S shellfish · V vegetarian</div></div>';
+  el('card').innerHTML = h;
+  counts();
+}
+
+function toggle(node){
+  var id = node.getAttribute('data-id');
+  picked[id] = !picked[id];
+  node.classList.toggle('on', picked[id]);
+  counts();
+}
+function counts(){
+  ['Cold','Hot','Dessert'].forEach(function(g){
+    var c = el('cnt-'+g); if(!c) return;
+    var n = document.querySelectorAll('.dish.on[data-g="'+g+'"]').length;
+    c.textContent = n ? n+' selected' : 'tap to choose';
+  });
+}
+async function send(){
+  var ids = Object.keys(picked).filter(function(k){ return picked[k]; });
+  if(!ids.length){ alert('Pick at least one canapé first.'); return; }
+  var btn = el('cl-send'); btn.disabled = true; btn.textContent = 'Sending…';
+  try{
+    var r = await fetch(FN_BASE, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ t:token, dish_ids:ids, note:(el('cl-note')||{}).value||'' }) });
+    var data = await r.json();
+    if(!r.ok || data.error) throw new Error(data.error||'failed');
+    el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div>'+
+      '<div class="msg">Grazie! Your selection has been sent.<br><br>Valentina will be in touch shortly to confirm everything for your evening.</div>';
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Send selection to Roberto’s';
+    alert('Could not send — please try again. '+(e.message||''));
+  }
+}
+load();
+</script>
+</body>
+</html>

@@ -2141,7 +2141,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.8</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.9</div>
   </div>
 
   <!-- main scroll area -->
@@ -2278,7 +2278,7 @@ if ('serviceWorker' in navigator) {
       <!-- Events (private events desk) — hidden until the module ships; the section
            label and card are pre-built so launching it is a one-line display toggle. -->
       <div class="module-section" id="sec-privateevents" style="display:none;">Events</div>
-      <div class="module-card" id="mod-card-privateevents" style="--acc:#8A9A5B; display:none;">
+      <div class="module-card" id="mod-card-privateevents" onclick="enterApp('privateevents')" style="--acc:#8A9A5B; display:none;">
         <div class="module-band">
           <span class="module-ico"><span class="module-mono">E</span></span>
           <div class="module-name">Events</div>
@@ -2622,7 +2622,7 @@ function renderNav(){
   const active = resolveTab(state.currentTab);
   // Module-scoped nav: Revenue and Operations are single pages reached from the Manager
   // landing — no cross-module links there. Only the Events module keeps its own sub-tabs.
-  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin'){ nav.innerHTML=''; return; }
+  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin' || active==='privateevents'){ nav.innerHTML=''; return; }
   const eventTabs = state.events.slice().sort(eventSort).map(ev=>
     `<div class="nav-tab ${active===eventTab(ev)?'active':''}" data-tab="${eventTab(ev)}" onclick="switchTab('${eventTab(ev)}')">${ev.name}</div>`
   ).join('');
@@ -2649,7 +2649,7 @@ function currentStageForTasks(tasks){
 // ── Per-user module access — driven by the app_users table (managed in the Admin module). ──
 // state.access = { modules:[...], isAdmin:bool } for the logged-in user; loaded on sign-in.
 function moduleOf(t){
-  if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin') return t;
+  if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin'||t==='privateevents') return t;
   return 'events';   // dashboard, event_*, events => the Events module
 }
 // DEFAULT-DENY: a signed-in user with no app_users row (or whose access hasn't
@@ -2664,7 +2664,7 @@ function fohBlocked(module){
   return mods.indexOf(m)===-1;
 }
 function applyFohAccess(){
-  ['events','operations','revenue','stocktake'].forEach(function(m){
+  ['events','operations','revenue','stocktake','privateevents'].forEach(function(m){
     var c=document.getElementById('mod-card-'+m);
     if(c) c.style.display = fohBlocked(m) ? 'none' : '';
   });
@@ -2675,6 +2675,8 @@ function applyFohAccess(){
   if(s1) s1.style.display = (!fohBlocked('operations') || !fohBlocked('events')) ? '' : 'none';
   var s2=document.getElementById('sec-business');
   if(s2) s2.style.display = (!fohBlocked('revenue') || !fohBlocked('stocktake')) ? '' : 'none';
+  var s3=document.getElementById('sec-privateevents');
+  if(s3) s3.style.display = fohBlocked('privateevents') ? 'none' : '';
   var hd=document.getElementById('hub-date');
   if(hd) hd.textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   try{ fohLoadHubStats(); }catch(e){}
@@ -2721,6 +2723,16 @@ async function fohLoadHubStats(){
     }
   }catch(e){}
   try{
+    var pe = await sb.from('events_desk').select('event_date,status').in('status',['draft','sent','confirmed','deposit']).limit(200);
+    if(!pe.error && pe.data){
+      var openN = pe.data.length;
+      var future = pe.data.filter(function(x){ return x.event_date && String(x.event_date).slice(0,10) >= localISO(new Date()); })
+        .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
+      var nxt = future.length ? new Date(String(future[0].event_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) : null;
+      setStat('privateevents', openN?'#A88930':'#8B7355', openN ? (openN+' open quotation'+(openN>1?'s':'')+(nxt?' \u00b7 next event '+nxt:'')) : 'No open quotations');
+    }
+  }catch(e){}
+  try{
     var s = await sb.from('stock_take_sheets').select('month').eq('venue_id','robertos-difc').order('month',{ascending:false}).limit(1);
     if(!s.error && s.data && s.data[0]){
       var mo = s.data[0].month;
@@ -2760,7 +2772,7 @@ async function loadFohAccess(){
 //  ADMIN MODULE — manage logins + module access (notifications: phase 2). Admin-only.
 // ══════════════════════════════════════════════
 var SUPA_USERS_URL='https://supabase.com/dashboard/project/paoaivwtkzujmrgrfjuq/auth/users';
-var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'}];
+var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'}];
 var ADMIN_NOTIFY=[{k:'closing_report',n:'Closing-report email'}];
 function admEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function loadAdminUsers(){
@@ -3510,7 +3522,7 @@ function enterApp(module){
   // Land in the chosen module — Revenue/Operations go straight there; Events keeps the
   // current Events-family tab (Leaders or an event) but NEVER another module's tab.
   var cur=state.currentTab;
-  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin') ? module
+  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin'||module==='privateevents') ? module
     : ((cur==='dashboard' || (cur && cur.indexOf('event_')===0)) ? cur : 'dashboard');
   switchTab(target);
 }
@@ -5452,7 +5464,8 @@ async function chkShowHistory(){
   }
 })();
 </script>
-<script src="foh-events.js?v=2026-07-02.4"></script>
+<script src="foh-events.js?v=2026-07-02.9"></script>
+<script src="foh-privateevents.js?v=2026-07-02.9"></script>
 <script src="foh-revenue.js?v=2026-07-02.1"></script>
 <script src="foh-closing.js?v=2026-06-25.4"></script>
 <script src="foh-ops.js?v=2026-06-26.3"></script>

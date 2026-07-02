@@ -134,7 +134,7 @@ function renderMain(){
   const el = document.getElementById('main-content');
   const sec = document.getElementById('topbar-section');
   const tab = state.currentTab;
-  if(sec) sec.textContent = tab==='revenue' ? 'Revenue' : (tab==='operations' ? 'Closing Report' : (tab==='stocktake' ? 'Stock Take' : (tab==='admin' ? 'Admin' : (tab==='dashboard' ? 'Leaders' : 'Activations'))));
+  if(sec) sec.textContent = tab==='revenue' ? 'Revenue' : (tab==='operations' ? 'Closing Report' : (tab==='stocktake' ? 'Stock Take' : (tab==='admin' ? 'Admin' : (tab==='privateevents' ? 'Events' : (tab==='dashboard' ? 'Leaders' : 'Activations')))));
   // Build the HTML first, then only touch the DOM if it actually changed.
   // The realtime path reloads all tables and re-renders on ANY change from ANY
   // screen — most of which don't affect the current view. Skipping an identical
@@ -146,6 +146,7 @@ function renderMain(){
   else if(tab==='operations'){ html = renderOperations(); }
   else if(tab==='stocktake'){ html = renderStockTake(); }
   else if(tab==='admin'){ html = renderAdmin(); }
+  else if(tab==='privateevents'){ html = (typeof renderPrivateEvents==='function') ? renderPrivateEvents() : '<div class="loading">Loading\u2026</div>'; }
   else if(state.events.length===0){ html = '<div class="loading">Loading...</div>'; }
   else if(tab==='dashboard'){ html = renderDashboard(); needsListeners = true; }
   else { html = renderEventPage(state.events.find(e=>e.id===tabEventId(tab))); needsListeners = true; }
