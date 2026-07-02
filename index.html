@@ -2141,7 +2141,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.7</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-02.8</div>
   </div>
 
   <!-- main scroll area -->
@@ -2341,12 +2341,58 @@ if ('serviceWorker' in navigator) {
 <script>
 const SUPABASE_URL = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
+
+// ── DEV-site write protection (mirrors the Kitchen app) ──
+// DEV (/robertos-foh-dev/) and LIVE (/robertos-foh/) are served from the SAME
+// hostname and hit the SAME production databases, so testing on the dev site
+// was silently writing real data. On the dev PATH every database write (both
+// the FOH and the Kitchen project — hence matching '/rest/v1/') is blocked in
+// the browser with a 403 unless deliberately unlocked via the DEV badge
+// (schedule PIN). localhost (local preview) stays writable. Must run BEFORE
+// createClient — supabase-js captures window.fetch when the client is created.
+const FOH_IS_DEV_SITE = location.pathname.indexOf('/robertos-foh-dev/') === 0;
+const FOH_DEV_READ_ONLY = FOH_IS_DEV_SITE && localStorage.getItem('foh-dev-writes') !== '1';
+if (FOH_DEV_READ_ONLY) {
+  const _realFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts) {
+    const method = ((opts && opts.method) || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && String(url).indexOf('/rest/v1/') !== -1) {
+      console.warn('[DEV read-only] blocked ' + method + ' ' + url);
+      return Promise.resolve(new Response(
+        JSON.stringify({ message: 'DEV site is read-only — tap the DEV badge (bottom-left) to enable test writes.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return _realFetch(url, opts);
+  };
+}
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Kitchen App Supabase — used only for public covers read
 const KITCHEN_URL = 'https://zrpglswalgjbtghudmhu.supabase.co';
 const KITCHEN_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpycGdsc3dhbGdqYnRnaHVkbWh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MTIyMjQsImV4cCI6MjA5NjQ4ODIyNH0.pfABN-so4xINK7nHxXUlVeTO4g0h0l6ILHVwpoKrbds';
 const sbKitchen = supabase.createClient(KITCHEN_URL, KITCHEN_KEY);
+
+// DEV badge: shows on the dev site only. Tap it to unlock test writes
+// (schedule PIN) or to lock them again; the choice sticks per browser.
+if (FOH_IS_DEV_SITE) {
+  const devBadge = document.createElement('div');
+  devBadge.textContent = FOH_DEV_READ_ONLY ? 'DEV · read-only' : 'DEV · WRITES ON';
+  devBadge.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:99999;padding:5px 12px;border-radius:14px;' +
+    'font:700 11px/1.3 Inter,system-ui,sans-serif;letter-spacing:.4px;cursor:pointer;color:#fff;' +
+    'box-shadow:0 2px 8px rgba(0,0,0,.25);background:' + (FOH_DEV_READ_ONLY ? '#6B1F2A' : '#B00020');
+  devBadge.onclick = function() {
+    if (FOH_DEV_READ_ONLY) {
+      const p = prompt('DEV site is read-only.\nEnter the schedule PIN to enable TEST WRITES to the production database:');
+      if (p === null) return;
+      if (p.trim() !== FOH_SCHED_PIN) { alert('Wrong PIN.'); return; }
+      localStorage.setItem('foh-dev-writes', '1');
+    } else {
+      localStorage.removeItem('foh-dev-writes');
+    }
+    location.reload();
+  };
+  document.body.appendChild(devBadge);
+}
 
 const TEAM = ['Francesco','Manuel','Alessandro','Nicole','Danilo','Alper','Katerina','Valentina'];
 const CHAMPIONS = TEAM; // all team members can be champions
