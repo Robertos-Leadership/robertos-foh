@@ -27,7 +27,7 @@ var PE_TARGETS = {
   serve: {Cold:20, Hot:20, Dessert:5},
   tiers: {Classic:10, Elevated:25, Signature:10}
 };
-var peQuick = { sel:{}, title:'Canap\u00e9 selection', price:'', guests:'' };
+var peQuick = { qty:{}, title:'Canap\u00e9 selection', guests:'40' };
 
 var PE_STATUS = [
   {k:'draft',     n:'Draft',          pill:'pe-p-draft'},
@@ -172,7 +172,7 @@ function peHeader(active){
     '<div class="pe-tabs">'+tabs.map(function(t){
       return '<span class="pe-tab'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
     }).join('')+'</div>'+
-    '<span style="display:flex;gap:8px"><button class="pe-btn sec" onclick="peQuick.sel={};peGo(\'quick\')">Quick menu</button>'+
+    '<span style="display:flex;gap:8px"><button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
     '<button class="pe-btn" onclick="peNewEvent()">+ New event</button></span>'+
   '</div>';
 }
@@ -905,52 +905,102 @@ function pePrintReport(){
 }
 
 
-// ── quick menu: Valentina's one-minute proposal, no event record needed ─────
-function peRenderQuick(){
-  var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
-  var selCount = Object.keys(peQuick.sel).filter(function(k){ return peQuick.sel[k]; }).length;
-  var h = '<div class="pe-wrap"><div class="pe-top"><span class="pe-tab" onclick="peGo(\'list\')">\u2039 Events</span>'+
-    '<span style="font-size:12px;color:#8B7355">'+selCount+' dishes picked</span></div>';
-  h += '<div class="pe-card"><b style="color:#400207;font-size:15px">Quick menu</b>'+
-    '<div style="font-size:11.5px;color:#8B7355;margin:2px 0 10px">Tick dishes, print the branded menu \u2014 nothing else needed. You can turn it into a full event later.</div>'+
-    '<div class="pe-grid3">'+
-    '<div style="grid-column:1/3"><div class="pe-lbl">Menu title</div><input class="pe-in" id="pe-q-title" value="'+peEsc(peQuick.title)+'"></div>'+
-    '<div><div class="pe-lbl">Price / person (AED, optional)</div><input class="pe-in" id="pe-q-price" type="number" value="'+peEsc(peQuick.price)+'"></div>'+
-    '</div>';
-  groups.forEach(function(g){
-    var list = peState.dishes.filter(function(d){ return d.active && d.serve===g[0]; });
-    if(!list.length) return;
-    var n = list.filter(function(d){ return peQuick.sel[d.id]; }).length;
-    h += '<div class="pe-lbl" style="margin-top:12px">'+g[1]+' \u00b7 '+n+' selected</div>'+
-      list.map(function(d){
-        return '<span class="pe-chip'+(peQuick.sel[d.id]?' on':'')+'" onclick="peQuickToggle(\''+d.id+'\')">'+peEsc(d.name)+'</span>';
-      }).join('');
+// ── quick menu: the Excel selector, reborn — priced table, qty per dish,
+//    live totals and the same warnings Valentina already knows ──────────────
+function peQuickGroups(){
+  var order = [['Vegetarian','Cold'],['Fish','Cold'],['Beef','Cold'],['Vegetarian','Hot'],['Fish','Hot'],['Beef','Hot'],['Dessert','Dessert']];
+  return order.map(function(o){
+    return { label: (o[0]==='Dessert' ? 'Dolci' : o[0]+' \u00b7 '+o[1]),
+             dishes: peState.dishes.filter(function(d){ return d.active && d.category===o[0] && d.serve===o[1]; }) };
+  }).filter(function(g){ return g.dishes.length; });
+}
+function peQuickTotals(){
+  var pieces=0, price=0, distinct=0, minViol=[];
+  peState.dishes.forEach(function(d){
+    var q = Number(peQuick.qty[d.id])||0;
+    if(q<=0) return;
+    distinct++; pieces += q; price += q*(Number(d.sell_price)||0);
+    if(d.min_order && q < d.min_order) minViol.push(d.name+' (min '+d.min_order+')');
   });
-  h += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'+
-    '<button class="pe-btn" onclick="peQuickPrint()" '+(selCount?'':'disabled')+'>Print / PDF menu</button>'+
-    '<button class="pe-btn sec" onclick="peQuickSave()" '+(selCount?'':'disabled')+'>Save as event draft</button>'+
+  var guests = Number(peQuick.guests)||0;
+  return { pieces:pieces, price:price, distinct:distinct, minViol:minViol, guests:guests,
+           perGuest: guests?price/guests:null, pcsPerGuest: guests?pieces/guests:null };
+}
+function peRenderQuick(){
+  var tt = peQuickTotals();
+  var h = '<div class="pe-wrap"><div class="pe-top"><span class="pe-tab" onclick="peGo(\'list\')">\u2039 Events</span>'+
+    '<span style="font-size:12px;color:#8B7355">Quick menu \u2014 like the Excel, but it prints itself</span></div>';
+  h += '<div class="pe-card"><div class="pe-grid3">'+
+    '<div style="grid-column:1/3"><div class="pe-lbl">Menu title</div><input class="pe-in" id="pe-q-title" value="'+peEsc(peQuick.title)+'" onchange="peQuickRead()"></div>'+
+    '<div><div class="pe-lbl">Number of guests</div><input class="pe-in" id="pe-q-guests" type="number" value="'+peEsc(peQuick.guests)+'" onchange="peQuickRead();renderMain()"></div>'+
     '</div></div>';
+  h += '<div class="pe-2col"><div>';
+  peQuickGroups().forEach(function(g){
+    var subP=0, subQ=0;
+    g.dishes.forEach(function(d){ var q=Number(peQuick.qty[d.id])||0; subQ+=q; subP+=q*(Number(d.sell_price)||0); });
+    h += '<div class="pe-card" style="padding:10px 14px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:13px;color:#400207">'+g.label+'</b>'+
+      (subQ?'<span style="font-size:11px;color:#8A6A4F">'+subQ+' pcs \u00b7 AED '+peMoney(subP)+'</span>':'')+'</div>';
+    g.dishes.forEach(function(d){
+      var q = Number(peQuick.qty[d.id])||0;
+      var bad = q>0 && d.min_order && q<d.min_order;
+      h += '<div class="pe-dishrow"><span><b style="font-weight:600">'+peEsc(d.name)+'</b>'+
+        ((d.allergens||[]).length?' <span style="color:#A5876B;font-size:10px">('+(d.allergens||[]).join(')(')+')</span>':'')+
+        '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+' \u00b7 AED '+peMoney(d.sell_price)+'/pc \u00b7 min '+(d.min_order||10)+' pcs'+
+        (d.description?' \u00b7 '+peEsc(d.description):'')+'</span>'+
+        (bad?'<br><span style="font-size:10.5px;color:#B00020">below the minimum order of '+d.min_order+'</span>':'')+'</span>'+
+        '<span style="display:flex;align-items:center;gap:5px;flex-shrink:0">'+
+        '<input class="pe-in" style="width:62px;padding:4px 7px;text-align:center'+(bad?';border-color:#B00020;color:#B00020':'')+'" type="number" min="0" placeholder="qty" value="'+(q||'')+'" onchange="peQuickSetQty(\''+d.id+'\',this.value)">'+
+        (q?'<span style="font-size:11px;color:#6B4A33;min-width:56px;text-align:right">'+peMoney(q*(Number(d.sell_price)||0))+'</span>':'<span style="min-width:56px"></span>')+
+        '</span></div>';
+    });
+    h += '</div>';
+  });
+  h += '</div><div><div class="pe-tot" style="position:sticky;top:10px">'+
+    '<div class="pe-lbl" style="color:#8A6A4F">Live totals</div>'+
+    '<div class="pe-tot-row"><span>Total pieces</span><b>'+tt.pieces+'</b></div>'+
+    '<div class="pe-tot-row"><span>Total price</span><b>AED '+peMoney(tt.price)+'</b></div>'+
+    '<div class="pe-tot-row" style="border-top:1px solid #DCC9B2;margin-top:4px;padding-top:7px"><span>Price / guest</span><b>'+(tt.perGuest!=null&&tt.guests?('AED '+peMoney(tt.perGuest)):'\u2014')+'</b></div>'+
+    '<div class="pe-tot-row"><span>Distinct dishes</span><b>'+tt.distinct+'</b></div>';
+  if(tt.distinct>15) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Above the 15-dish kitchen cap \u2014 reduce variety</div>';
+  else if(tt.distinct>10) h += '<div class="pe-flag" style="color:#7A5500">\u25b2 Within range \u2014 confirm lead time with the kitchen</div>';
+  if(tt.pcsPerGuest!=null && tt.pieces>0){
+    var ok = tt.pcsPerGuest>=8 && tt.pcsPerGuest<=12;
+    h += '<div class="pe-flag" style="color:'+(ok?'#2E5B30':'#7A5500')+'">'+(ok?'\u2713':'\u25b2')+' '+tt.pcsPerGuest.toFixed(1)+' pieces / guest'+(ok?' \u2014 within the 8\u201312 norm':(tt.pcsPerGuest<8?' \u2014 below the 8\u201312 norm':' \u2014 above the 8\u201312 norm'))+'</div>';
+  }
+  if(tt.minViol.length) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Below minimum order: '+peEsc(tt.minViol.join(', '))+'</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">'+
+    '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.pieces?'':'disabled')+'>Print / PDF menu</button>'+
+    '<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.pieces?'':'disabled')+'>Save as event draft</button>'+
+    '</div></div></div></div>';
   return h+'</div>';
 }
-function peQuickToggle(id){
+function peQuickRead(){
+  var tEl = document.getElementById('pe-q-title'), gEl = document.getElementById('pe-q-guests');
+  if(tEl) peQuick.title = tEl.value.trim() || 'Canap\u00e9 selection';
+  if(gEl) peQuick.guests = gEl.value.trim();
+}
+function peQuickSetQty(id, val){
   peQuickRead();
-  peQuick.sel[id] = !peQuick.sel[id];
+  var v = Math.max(0, parseInt(val,10)||0);
+  if(v>0) peQuick.qty[id] = v; else delete peQuick.qty[id];
   renderMain();
 }
-function peQuickRead(){
-  var tEl = document.getElementById('pe-q-title'), pEl = document.getElementById('pe-q-price');
-  if(tEl) peQuick.title = tEl.value.trim() || 'Canap\u00e9 selection';
-  if(pEl) peQuick.price = pEl.value.trim();
-  return peState.dishes.filter(function(d){ return peQuick.sel[d.id]; });
+function peQuickDishes(){
+  return peState.dishes.filter(function(d){ return (Number(peQuick.qty[d.id])||0) > 0; });
 }
 function peQuickPrint(){
-  var dishes = peQuickRead();
+  peQuickRead();
+  var dishes = peQuickDishes();
   if(!dishes.length) return;
+  var tt = peQuickTotals();
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
-  var pcs = dishes.length;
   var body = '<div class="brand">R O B E R T O \u2019 S</div><div class="rule"></div>'+
     '<h2>'+peEsc(peQuick.title)+'</h2>';
-  if(peQuick.price) body += '<div class="sub">AED '+peMoney(Number(peQuick.price))+' / person \u00b7 '+pcs+' pieces per guest</div>';
+  var sub = [];
+  if(tt.perGuest!=null && tt.guests) sub.push('AED '+peMoney(tt.perGuest)+' / person');
+  if(tt.pcsPerGuest!=null && tt.guests) sub.push(tt.pcsPerGuest.toFixed(0)+' pieces per guest');
+  if(sub.length) body += '<div class="sub">'+sub.join(' \u00b7 ')+'</div>';
   groups.forEach(function(g){
     var list = dishes.filter(function(d){ return d.serve===g.k; });
     if(!list.length) return;
@@ -966,19 +1016,27 @@ function peQuickPrint(){
   pePrintHTML(peDocShell(peQuick.title, body));
 }
 async function peQuickSave(){
-  var dishes = peQuickRead();
+  peQuickRead();
+  var dishes = peQuickDishes();
   if(!dishes.length) return;
+  var tt = peQuickTotals();
   var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
-              package_label:peQuick.title, food_price_pp:peQuick.price?Number(peQuick.price):null,
+              package_label:peQuick.title,
+              guests: tt.guests||null,
+              food_price_pp: (tt.perGuest!=null && tt.guests) ? Math.round(tt.perGuest*100)/100 : null,
               payment_terms:'50% deposit to confirm, balance on the day' };
   var r = await sb.from('events_desk').insert(row).select().single();
   if(r.error || !r.data){ peToast('Could not save \u2014 check connection', true); return; }
   peState.events.push(r.data);
-  var items = dishes.map(function(d){ return {event_id:r.data.id, dish_id:d.id, pcs_per_guest:1}; });
+  var g = tt.guests||0;
+  var items = dishes.map(function(d){
+    var q = Number(peQuick.qty[d.id])||0;
+    return {event_id:r.data.id, dish_id:d.id, pcs_per_guest: g ? Math.round(q/g*100)/100 : q};
+  });
   var ir = await sb.from('event_items').insert(items).select();
   if(!ir.error) peState.items[r.data.id] = ir.data||[];
   sb.from('event_log').insert({event_id:r.data.id, action:'created', detail:'from quick menu', actor:peActor()});
-  peQuick.sel = {};
+  peQuick.qty = {};
   peToast('Saved as a draft event \u2014 add the client details when ready');
   peGo('event', r.data.id);
 }
