@@ -22,6 +22,13 @@ var peState = {
   editDishId:null, editBevId:null, editPackId:null
 };
 
+var PE_TARGETS = {
+  cells: {'Vegetarian|Cold':7,'Fish|Cold':7,'Beef|Cold':6,'Vegetarian|Hot':7,'Fish|Hot':6,'Beef|Hot':7,'Dessert|Dessert':5},
+  serve: {Cold:20, Hot:20, Dessert:5},
+  tiers: {Classic:10, Elevated:25, Signature:10}
+};
+var peQuick = { sel:{}, title:'Canap\u00e9 selection', price:'', guests:'' };
+
 var PE_STATUS = [
   {k:'draft',     n:'Draft',          pill:'pe-p-draft'},
   {k:'sent',      n:'Proposal sent',  pill:'pe-p-sent'},
@@ -153,6 +160,7 @@ function renderPrivateEvents(){
   if(!peState.loaded){ peLoadAll(); return '<div class="loading">Loading events…</div>'; }
   var v = peState.view;
   if(v==='event')    return peRenderEvent();
+  if(v==='quick')    return peRenderQuick();
   if(v==='calendar') return peRenderCalendar();
   if(v==='library')  return peRenderLibrary();
   if(v==='report')   return peRenderReport();
@@ -164,7 +172,8 @@ function peHeader(active){
     '<div class="pe-tabs">'+tabs.map(function(t){
       return '<span class="pe-tab'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
     }).join('')+'</div>'+
-    '<button class="pe-btn" onclick="peNewEvent()">+ New event</button>'+
+    '<span style="display:flex;gap:8px"><button class="pe-btn sec" onclick="peQuick.sel={};peGo(\'quick\')">Quick menu</button>'+
+    '<button class="pe-btn" onclick="peNewEvent()">+ New event</button></span>'+
   '</div>';
 }
 
@@ -641,9 +650,49 @@ function peRenderLibrary(){
   else h += peRenderPackLib();
   return h+'</div>';
 }
+function peBuildGoal(){
+  var have = { serve:{}, tiers:{}, cells:{} };
+  peState.dishes.forEach(function(d){
+    if(!d.active) return;
+    have.serve[d.serve] = (have.serve[d.serve]||0)+1;
+    if(d.tier) have.tiers[d.tier] = (have.tiers[d.tier]||0)+1;
+    var ck = d.category+'|'+d.serve;
+    have.cells[ck] = (have.cells[ck]||0)+1;
+  });
+  var total = peState.dishes.filter(function(d){ return d.active; }).length;
+  var goal = 0; Object.keys(PE_TARGETS.serve).forEach(function(k){ goal += PE_TARGETS.serve[k]; });
+  function bar(label, n, target){
+    var pct = Math.min(100, Math.round(n/target*100));
+    return '<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:11.5px;color:#6B4A33"><span>'+label+'</span><span><b style="color:#400207">'+n+'</b> of '+target+'</span></div>'+
+      '<div style="height:7px;background:#EFE4D4;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(pct>=100?'#2E6B34':'#C9A84C')+'"></div></div></div>';
+  }
+  var gaps = [];
+  Object.keys(PE_TARGETS.cells).forEach(function(ck){
+    var miss = PE_TARGETS.cells[ck] - (have.cells[ck]||0);
+    if(miss>0) gaps.push({k:ck.replace('|',' \u00b7 '), miss:miss});
+  });
+  gaps.sort(function(a,b){ return b.miss-a.miss; });
+  var h = '<div class="pe-card" style="background:#F7EEE2;border-color:rgba(201,168,76,0.5)">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">'+
+    '<b style="color:#400207;font-size:14px">The kitchen goal: '+goal+' canap\u00e9s on the menu</b>'+
+    '<span style="font-size:12px;color:'+(total>=goal?'#2E6B34':'#8A6A4F')+'">'+total+' done \u00b7 '+Math.max(0,goal-total)+' to create</span></div>'+
+    '<div class="pe-grid3" style="margin-top:6px">'+
+    bar('Cold', have.serve.Cold||0, PE_TARGETS.serve.Cold)+
+    bar('Hot', have.serve.Hot||0, PE_TARGETS.serve.Hot)+
+    bar('Dolci', have.serve.Dessert||0, PE_TARGETS.serve.Dessert)+
+    '</div><div class="pe-grid3" style="margin-top:2px">'+
+    bar('Classic \u00b7 AED 10', have.tiers.Classic||0, PE_TARGETS.tiers.Classic)+
+    bar('Elevated \u00b7 AED 20', have.tiers.Elevated||0, PE_TARGETS.tiers.Elevated)+
+    bar('Signature \u00b7 AED 35', have.tiers.Signature||0, PE_TARGETS.tiers.Signature)+
+    '</div>'+
+    (gaps.length ? '<div style="font-size:12px;color:#6B4A33;margin-top:8px"><b style="color:#400207">Most needed next:</b> '+gaps.slice(0,4).map(function(g){ return g.k+' ('+g.miss+' more)'; }).join(' \u00b7 ')+'</div>'
+                 : '<div style="font-size:12px;color:#2E6B34;margin-top:8px">Every category is complete \u2014 grande!</div>')+
+    '</div>';
+  return h;
+}
 function peRenderDishLib(){
   var ed = peState.editDishId==='new' ? {} : (peState.editDishId ? peDishById(peState.editDishId)||{} : null);
-  var h = '';
+  var h = peBuildGoal();
   if(ed){
     var alg = ed.allergens||[];
     h += '<div class="pe-card"><b style="color:#400207">'+(ed.id?'Edit dish':'Add a dish')+'</b>'+
@@ -853,4 +902,83 @@ function pePrintReport(){
   if(!el) return;
   pePrintHTML(peDocShell('Group report', '<div class="brand">R O B E R T O ’ S</div><div class="fs-h">GROUP REPORT — '+peEsc(peState.month)+'</div>'+
     el.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'').replace(/onclick="[^"]*"/g,'')));
+}
+
+
+// ── quick menu: Valentina's one-minute proposal, no event record needed ─────
+function peRenderQuick(){
+  var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
+  var selCount = Object.keys(peQuick.sel).filter(function(k){ return peQuick.sel[k]; }).length;
+  var h = '<div class="pe-wrap"><div class="pe-top"><span class="pe-tab" onclick="peGo(\'list\')">\u2039 Events</span>'+
+    '<span style="font-size:12px;color:#8B7355">'+selCount+' dishes picked</span></div>';
+  h += '<div class="pe-card"><b style="color:#400207;font-size:15px">Quick menu</b>'+
+    '<div style="font-size:11.5px;color:#8B7355;margin:2px 0 10px">Tick dishes, print the branded menu \u2014 nothing else needed. You can turn it into a full event later.</div>'+
+    '<div class="pe-grid3">'+
+    '<div style="grid-column:1/3"><div class="pe-lbl">Menu title</div><input class="pe-in" id="pe-q-title" value="'+peEsc(peQuick.title)+'"></div>'+
+    '<div><div class="pe-lbl">Price / person (AED, optional)</div><input class="pe-in" id="pe-q-price" type="number" value="'+peEsc(peQuick.price)+'"></div>'+
+    '</div>';
+  groups.forEach(function(g){
+    var list = peState.dishes.filter(function(d){ return d.active && d.serve===g[0]; });
+    if(!list.length) return;
+    var n = list.filter(function(d){ return peQuick.sel[d.id]; }).length;
+    h += '<div class="pe-lbl" style="margin-top:12px">'+g[1]+' \u00b7 '+n+' selected</div>'+
+      list.map(function(d){
+        return '<span class="pe-chip'+(peQuick.sel[d.id]?' on':'')+'" onclick="peQuickToggle(\''+d.id+'\')">'+peEsc(d.name)+'</span>';
+      }).join('');
+  });
+  h += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'+
+    '<button class="pe-btn" onclick="peQuickPrint()" '+(selCount?'':'disabled')+'>Print / PDF menu</button>'+
+    '<button class="pe-btn sec" onclick="peQuickSave()" '+(selCount?'':'disabled')+'>Save as event draft</button>'+
+    '</div></div>';
+  return h+'</div>';
+}
+function peQuickToggle(id){
+  peQuickRead();
+  peQuick.sel[id] = !peQuick.sel[id];
+  renderMain();
+}
+function peQuickRead(){
+  var tEl = document.getElementById('pe-q-title'), pEl = document.getElementById('pe-q-price');
+  if(tEl) peQuick.title = tEl.value.trim() || 'Canap\u00e9 selection';
+  if(pEl) peQuick.price = pEl.value.trim();
+  return peState.dishes.filter(function(d){ return peQuick.sel[d.id]; });
+}
+function peQuickPrint(){
+  var dishes = peQuickRead();
+  if(!dishes.length) return;
+  var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
+  var pcs = dishes.length;
+  var body = '<div class="brand">R O B E R T O \u2019 S</div><div class="rule"></div>'+
+    '<h2>'+peEsc(peQuick.title)+'</h2>';
+  if(peQuick.price) body += '<div class="sub">AED '+peMoney(Number(peQuick.price))+' / person \u00b7 '+pcs+' pieces per guest</div>';
+  groups.forEach(function(g){
+    var list = dishes.filter(function(d){ return d.serve===g.k; });
+    if(!list.length) return;
+    body += '<div class="sec">'+g.n+'</div>';
+    list.forEach(function(d){
+      body += '<div class="dish">'+peEsc(d.name)+((d.allergens||[]).length?' <span class="codes">('+(d.allergens||[]).join(')(')+')</span>':'')+
+        (d.description?'<br><span class="d">'+peEsc(d.description)+'</span>':'')+'</div>';
+    });
+  });
+  body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
+    'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
+    'D - Dairy | E - Egg | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+  pePrintHTML(peDocShell(peQuick.title, body));
+}
+async function peQuickSave(){
+  var dishes = peQuickRead();
+  if(!dishes.length) return;
+  var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
+              package_label:peQuick.title, food_price_pp:peQuick.price?Number(peQuick.price):null,
+              payment_terms:'50% deposit to confirm, balance on the day' };
+  var r = await sb.from('events_desk').insert(row).select().single();
+  if(r.error || !r.data){ peToast('Could not save \u2014 check connection', true); return; }
+  peState.events.push(r.data);
+  var items = dishes.map(function(d){ return {event_id:r.data.id, dish_id:d.id, pcs_per_guest:1}; });
+  var ir = await sb.from('event_items').insert(items).select();
+  if(!ir.error) peState.items[r.data.id] = ir.data||[];
+  sb.from('event_log').insert({event_id:r.data.id, action:'created', detail:'from quick menu', actor:peActor()});
+  peQuick.sel = {};
+  peToast('Saved as a draft event \u2014 add the client details when ready');
+  peGo('event', r.data.id);
 }
