@@ -103,7 +103,17 @@ function peGo(view, id){
 // ── styles (injected once) ───────────────────────────────────────────────────
 (function(){
   var css = ''+
-  '.pe-wrap{max-width:1000px;margin:0 auto}'+
+  '.pe-wrap{max-width:1080px;margin:0 auto}'+
+  '.pe-kbar{display:flex;justify-content:flex-end;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px}'+
+  '.pe-shell{display:flex;gap:18px;align-items:flex-start}'+
+  '.pe-side{width:168px;flex-shrink:0;display:flex;flex-direction:column;gap:5px}'+
+  '.pe-side .pe-btn{width:100%;box-sizing:border-box;text-align:center}'+
+  '.pe-sdiv{border-top:1px solid rgba(107,31,42,0.15);margin:9px 6px}'+
+  '.pe-snav{font-size:12.5px;padding:8px 12px;border-radius:8px;color:var(--vino);cursor:pointer}'+
+  '.pe-snav:hover{background:rgba(107,31,42,0.07)}'+
+  '.pe-snav.on{background:var(--vino);color:var(--cream);font-weight:600}'+
+  '.pe-main{flex:1;min-width:0}'+
+  '@media(max-width:820px){.pe-shell{display:block}.pe-side{width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;margin-bottom:12px}.pe-side .pe-btn{width:auto}.pe-sdiv{display:none}.pe-snav{border:1px solid rgba(107,31,42,0.3);border-radius:14px;padding:6px 14px;font-size:12px}.pe-snav.on{border-color:var(--vino)}}'+
   '.pe-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}'+
   '.pe-title{font-family:\'Playfair Display\',serif;font-size:22px;color:var(--vino-dark)}'+
   '.pe-tabs{display:flex;gap:6px;flex-wrap:wrap}'+
@@ -177,17 +187,25 @@ function renderPrivateEvents(){
 function peHeader(active){
   var left = [['list','Events'],['calendar','Calendar'],['report','Monthly report'],['packs','Menu packages']];
   var right = [['chef','Chef corner'],['bev','Beverage corner']];
-  return '<div class="pe-wrap"><div class="pe-top" style="align-items:flex-end">'+
-    '<div class="pe-tabs">'+left.map(function(t){
-      return '<span class="pe-tab'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
-    }).join('')+'</div>'+
-    '<div class="pe-tabs" style="margin-left:auto">'+
-    '<span style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#A88930;align-self:center;margin-right:2px">Kitchen &amp; bar</span>'+
+  return '<div class="pe-wrap">'+
+    '<div class="pe-kbar">'+
+    '<span style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#A88930;margin-right:2px">Kitchen &amp; bar</span>'+
     right.map(function(t){
       return '<span class="pe-tab staff'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
     }).join('')+'</div>'+
-  '</div>';
+    '<div class="pe-shell">'+
+    '<div class="pe-side">'+
+      '<button class="pe-btn" onclick="peNewEvent()">+ New event</button>'+
+      '<button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
+      '<button class="pe-btn sec" onclick="peCopyGuestLink()">Guest link</button>'+
+      '<div class="pe-sdiv"></div>'+
+    left.map(function(t){
+      return '<span class="pe-snav'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
+    }).join('')+
+    '</div>'+
+    '<div class="pe-main">';
 }
+var PE_FOOT = '</div></div></div>';
 
 // ── list view ────────────────────────────────────────────────────────────────
 function peFilteredEvents(){
@@ -205,17 +223,12 @@ function peRenderList(){
   var pipeline = 0;
   evs.forEach(function(e){ var t = peEventValue(e); if(t && ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0) pipeline += t; });
   var h = peHeader('list');
-  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
-    '<button class="pe-btn" onclick="peNewEvent()">+ New event</button>'+
-    '<button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
-    '<button class="pe-btn sec" onclick="peCopyGuestLink()">Guest link</button>'+
-  '</div>';
-  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">'+filters.map(function(f){
+  h += '<div class="pe-card">';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(107,31,42,0.1);padding-bottom:10px;margin-bottom:4px">'+filters.map(function(f){
     return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';renderMain()">'+f[1]+'</span>';
   }).join('')+
   '<input class="pe-in" style="width:190px;margin-left:auto" placeholder="Search client or company\u2026" value="'+peEsc(peState.q||'')+'" oninput="peState.q=this.value;renderMain();var el=document.querySelectorAll(\'input[placeholder^=Search]\')[0];if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}">'+
   '</div>';
-  h += '<div class="pe-card">';
   if(!evs.length){
     h += '<div style="text-align:center;padding:26px;color:#8B7355;font-size:13px">No events here yet. Tap “+ New event” to start a quotation.</div>';
   } else {
@@ -234,7 +247,7 @@ function peRenderList(){
   }
   h += '</div>';
   h += '<div style="font-size:11.5px;color:#8B7355;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>'+evs.length+' events shown</span><span>Open pipeline value: AED '+peMoney(pipeline)+'</span></div>';
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function peEventValue(e){
   var t = peCalcTotals(e);
@@ -273,7 +286,7 @@ function peRenderCalendar(){
   }
   h += '</div>';
   h += '<div style="font-size:11px;color:#8B7355;margin-top:8px">Tap an event to open it. Colors follow the status pills.</div>';
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function peCalShift(n){
   var y = +peState.month.slice(0,4), mo = +peState.month.slice(5,7)-1+n;
@@ -313,7 +326,7 @@ function peCalcTotals(e){
 }
 function peRenderEvent(){
   var e = peEvById(peState.currentId);
-  if(!e) return peHeader('list')+'<div class="pe-card">Event not found.</div></div>';
+  if(!e) return peHeader('list')+'<div class="pe-card">Event not found.</div>'+PE_FOOT;
   var t = peCalcTotals(e);
   var m = peStatusMeta(e.status);
   var log = peState.log[e.id]||[];
@@ -698,19 +711,19 @@ function peRenderChefCorner(){
   var h = peHeader('chef');
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">The kitchen\u2019s home: add and update canap\u00e9s \u2014 everything saved here is instantly available to the events desk and the guest menu.</div>';
   h += peRenderDishLib();
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function peRenderBevCorner(){
   var h = peHeader('bev');
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Manuel\u2019s home: beverage packages for events \u2014 name, hours, price per guest and what\u2019s included.</div>';
   h += peRenderBevLib();
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function peRenderPacksView(){
   var h = peHeader('packs');
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Ready-made menu packages (like Canape Cortile) that start a quotation with one tap.</div>';
   h += peRenderPackLib();
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function peBuildGoal(){
   var have = { serve:{}, tiers:{}, cells:{} };
@@ -1062,7 +1075,7 @@ function peRenderReport(){
   });
   h += '<div class="pe-tot" style="max-width:380px"><div class="pe-tot-row"><span>'+mLbl+' confirmed value</span><b>AED '+peMoney(mtot)+'</b></div>'+
        '<div class="pe-tot-row"><span>'+mk.slice(0,4)+' YTD confirmed value</span><b>AED '+peMoney(ytd)+'</b></div></div>';
-  return h+'</div>';
+  return h+PE_FOOT;
 }
 function pePrintReport(){
   var el = document.getElementById('main-content');
