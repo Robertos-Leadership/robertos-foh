@@ -106,6 +106,8 @@ function peGo(view, id){
   '.pe-tabs{display:flex;gap:6px;flex-wrap:wrap}'+
   '.pe-tab{font-size:12px;padding:6px 14px;border-radius:14px;border:1px solid rgba(107,31,42,0.3);color:var(--vino);cursor:pointer;background:transparent}'+
   '.pe-tab.on{background:var(--vino);color:var(--cream)}'+
+  '.pe-tab.staff{border-color:#C9A84C;color:#8A6A4F}'+
+  '.pe-tab.staff.on{background:#8A6A4F;border-color:#8A6A4F;color:#FBF7F1}'+
   '.pe-btn{font-size:12.5px;padding:8px 14px;border-radius:8px;border:1px solid var(--vino);background:var(--vino);color:var(--cream);cursor:pointer}'+
   '.pe-btn.sec{background:transparent;color:var(--vino)}'+
   '.pe-btn.sm{padding:5px 10px;font-size:11.5px}'+
@@ -162,19 +164,25 @@ function renderPrivateEvents(){
   if(v==='event')    return peRenderEvent();
   if(v==='quick')    return peRenderQuick();
   if(v==='calendar') return peRenderCalendar();
-  if(v==='library')  return peRenderLibrary();
+  if(v==='chef')     return peRenderChefCorner();
+  if(v==='bev')      return peRenderBevCorner();
+  if(v==='packs')    return peRenderPacksView();
+  if(v==='library')  return peRenderChefCorner();
   if(v==='report')   return peRenderReport();
   return peRenderList();
 }
 function peHeader(active){
-  var tabs = [['list','Events'],['calendar','Calendar'],['report','Monthly report'],['library','Library']];
-  return '<div class="pe-wrap"><div class="pe-top">'+
-    '<div class="pe-tabs">'+tabs.map(function(t){
+  var left = [['list','Events'],['calendar','Calendar'],['report','Monthly report'],['packs','Menu packages']];
+  var right = [['chef','Chef corner'],['bev','Beverage corner']];
+  return '<div class="pe-wrap"><div class="pe-top" style="align-items:flex-end">'+
+    '<div class="pe-tabs">'+left.map(function(t){
       return '<span class="pe-tab'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
     }).join('')+'</div>'+
-    '<span style="display:flex;gap:8px;flex-wrap:wrap"><button class="pe-btn sec" onclick="peCopyGuestLink()">Guest link</button>'+
-    '<button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
-    '<button class="pe-btn" onclick="peNewEvent()">+ New event</button></span>'+
+    '<div class="pe-tabs" style="margin-left:auto">'+
+    '<span style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#A88930;align-self:center;margin-right:2px">Kitchen &amp; bar</span>'+
+    right.map(function(t){
+      return '<span class="pe-tab staff'+(active===t[0]?' on':'')+'" onclick="peGo(\''+t[0]+'\')">'+t[1]+'</span>';
+    }).join('')+'</div>'+
   '</div>';
 }
 
@@ -193,6 +201,11 @@ function peRenderList(){
   var pipeline = 0;
   evs.forEach(function(e){ var t = peEventValue(e); if(t && ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0) pipeline += t; });
   var h = peHeader('list');
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+    '<button class="pe-btn" onclick="peNewEvent()">+ New event</button>'+
+    '<button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
+    '<button class="pe-btn sec" onclick="peCopyGuestLink()">Guest link</button>'+
+  '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+filters.map(function(f){
     return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';renderMain()">'+f[1]+'</span>';
   }).join('')+'</div>';
@@ -645,15 +658,22 @@ function peCopyClientLink(id){
 }
 
 // ── library (chef dishes / Manuel beverage / packages) ───────────────────────
-function peRenderLibrary(){
-  var h = peHeader('library');
-  var tabs = [['dishes','Dishes (kitchen)'],['bev','Beverage packages'],['packages','Menu packages']];
-  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+tabs.map(function(t){
-    return '<span class="pe-tab'+(peState.libTab===t[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.libTab=\''+t[0]+'\';renderMain()">'+t[1]+'</span>';
-  }).join('')+'</div>';
-  if(peState.libTab==='dishes') h += peRenderDishLib();
-  else if(peState.libTab==='bev') h += peRenderBevLib();
-  else h += peRenderPackLib();
+function peRenderChefCorner(){
+  var h = peHeader('chef');
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">The kitchen\u2019s home: add and update canap\u00e9s \u2014 everything saved here is instantly available to the events desk and the guest menu.</div>';
+  h += peRenderDishLib();
+  return h+'</div>';
+}
+function peRenderBevCorner(){
+  var h = peHeader('bev');
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Manuel\u2019s home: beverage packages for events \u2014 name, hours, price per guest and what\u2019s included.</div>';
+  h += peRenderBevLib();
+  return h+'</div>';
+}
+function peRenderPacksView(){
+  var h = peHeader('packs');
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Ready-made menu packages (like Canape Cortile) that start a quotation with one tap.</div>';
+  h += peRenderPackLib();
   return h+'</div>';
 }
 function peBuildGoal(){
