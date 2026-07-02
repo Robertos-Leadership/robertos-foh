@@ -33,6 +33,8 @@
   .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
   .gbox{margin:16px 22px 0;background:#F3E9DA;border-radius:10px;padding:12px 14px}
   .pr{font-size:11px;color:#400207;font-family:Arial,sans-serif;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.3}
+  .qbox{flex-shrink:0;margin-left:8px;text-align:center}
+  .qin{width:58px;border:1px solid #C9AD96;border-radius:7px;background:#fff;padding:6px 4px;font-family:Arial,sans-serif;font-size:13px;text-align:center}
   body.nogc .sect{opacity:.35;pointer-events:none}
 </style>
 </head>
@@ -46,6 +48,8 @@ var token = new URLSearchParams(location.search).get('t') || '';
 var picked = {};
 var guestCount = 0;
 var dishById = {};
+var qty = {};
+function defaultQty(d){ return Math.max(guestCount||0, Number(d.min_order)||10); }
 function allowedDishes(g){ return g>=30 ? 15 : (g>=20 ? 8 : (g>=15 ? 5 : 0)); }
 function pickedCount(){ return Object.keys(picked).filter(function(k){ return picked[k]; }).length; }
 
@@ -91,7 +95,8 @@ function render(data){
           '<span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'+
           '<span style="flex:1"><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
           (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span>'+
-          (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+' <span style="font-size:9px">/pc</span><br><span style="font-size:9px;color:#A5876B">min '+(d.min_order||10)+' pcs</span></span>':'')+'</div>';
+          (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+' <span style="font-size:9px">/pc</span><br><span style="font-size:9px;color:#A5876B">min '+(d.min_order||10)+' pcs</span></span>':'')+
+          (picked[d.id]?'<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+d.id+'" min="'+(d.min_order||10)+'" value="'+(qty[d.id]||defaultQty(d))+'" oninput="setQty(\''+d.id+'\',this.value)"><br><span style="font-size:9px;color:#A5876B">pieces</span></span>':'')+'</div>';
       }).join('')+'</div>';
   });
   if(open){
@@ -120,6 +125,24 @@ function toggle(node){
   }
   picked[id] = !picked[id];
   node.classList.toggle('on', picked[id]);
+  var d = dishById[id];
+  if(picked[id]){ if(!qty[id]) qty[id] = defaultQty(d); }
+  else delete qty[id];
+  var qb = node.querySelector('.qbox');
+  if(qb) qb.remove();
+  if(picked[id] && d){
+    node.insertAdjacentHTML('beforeend',
+      '<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+id+'" min="'+(d.min_order||10)+'" value="'+qty[id]+'" oninput="setQty(\''+id+'\',this.value)"><br><span style="font-size:9px;color:#A5876B">pieces</span></span>');
+  }
+  counts();
+}
+function setQty(id, v){
+  var d = dishById[id];
+  var n = parseInt(v,10)||0;
+  qty[id] = n;
+  var inp = el('q-'+id);
+  var low = n < (Number(d.min_order)||10);
+  if(inp) inp.style.borderColor = low ? '#B00020' : '#C9AD96';
   counts();
 }
 function onGuests(v){
@@ -156,16 +179,19 @@ function counts(){
   }
   var tl = el('cl-total');
   if(tl){
-    var total = 0, any = false;
+    var total = 0, any = false, lowMin = [];
     Object.keys(picked).forEach(function(k){
       if(!picked[k] || !dishById[k]) return;
       var d = dishById[k];
-      total += (Number(d.sell_price)||0) * Math.max(guestCount, Number(d.min_order)||10);
+      var q = qty[k] || defaultQty(d);
+      total += (Number(d.sell_price)||0) * q;
+      if(q < (Number(d.min_order)||10)) lowMin.push(d.name);
       any = true;
     });
     if(any && guestCount >= 15){
       tl.innerHTML = '<b>Estimated total: AED '+Math.round(total).toLocaleString('en-US')+'</b> · about AED '+Math.round(total/guestCount).toLocaleString('en-US')+' per guest'+
-        '<br><span style="font-size:10.5px;color:#A5876B">Based on one piece per guest of each canapé (minimum quantities apply) — Valentina will confirm your final quote.</span>';
+        (lowMin.length?'<br><span style="font-size:10.5px;color:#B00020">Please check quantities — below the minimum for: '+esc(lowMin.join(', '))+'</span>':'')+
+        '<br><span style="font-size:10.5px;color:#A5876B">Adjust the pieces of each canapé as you like — Valentina will confirm your final quote.</span>';
     } else tl.innerHTML = '';
   }
 }
@@ -175,7 +201,11 @@ async function send(){
   if(guestCount < 15){ alert('First tell us how many guests you will be (minimum 15).'); return; }
   var cap = allowedDishes(guestCount);
   if(ids.length > cap){ alert('With '+guestCount+' guests you can pick up to '+cap+' different canapés.'); return; }
-  var payload = { dish_ids:ids, note:(el('cl-note')||{}).value||'', guests:guestCount };
+  var lowMin = ids.filter(function(k){ var d=dishById[k]; return (qty[k]||defaultQty(d)) < (Number(d.min_order)||10); });
+  if(lowMin.length){ alert('Some quantities are below the minimum: '+lowMin.map(function(k){ return dishById[k].name+' (min '+(dishById[k].min_order||10)+')'; }).join(', ')); return; }
+  var quantities = {};
+  ids.forEach(function(k){ quantities[k] = qty[k] || defaultQty(dishById[k]); });
+  var payload = { dish_ids:ids, quantities:quantities, note:(el('cl-note')||{}).value||'', guests:guestCount };
   if(token){ payload.t = token; }
   else {
     payload.name = (el('cl-name')||{}).value||'';

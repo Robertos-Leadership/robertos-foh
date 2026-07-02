@@ -513,9 +513,14 @@ async function peSetPcs(itemId, val){
 async function peApplyClientSelection(eventId){
   var e = peEvById(eventId); if(!e || !e.client_selection) return;
   var want = e.client_selection.dish_ids||[];
+  var qmap = e.client_selection.quantities||{};
+  var g = Number(e.guests)||0;
   var existing = (peState.items[eventId]||[]).map(function(i){ return i.dish_id; });
   var toAdd = want.filter(function(d){ return existing.indexOf(d)<0; })
-    .map(function(d){ return {event_id:eventId, dish_id:d, pcs_per_guest:1}; });
+    .map(function(d){
+      var q = Number(qmap[d])||0;
+      return {event_id:eventId, dish_id:d, pcs_per_guest:(q&&g)?Math.round(q/g*100)/100:1};
+    });
   if(toAdd.length){
     var r = await sb.from('event_items').insert(toAdd).select();
     if(r.error){ peToast('Could not apply — check connection', true); return; }
