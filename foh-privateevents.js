@@ -47,14 +47,36 @@ var PE_GROSS = 1.23585;   // 10% SC + 7% DIFC + 5% VAT compounding — net = gro
 var PE_TIERS = [{n:'Classic',p:10},{n:'Elevated',p:20},{n:'Signature',p:35}];
 // The three designed set menus (PDFs live in menus/ inside this repo, so they
 // deploy with the app and the email links always match the site being served).
+// Each menu carries its courses so the kitchen prep sheet can be built from a
+// booking. Fixed courses = one portion per guest; a "choose" course records the
+// per-option headcount split the kitchen actually cooks (e.g. 18 wagyu / 8 moro).
 var PE_SET_MENUS = [
   {key:'terra', name:'Terra set menu', price:370, pdf:'menus/set-menu-terra.pdf',
-   line:'Burrata · homemade tortelli, ricotta and spinach with truffle cream · choice of branzino, polletto or insalata 4 semi · tiramisù'},
+   line:'Burrata · homemade tortelli, ricotta and spinach with truffle cream · choice of branzino, polletto or insalata 4 semi · tiramisù',
+   courses:[
+     {name:'Primi', items:['Burrata']},
+     {name:'Pasta', items:['Tortelli ricotta &amp; spinach']},
+     {name:'Secondi', choose:1, options:['Branzino','Polletto','Insalata 4 semi']},
+     {name:'Dolci', items:['Tiramisù']}
+   ]},
   {key:'mare', name:'Mare set menu', price:440, pdf:'menus/set-menu-mare.pdf',
-   line:'Burrata, bresaola and tonno battuto · Il Bosco truffle risotto · choice of angus ribeye, branzino or melanzane · torta al limone'},
+   line:'Burrata, bresaola and tonno battuto · Il Bosco truffle risotto · choice of angus ribeye, branzino or melanzane · torta al limone',
+   courses:[
+     {name:'Primi', items:['Burrata','Bresaola','Tonno Battuto']},
+     {name:'Pasta', items:['Il Bosco truffle risotto']},
+     {name:'Secondi', choose:1, options:['Ribeye di Angus','Branzino','Melanzane']},
+     {name:'Dolci', items:['Torta al Limone']}
+   ]},
   {key:'fuoco', name:'Fuoco set menu', price:525, pdf:'menus/set-menu-fuoco.pdf',
-   line:'Burrata, bresaola and tonno battuto · raviolo alla Genovese · choice of wagyu ribeye, moro toothfish or melanzane · Choc-Choc'}
+   line:'Burrata, bresaola and tonno battuto · raviolo alla Genovese · choice of wagyu ribeye, moro toothfish or melanzane · Choc-Choc',
+   courses:[
+     {name:'Primi', items:['Burrata','Bresaola','Tonno Battuto']},
+     {name:'Pasta', items:['Raviolo alla Genovese']},
+     {name:'Secondi', choose:1, options:['Ribeye di Wagyu','Moro','Melanzane']},
+     {name:'Dolci', items:['Choc-Choc']}
+   ]}
 ];
+function peSetMenuByKey(k){ for(var i=0;i<PE_SET_MENUS.length;i++) if(PE_SET_MENUS[i].key===k) return PE_SET_MENUS[i]; return null; }
 
 function peStatusMeta(k){ for(var i=0;i<PE_STATUS.length;i++) if(PE_STATUS[i].k===k) return PE_STATUS[i]; return PE_STATUS[0]; }
 function peEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -381,25 +403,30 @@ function peRenderEvent(){
 
   // 2col: food+bev | totals+actions
   h += '<div class="pe-2col"><div>';
-  // food
+  // food — either a set menu (plated, with a per-choice headcount) or canapés
+  var sm = e.set_menu;
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+
     '<b style="font-size:14px;color:#400207">Food</b>'+
-    '<span><select class="pe-in" style="width:auto;display:inline-block" id="pe-pack-sel">'+
+    (sm ? '' : '<span><select class="pe-in" style="width:auto;display:inline-block" id="pe-pack-sel">'+
       '<option value="">Start from a package…</option>'+
       peState.packs.map(function(p){ return '<option value="'+p.id+'">'+peEsc(p.name)+' — AED '+peMoney(p.price_pp)+'/guest</option>'; }).join('')+
-    '</select> <button class="pe-btn sec sm" onclick="peApplyPackage(\''+e.id+'\')">Apply</button></span></div>';
-  h += '<div class="pe-lbl">Package label on documents (free text — set menus welcome)</div>'+
-       '<input class="pe-in" id="pe-f-package_label" value="'+peEsc(e.package_label||'')+'" placeholder="e.g. Canape Cortile · or Set Menu Mare 440">';
-  h += '<div style="display:flex;gap:10px;margin-top:8px;align-items:end"><div style="flex:1"><div class="pe-lbl">Food price / guest (AED) — leave blank to use the dishes total</div>'+
+    '</select> <button class="pe-btn sec sm" onclick="peApplyPackage(\''+e.id+'\')">Apply</button></span>')+'</div>';
+  h += peFoodSetMenuHTML(e);
+  if(!sm){
+    h += '<div class="pe-lbl">Package label on documents (free text)</div>'+
+       '<input class="pe-in" id="pe-f-package_label" value="'+peEsc(e.package_label||'')+'" placeholder="e.g. Canape Cortile">';
+    h += '<div style="display:flex;gap:10px;margin-top:8px;align-items:end"><div style="flex:1"><div class="pe-lbl">Food price / guest (AED) — leave blank to use the dishes total</div>'+
        '<input class="pe-in" id="pe-f-food_price_pp" type="number" value="'+(e.food_price_pp!=null?peEsc(e.food_price_pp):'')+'" placeholder="auto: '+peMoney(t.foodComputed)+'"></div></div>';
-  h += '<div style="margin-top:10px">'+ (t.items.length ? t.items.map(function(it){
-      var d = peDishById(it.dish_id); if(!d) return '';
-      return '<div class="pe-dishrow"><span>'+peEsc(d.name)+' <span style="color:#A5876B;font-size:10.5px">('+peEsc((d.allergens||[]).join(')(')||'–')+')</span>'+
-        ((d.allergens||[]).length||d.category==='Dessert'?'':' <span class="pe-pill pe-p-sent" style="font-size:10px">no allergens set</span>')+'</span>'+
-        '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0"><input class="pe-in" style="width:52px;padding:3px 6px" type="number" step="0.5" value="'+it.pcs_per_guest+'" onchange="peSetPcs(\''+it.id+'\',this.value)"> pc/guest'+
-        '<span class="pe-x" onclick="peRemoveItem(\''+it.id+'\')">✕</span></span></div>';
-    }).join('') : '<div style="font-size:12px;color:#8B7355;padding:6px 0">No dishes yet — apply a package or add from the library.</div>');
-  h += '<button class="pe-btn sec sm" style="margin-top:8px" onclick="peOpenDishPicker(\''+e.id+'\')">+ Add dish from library</button></div></div>';
+    h += '<div style="margin-top:10px">'+ (t.items.length ? t.items.map(function(it){
+        var d = peDishById(it.dish_id); if(!d) return '';
+        return '<div class="pe-dishrow"><span>'+peEsc(d.name)+' <span style="color:#A5876B;font-size:10.5px">('+peEsc((d.allergens||[]).join(')(')||'–')+')</span>'+
+          ((d.allergens||[]).length||d.category==='Dessert'?'':' <span class="pe-pill pe-p-sent" style="font-size:10px">no allergens set</span>')+'</span>'+
+          '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0"><input class="pe-in" style="width:52px;padding:3px 6px" type="number" step="0.5" value="'+it.pcs_per_guest+'" onchange="peSetPcs(\''+it.id+'\',this.value)"> pc/guest'+
+          '<span class="pe-x" onclick="peRemoveItem(\''+it.id+'\')">✕</span></span></div>';
+      }).join('') : '<div style="font-size:12px;color:#8B7355;padding:6px 0">No dishes yet — apply a package or add from the library.</div>');
+    h += '<button class="pe-btn sec sm" style="margin-top:8px" onclick="peOpenDishPicker(\''+e.id+'\')">+ Add dish from library</button>';
+  }
+  h += '</div></div>';
   // beverage
   var dry = e.bev_mode==='dry';
   h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Beverage</b>'+
@@ -712,6 +739,70 @@ async function peApplyClientSelection(eventId){
   renderMain();
 }
 
+// ── set menus (plated Terra/Mare/Fuoco with a per-choice headcount) ──────────
+function peSmEsc(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function peFoodSetMenuHTML(e){
+  var sm = e.set_menu;
+  var h = '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(107,31,42,0.15)">';
+  if(!sm){
+    h += '<div class="pe-lbl">Or use a set menu</div>'+
+      '<span style="display:flex;gap:6px;align-items:center"><select class="pe-in" style="flex:1" id="pe-sm-sel"><option value="">Choose a set menu…</option>'+
+      PE_SET_MENUS.map(function(m){ return '<option value="'+m.key+'">'+peEsc(m.name)+' — AED '+m.price+'/guest</option>'; }).join('')+
+      '</select><button class="pe-btn sec sm" onclick="peApplySetMenu(\''+e.id+'\')">Use</button></span>';
+    return h+'</div>';
+  }
+  var m = peSetMenuByKey(sm.key);
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<b style="color:#400207">'+(m?peEsc(m.name):'Set menu')+(m?' · AED '+m.price+'/guest':'')+'</b>'+
+    '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peClearSetMenu(\''+e.id+'\')">Remove set menu</button></div>';
+  if(m){
+    var g = Number(e.guests)||0;
+    m.courses.forEach(function(c){
+      if(!c.choose) return;
+      var counts = (sm.choices&&sm.choices[c.name])||{};
+      var sum = 0; c.options.forEach(function(o){ sum += Number(counts[o])||0; });
+      h += '<div style="margin-top:8px"><div class="pe-lbl">'+peEsc(c.name)+' — how many guests chose each</div>'+
+        c.options.map(function(o){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0">'+
+            '<span style="font-size:12.5px">'+o+'</span>'+
+            '<input class="pe-in" style="width:70px;padding:4px 6px" type="number" min="0" value="'+(counts[o]!=null?counts[o]:'')+'" onchange="peSetMenuCount(\''+e.id+'\',\''+peSmEsc(c.name)+'\',\''+peSmEsc(o)+'\',this.value)"></div>';
+        }).join('')+
+        '<div style="font-size:11.5px;margin-top:3px;color:'+((g&&sum===g)?'#2E6B34':'#8A6400')+'">'+sum+' of '+(g||'—')+' guests assigned'+
+        ((g&&sum!==g)?' — '+(sum<g?(g-sum)+' still to assign':(sum-g)+' over'):(g?' ✓':''))+'</div></div>';
+    });
+  }
+  return h+'</div>';
+}
+async function peApplySetMenu(eventId){
+  var sel = document.getElementById('pe-sm-sel'); if(!sel || !sel.value) return;
+  var m = peSetMenuByKey(sel.value); if(!m) return;
+  var patch = { set_menu:{key:m.key, choices:{}}, package_label:m.name, food_price_pp:m.price, updated_at:new Date().toISOString() };
+  var r = await sb.from('events_desk').update(patch).eq('id', eventId);
+  if(r.error){ peToast('NOT applied — '+(r.error.message||'check connection'), true); return; }
+  var e = peEvById(eventId); Object.keys(patch).forEach(function(k){ e[k] = patch[k]; });
+  peToast('Set menu applied — enter the guests’ choices for the kitchen');
+  renderMain();
+}
+async function peClearSetMenu(eventId){
+  var patch = { set_menu:null, package_label:null, food_price_pp:null, updated_at:new Date().toISOString() };
+  var r = await sb.from('events_desk').update(patch).eq('id', eventId);
+  if(r.error){ peToast('NOT changed — check connection', true); return; }
+  var e = peEvById(eventId); Object.keys(patch).forEach(function(k){ e[k] = patch[k]; });
+  peToast('Set menu removed');
+  renderMain();
+}
+async function peSetMenuCount(eventId, course, option, val){
+  var e = peEvById(eventId); if(!e || !e.set_menu) return;
+  var sm = JSON.parse(JSON.stringify(e.set_menu));
+  sm.choices = sm.choices || {};
+  sm.choices[course] = sm.choices[course] || {};
+  var n = parseInt(val,10);
+  if(n>0) sm.choices[course][option] = n; else delete sm.choices[course][option];
+  var r = await sb.from('events_desk').update({set_menu:sm, updated_at:new Date().toISOString()}).eq('id', eventId);
+  if(r.error){ peToast('NOT saved — check connection', true); return; }
+  e.set_menu = sm; renderMain();
+}
+
 // ── documents ────────────────────────────────────────────────────────────────
 function peDocShell(title, inner){
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+peEsc(title)+'</title>'+
@@ -747,6 +838,7 @@ function peProposalHTML(e){
   if(e.event_date) who.push(peDLabel(e.event_date));
   if(e.area) who.push(peEsc(e.area));
   if(who.length) body += '<div class="sub">'+who.join(' · ')+'</div>';
+  body += peProposalSetMenuHTML(e);
   groups.forEach(function(g){
     var list = t.items.map(function(it){ return peDishById(it.dish_id); }).filter(function(d){ return d && d.serve===g.k; });
     if(!list.length) return;
@@ -792,9 +884,68 @@ function peFunctionSheetHTML(e){
   body += row('Dietary', e.dietary)+row('Payment', e.payment_terms);
   body += row('Status', peStatusMeta(e.status).n)+row('Last update', new Date().toLocaleDateString('en-GB')+' · '+peActor());
   body += '</table>';
+  body += peSetMenuPrepHTML(e);
   body += peKitchenPrepHTML(e, t);
   body += '<div class="ft">All prices inclusive of 5% VAT, 7% DIFC authority fee and 10% service charge.</div>';
   return peDocShell('Function sheet', body);
+}
+// Set-menu prep for the kitchen: fixed courses = one portion per guest; the
+// choose course carries the exact per-option headcount the chef cooks.
+function peSetMenuPrepHTML(e){
+  var sm = e.set_menu; if(!sm) return '';
+  var m = peSetMenuByKey(sm.key); if(!m) return '';
+  var g = Number(e.guests)||0;
+  var h = '<div class="fs-h" style="margin-top:16px">KITCHEN — '+peEsc(m.name).toUpperCase()+' · '+(g||'?')+' GUESTS</div><table>';
+  m.courses.forEach(function(c){
+    h += '<tr><td colspan="2" style="background:#F3E9DA;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8A6A4F">'+peEsc(c.name)+(c.choose?' — guests’ choice':'')+'</td></tr>';
+    if(c.choose){
+      var counts = (sm.choices&&sm.choices[c.name])||{}, sum = 0;
+      c.options.forEach(function(o){ var n=Number(counts[o])||0; sum+=n;
+        h += '<tr><td>'+o+'</td><td><b>'+(n?n+' portions':'—')+'</b></td></tr>';
+      });
+      if(g && sum!==g) h += '<tr><td colspan="2" style="color:#B00020;font-size:11px">▲ choices total '+sum+' of '+g+' guests — confirm the split with the events desk</td></tr>';
+    } else {
+      (c.items||[]).forEach(function(it){ h += '<tr><td>'+it+'</td><td><b>'+(g?g+' portions':'per guest')+'</b></td></tr>'; });
+    }
+  });
+  h += '</table>';
+  if(e.dietary) h += '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Dietary — read before prep:</b> '+peEsc(e.dietary)+'</div>';
+  return h;
+}
+function peCoordSetMenuHTML(e){
+  var sm = e.set_menu; if(!sm) return '';
+  var m = peSetMenuByKey(sm.key); if(!m) return '';
+  var g = Number(e.guests)||0;
+  var h = '<p style="margin:14px 0 4px"><b>'+peEsc(m.name)+' — kitchen (@Danilo) · '+(g||'?')+' guests:</b></p>'+
+    '<table style="border-collapse:collapse;font-size:13px">';
+  m.courses.forEach(function(c){
+    h += '<tr><td colspan="2" style="padding:3px 8px;border:1px solid #ddd;color:#8A6A4F;font-size:11px;text-transform:uppercase;letter-spacing:1px">'+peEsc(c.name)+(c.choose?' — guests’ choice':'')+'</td></tr>';
+    if(c.choose){
+      var counts = (sm.choices&&sm.choices[c.name])||{}, sum = 0;
+      c.options.forEach(function(o){ var n=Number(counts[o])||0; sum+=n;
+        h += '<tr><td style="padding:3px 8px;border:1px solid #ddd">'+o+'</td><td style="padding:3px 8px;border:1px solid #ddd"><b>'+(n?n+' portions':'—')+'</b></td></tr>';
+      });
+      if(g && sum!==g) h += '<tr><td colspan="2" style="padding:3px 8px;border:1px solid #ddd;color:#B00020;font-size:11px">choices total '+sum+' of '+g+' — to be confirmed</td></tr>';
+    } else {
+      (c.items||[]).forEach(function(it){ h += '<tr><td style="padding:3px 8px;border:1px solid #ddd">'+it+'</td><td style="padding:3px 8px;border:1px solid #ddd"><b>'+(g?g+' portions':'per guest')+'</b></td></tr>'; });
+    }
+  });
+  return h+'</table>';
+}
+// Elegant set-menu courses for the guest proposal — a menu, not a headcount.
+function peProposalSetMenuHTML(e){
+  var sm = e.set_menu; if(!sm) return '';
+  var m = peSetMenuByKey(sm.key); if(!m) return '';
+  var h = '';
+  m.courses.forEach(function(c){
+    h += '<div class="sec">'+peEsc(c.name)+'</div>';
+    if(c.choose){
+      h += '<div class="dish"><span class="d">Choice of '+c.options.map(function(o){ return o; }).join(', ').replace(/, ([^,]*)$/,' or $1')+'</span></div>';
+    } else {
+      (c.items||[]).forEach(function(it){ h += '<div class="dish">'+it+'</div>'; });
+    }
+  });
+  return h;
 }
 // The chef's half of the sheet: every selected dish with the quantity to
 // prepare (pcs/guest × guests), grouped like the kitchen works — cold, hot,
@@ -850,6 +1001,7 @@ function peCoordEmailHTML(e){
     li('Minimum spending', e.min_spend?'AED '+peMoney(e.min_spend):null)+
     li('Dietary', e.dietary)+
     '</table>'+
+    peCoordSetMenuHTML(e)+
     peCoordPrepHTML(e)+
     '<p style="color:#666;font-size:12px">Sent automatically from the Events module · status: '+peStatusMeta(e.status).n+'</p>'+
     '<p>Kind regards,<br>'+peEsc(peActor())+'</p></div>';
