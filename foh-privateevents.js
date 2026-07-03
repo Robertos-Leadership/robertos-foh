@@ -10,7 +10,7 @@
 
 var peState = {
   loaded:false, loading:false,
-  view:'list',            // list | calendar | event | library | report | packs | packsfood | packsbev | packlib
+  view:'list',            // list | calendar | event | library | report | packs | packlib | wizard
   libTab:'dishes',        // dishes | bev | packages
   filter:'open',          // open | all | draft | sent | confirmed | deposit | done
   q:'',                   // search text on the events list
@@ -191,6 +191,7 @@ function renderPrivateEvents(){
   if(v==='bev')      return peRenderBevCorner();
   if(v==='packs' || v==='packsfood' || v==='packsbev') return peRenderPacksView();
   if(v==='packlib')   return peRenderPacksLibView();
+  if(v==='wizard')   return peRenderWizard();
   if(v==='library')  return peRenderChefCorner();
   if(v==='report')   return peRenderReport();
   return peRenderList();
@@ -208,6 +209,7 @@ function peHeader(active){
     '<div class="pe-side">'+
       '<button class="pe-btn" onclick="peNewEvent()">+ New event</button>'+
       '<button class="pe-btn sec" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</button>'+
+      '<button class="pe-btn sec" onclick="peWizReset();peGo(\'wizard\')">Budget proposal</button>'+
       '<button class="pe-btn sec" onclick="peCopyGuestLink()">Guest link</button>'+
       '<div class="pe-sdiv"></div>'+
     left.map(function(t){
@@ -1131,6 +1133,207 @@ async function peSavePack(id){
   if(r.error || !r.data){ peToast('NOT saved — '+String(r.error&&r.error.message||'').slice(0,100), true); return; }
   if(id){ peState.packs = peState.packs.map(function(p){ return p.id===id ? r.data : p; }); } else peState.packs.push(r.data);
   peState.editPackId = null; peToast('Menu package saved ✓'); renderMain();
+}
+
+// ── budget proposal wizard ───────────────────────────────────────────────────
+// Valentina types the facts of the enquiry (guests, budget, beverage package);
+// the app does ALL the math on her own library — beverage total, balance for
+// food per guest, then a canapé mix that fits it under the kitchen rules
+// (8–12 pcs/guest, variety cap by guest count, min orders). No AI, no guessing.
+var peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', busy:false };
+function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', busy:false }; }
+function peWizSet(f, v){ peWiz[f] = v; peWizPaint(); }
+function peWizCap(guests){ return guests>=30 ? 15 : (guests>=20 ? 8 : 5); }
+function peWizAvail(){
+  var a = {Signature:0, Elevated:0, Classic:0};
+  peState.dishes.forEach(function(d){ if(d.active && a[d.tier]!=null) a[d.tier]++; });
+  return a;
+}
+function peWizMix(foodPP, guests){
+  // best tier mix (pcs of Signature 35 / Elevated 20 / Classic 10 per guest)
+  // that spends as much of the food balance as possible without going over —
+  // constrained to what the live library can actually serve (a dish carries
+  // at most 2 pcs/guest, and the distinct-dish count must fit the variety cap).
+  var avail = peWizAvail(), cap = peWizCap(guests);
+  var best = null;
+  for(var pcs=8; pcs<=12; pcs++){
+    for(var s=0; s<=pcs; s++){
+      for(var e=0; e<=pcs-s; e++){
+        var c = pcs-s-e;
+        if(s > avail.Signature*2 || e > avail.Elevated*2 || c > avail.Classic*2) continue;
+        if(Math.ceil(s/2)+Math.ceil(e/2)+Math.ceil(c/2) > cap) continue;
+        var price = 35*s + 20*e + 10*c;
+        if(price > foodPP) continue;
+        var score = (foodPP-price)*100 + Math.abs(pcs-10)*10 - e;
+        if(!best || score < best.score) best = {s:s, e:e, c:c, pcs:pcs, price:price, score:score};
+      }
+    }
+  }
+  return best;
+}
+function peWizPick(mix, guests){
+  // turn the tier mix into real dishes from the live library, balancing
+  // cold/hot/dolci (~40/40/20 of pieces) and spreading categories.
+  var cap = peWizCap(guests), avail = peWizAvail();
+  var plan = [['Signature',mix.s],['Elevated',mix.e],['Classic',mix.c]]
+    .filter(function(t){ return t[1]>0; })
+    .map(function(t){ return {tier:t[0], pcs:t[1], distinct:Math.min(t[1], avail[t[0]])}; });
+  function totalDistinct(){ return plan.reduce(function(a,p){ return a+p.distinct; },0); }
+  while(totalDistinct() > cap){
+    // over the variety cap — double up pieces, shrinking the biggest tier first
+    var cand = null;
+    plan.forEach(function(p){ if(p.distinct > Math.ceil(p.pcs/2) && (!cand || p.distinct > cand.distinct)) cand = p; });
+    if(!cand) break;
+    cand.distinct--;
+  }
+  var used = {}, servePcs = {Cold:0, Hot:0, Dessert:0}, catCount = {}, totalAssigned = 0;
+  var target = {Cold:.4, Hot:.4, Dessert:.2};
+  var picked = [];
+  plan.forEach(function(p){
+    for(var i=0; i<p.distinct; i++){
+      // spread the tier's pieces over its dishes, max 2 pcs/guest each
+      var pcsHere = Math.min(2, p.pcs - (p.distinct-1-i));
+      if(pcsHere < 1) pcsHere = 1;
+      p.pcs -= pcsHere;
+      var pool = peState.dishes.filter(function(d){
+        return d.active && d.tier===p.tier && !used[d.id] && (d.min_order||10) <= guests*pcsHere;
+      });
+      if(!pool.length) pool = peState.dishes.filter(function(d){ return d.active && d.tier===p.tier && !used[d.id]; });
+      if(!pool.length) continue;
+      pool.sort(function(a,b){
+        var pa = servePcs[a.serve]-target[a.serve]*(totalAssigned||1), pb = servePcs[b.serve]-target[b.serve]*(totalAssigned||1);
+        if(pa!==pb) return pa-pb;
+        var ca = catCount[a.category]||0, cb = catCount[b.category]||0;
+        if(ca!==cb) return ca-cb;
+        return (b.description?1:0)-(a.description?1:0);
+      });
+      var d = pool[0];
+      used[d.id] = true;
+      servePcs[d.serve] += pcsHere; catCount[d.category] = (catCount[d.category]||0)+1; totalAssigned += pcsHere;
+      picked.push({dish:d, pcs:pcsHere});
+    }
+  });
+  return picked;
+}
+function peWizCalc(){
+  var guests = parseInt(peWiz.guests,10)||0;
+  var budget = Number(peWiz.budget)||0;
+  var bev = peWiz.bev==='none' ? null : (peWiz.bev ? peBevById(peWiz.bev) : undefined);
+  if(!guests || !budget || bev===undefined) return {ready:false};
+  if(guests < 15) return {ready:false, err:'Canapé receptions start at 15 guests — for smaller groups use a normal event.'};
+  var bevPP = bev ? Number(bev.price_pp)||0 : 0;
+  var bevTotal = bevPP*guests;
+  var balance = budget - bevTotal;
+  var foodPP = Math.floor(balance/guests);
+  if(foodPP < 80){
+    var err = bev ? (balance<=0
+      ? 'The '+bev.name+' alone is AED '+peMoney(bevTotal)+' — '+(balance<0?'AED '+peMoney(-balance)+' OVER the budget.':'the whole budget.')+' Pick a lighter package or raise the budget.'
+      : 'Only AED '+peMoney(foodPP)+'/guest left for food — the lightest proper selection needs AED 80/guest (8 Classic canapés). Pick a lighter package or raise the budget.')
+      : 'AED '+peMoney(foodPP)+'/guest is below the lightest selection (AED 80/guest — 8 Classic canapés).';
+    return {ready:false, err:err, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance, foodPP:foodPP, guests:guests, budget:budget};
+  }
+  var mix = peWizMix(foodPP, guests);
+  if(!mix) return {ready:false, err:'The dish library cannot serve a full selection yet (8 pcs/guest minimum) — add more active canapés in the Chef corner.'};
+  var picked = peWizPick(mix, guests);
+  var realFoodPP = 0; picked.forEach(function(p){ realFoodPP += (Number(p.dish.sell_price)||0)*p.pcs; });
+  var total = (realFoodPP+bevPP)*guests;
+  return {ready:true, guests:guests, budget:budget, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance,
+          foodPP:foodPP, mix:mix, picked:picked, realFoodPP:realFoodPP, total:total, gap:budget-total, cap:peWizCap(guests)};
+}
+function peRenderWizard(){
+  var bevs = peState.bevs.filter(function(b){ return b.active!==false; });
+  var h = peHeader('');
+  h += '<div class="pe-top"><div class="pe-title">Budget proposal</div></div>';
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Type the enquiry as the guest gave it — the app computes the beverage, the balance for food, and builds a canapé selection that fits. You review, then send.</div>';
+  h += '<div class="pe-card"><div class="pe-grid3">'+
+    '<div><div class="pe-lbl">Client name</div><input class="pe-in" id="pe-w-client" value="'+peEsc(peWiz.client)+'" onchange="peWiz.client=this.value" placeholder="e.g. Mrs Anna"></div>'+
+    '<div><div class="pe-lbl">Event date</div><input class="pe-in" type="date" id="pe-w-date" min="'+peToday()+'" value="'+peEsc(peWiz.date)+'" onchange="peWiz.date=this.value"></div>'+
+    '<div><div class="pe-lbl">Start time (optional)</div><input class="pe-in" type="time" id="pe-w-time" value="'+peEsc(peWiz.time)+'" onchange="peWiz.time=this.value"></div>'+
+    '</div><div class="pe-grid3" style="margin-top:8px">'+
+    '<div><div class="pe-lbl">Area</div><select class="pe-in" onchange="peWiz.area=this.value">'+PE_AREAS.map(function(a){ return '<option'+(peWiz.area===a?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>'+
+    '<div><div class="pe-lbl">Guests</div><input class="pe-in" type="number" min="15" value="'+peEsc(peWiz.guests)+'" onchange="peWizSet(\'guests\',this.value)" placeholder="e.g. 30"></div>'+
+    '<div><div class="pe-lbl">Total budget (AED, incl. VAT &amp; service)</div><input class="pe-in" type="number" value="'+peEsc(peWiz.budget)+'" onchange="peWizSet(\'budget\',this.value)" placeholder="e.g. 15000"></div>'+
+    '</div><div style="margin-top:8px"><div class="pe-lbl">Beverage package the guest wants</div>'+
+    '<select class="pe-in" onchange="peWizSet(\'bev\',this.value)"><option value="" '+(peWiz.bev===''?'selected':'')+'>Choose…</option>'+
+    '<option value="none"'+(peWiz.bev==='none'?' selected':'')+'>No beverage package — whole budget on food</option>'+
+    bevs.map(function(b){ return '<option value="'+b.id+'"'+(peWiz.bev===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest</option>'; }).join('')+
+    '</select></div></div>';
+  h += '<div id="pe-wiz-out">'+peWizOutHTML()+'</div>';
+  return h+PE_FOOT;
+}
+function peWizPaint(){
+  var el = document.getElementById('pe-wiz-out');
+  if(el) el.innerHTML = peWizOutHTML();
+}
+function peWizOutHTML(){
+  var w = peWizCalc();
+  if(w.err) return '<div class="pe-card" style="border-color:#B00020"><div style="font-size:13px;color:#B00020">'+w.err+'</div></div>';
+  if(!w.ready) return '<div class="pe-card"><div style="font-size:12px;color:#8B7355">Fill guests, budget and the beverage choice — the proposal appears here instantly.</div></div>';
+  function mrow(l, v){ return '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span style="color:#6B4A33">'+l+'</span><span style="color:#400207;font-weight:600">'+v+'</span></div>'; }
+  var h = '<div class="pe-card" style="background:#F7EEE2;border-color:rgba(201,168,76,0.5)">'+
+    '<div class="pe-lbl" style="color:#8A6A4F">The math — every number from your own prices</div>'+
+    (w.bev ? mrow('Beverage — '+peEsc(w.bev.name)+(w.bev.duration_hours?' ('+w.bev.duration_hours+'h)':''), w.guests+' × AED '+peMoney(w.bevPP)+' = AED '+peMoney(w.bevTotal))
+           : mrow('Beverage', 'none — whole budget on food'))+
+    mrow('Balance for food', 'AED '+peMoney(w.balance)+' → AED '+peMoney(w.foodPP)+' / guest')+
+    mrow('Canapé mix that fits', w.mix.pcs+' pcs/guest — '+[w.mix.s?w.mix.s+' Signature':null, w.mix.e?w.mix.e+' Elevated':null, w.mix.c?w.mix.c+' Classic':null].filter(Boolean).join(' + '))+
+    mrow('Proposal total', w.guests+' × AED '+peMoney(w.realFoodPP+w.bevPP)+' = AED '+peMoney(w.total))+
+    '<div style="font-size:12px;margin-top:4px;color:'+(w.gap>=0?'#2E6B34':'#B00020')+'">'+(w.gap>=0?'AED '+peMoney(w.gap)+' under the AED '+peMoney(w.budget)+' budget ✓':'AED '+peMoney(-w.gap)+' OVER budget')+'</div>'+
+    '<div style="font-size:10.5px;color:#8B7355;margin-top:4px">Kitchen rules applied: 8–12 pieces per guest · '+w.guests+' guests → up to '+w.cap+' different canapés · minimum orders respected.</div></div>';
+  var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
+  h += '<div class="pe-card"><b style="color:#400207">Suggested menu — '+w.picked.length+' canapés</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 6px">Built from the live dish library. Create the draft, then swap any dish freely in the event before sending.</div>';
+  groups.forEach(function(g){
+    var list = w.picked.filter(function(p){ return p.dish.serve===g.k; });
+    if(!list.length) return;
+    h += '<div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#A88930;margin:8px 0 2px">'+g.n+'</div>';
+    list.forEach(function(p){
+      var d = p.dish;
+      h += '<div class="pe-dishrow"><span><b>'+peEsc(d.name)+'</b> <span style="color:#A5876B;font-size:10.5px">('+((d.allergens||[]).join(')(')||'–')+')</span>'+
+        '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+' · AED '+peMoney(d.sell_price)+'/pc'+(p.pcs>1?' · ×'+p.pcs+' per guest':'')+'</span></span>'+
+        '<span style="font-size:11.5px;color:#400207;white-space:nowrap">AED '+peMoney((Number(d.sell_price)||0)*p.pcs)+' /guest</span></div>';
+    });
+  });
+  h += '<div style="margin-top:12px"><button class="pe-btn" onclick="peWizCreate()" '+(peWiz.busy?'disabled':'')+'>'+(peWiz.busy?'Creating…':'Create the draft event')+'</button>'+
+    '<span style="font-size:11px;color:#8B7355;margin-left:10px">Opens the event ready to print or email the proposal.</span></div></div>';
+  return h;
+}
+async function peWizCreate(){
+  var w = peWizCalc();
+  if(!w.ready){ peToast('Fill guests, budget and beverage first', true); return; }
+  if(peWiz.busy) return;
+  peWiz.busy = true; peWizPaint();
+  try{
+    var timeTo = null;
+    if(peWiz.time){
+      var hrs = (w.bev && w.bev.duration_hours) ? Number(w.bev.duration_hours) : 3;
+      var parts = peWiz.time.split(':');
+      timeTo = String((parseInt(parts[0],10)+Math.round(hrs))%24).padStart(2,'0')+':'+parts[1];
+    }
+    var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
+                client_name: peWiz.client||null, event_date: peWiz.date||null,
+                time_from: peWiz.time||null, time_to: timeTo,
+                area: peWiz.area||null, guests: w.guests,
+                bev_package_id: w.bev ? w.bev.id : null,
+                payment_terms:'50% deposit to confirm, balance on the day' };
+    var r = await sb.from('events_desk').insert(row).select().single();
+    if(r.error || !r.data) throw (r.error||{message:'no data'});
+    peState.events.push(r.data);
+    var items = w.picked.map(function(p){ return {event_id:r.data.id, dish_id:p.dish.id, pcs_per_guest:p.pcs}; });
+    if(items.length){
+      var ri = await sb.from('event_items').insert(items).select();
+      if(ri.error) throw ri.error;
+      peState.items[r.data.id] = ri.data||[];
+    }
+    await sb.from('event_log').insert({event_id:r.data.id, action:'created',
+      detail:'Budget proposal: AED '+peMoney(w.budget)+' · '+(w.bev?w.bev.name+' AED '+peMoney(w.bevTotal):'no beverage')+' · food AED '+peMoney(w.realFoodPP)+'/guest ('+w.mix.pcs+' pcs) · total AED '+peMoney(w.total),
+      actor:peActor()});
+    peWiz.busy = false;
+    peToast('Draft created ✓ — review it, then print or email the proposal');
+    peGo('event', r.data.id);
+  }catch(err){
+    peWiz.busy = false; peWizPaint();
+    peToast('NOT created — '+String(err&&err.message||err).slice(0,120), true);
+  }
 }
 
 // ── monthly report (replaces the Group Report + RLL financials) ──────────────
