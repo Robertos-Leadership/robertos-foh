@@ -101,6 +101,9 @@ function render(data){
     h += '<div class="sect"><div class="sect-h">The beverages</div>'+
       '<div class="dish">'+esc(data.bev.name)+(data.bev.duration_hours?' — '+data.bev.duration_hours+' hours':'')+
       (data.bev.includes?'<br><span class="ds">'+esc(data.bev.includes)+'</span>':'')+'</div></div>';
+  } else if(ev.bev_mode==='dry'){
+    h += '<div class="sect"><div class="sect-h">The beverages</div>'+
+      '<div class="dish">A dry event — no alcohol will be served<br><span class="ds">Soft drinks and water throughout</span></div></div>';
   }
 
   // the one figure

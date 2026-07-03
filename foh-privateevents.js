@@ -358,6 +358,15 @@ function peRenderEvent(){
     h += '<div style="font-size:12px;color:#933;margin:-4px 0 10px">Lost — '+peEsc(lr||'reason not recorded')+'</div>';
   }
 
+  // #3 — double-booking warning
+  var clash = peConflicts(e);
+  if(clash.length){
+    h += '<div style="background:#FBE9E7;border:1px solid #E8A99E;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#8A2A1A">'+
+      '⚠ Also booked in <b>'+peEsc(e.area)+'</b> on <b>'+peEsc(peDLabel(e.event_date))+'</b>: '+
+      clash.map(function(c){ return '<span style="text-decoration:underline;cursor:pointer" onclick="peGo(\'event\',\''+c.id+'\')">'+peEsc(c.client_name||c.company||'another event')+'</span> ('+peEsc(peStatusMeta(c.status).n)+')'; }).join(', ')+
+      ' — check this is intentional.</div>';
+  }
+
   // facts
   h += '<div class="pe-card"><div class="pe-grid3">'+
     peIn('Client / booking name','client_name',e)+peIn('Company','company',e)+peSel('Type of event','event_type',e,PE_TYPES)+
@@ -392,9 +401,14 @@ function peRenderEvent(){
     }).join('') : '<div style="font-size:12px;color:#8B7355;padding:6px 0">No dishes yet — apply a package or add from the library.</div>');
   h += '<button class="pe-btn sec sm" style="margin-top:8px" onclick="peOpenDishPicker(\''+e.id+'\')">+ Add dish from library</button></div></div>';
   // beverage
+  var dry = e.bev_mode==='dry';
   h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Beverage</b>'+
+    '<div style="margin-top:8px"><label style="font-size:12px;color:#6B4A33;cursor:pointer;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" '+(dry?'checked':'')+' style="accent-color:#400207" onchange="peSaveField(\''+e.id+'\',\'bev_mode\',this.checked?\'dry\':null)"> Dry event — no alcohol served</label></div>'+
+    (dry
+      ? '<div style="font-size:12px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:8px 10px;margin-top:8px">No alcohol will be served. Documents state this; soft drinks and water only unless a non-alcoholic package is added below.</div>'
+      : '')+
     '<div style="margin-top:8px"><select class="pe-in" id="pe-f-bev_package_id" onchange="peSaveField(\''+e.id+'\',\'bev_package_id\',this.value||null)">'+
-      '<option value="">No beverage package</option>'+
+      '<option value="">'+(dry?'No package — soft drinks &amp; water':'No beverage package')+'</option>'+
       peState.bevs.filter(function(b){ return b.active!==false || b.id===e.bev_package_id; }).map(function(b){ return '<option value="'+b.id+'"'+(e.bev_package_id===b.id?' selected':'')+'>'+peEsc(b.name)+' — '+(b.duration_hours?b.duration_hours+'h — ':'')+'AED '+peMoney(b.price_pp)+'/guest'+(b.active===false?' (retired)':'')+'</option>'; }).join('')+
     '</select>'+
     (e.bev_package_id && peBevById(e.bev_package_id) ? '<div style="font-size:11.5px;color:#8B7355;margin-top:6px">'+peEsc(peBevById(e.bev_package_id).includes||'')+'</div>' : '')+
@@ -482,6 +496,9 @@ function peSel(lbl, field, e, opts){
     '<option value=""></option>'+opts.map(function(o){ return '<option'+(e[field]===o?' selected':'')+'>'+o+'</option>'; }).join('')+
   '</select></div>';
 }
+// Fields whose change is money-relevant / contract-relevant — logged for
+// Andrea's audit trail, and (for guests/date) guarded when already signed.
+var PE_AUDIT_FIELDS = { guests:'Guests', event_date:'Date', food_price_pp:'Food price/guest', min_spend:'Minimum spend', area:'Area', time_from:'Start time', time_to:'End time' };
 async function peSaveEvent(id){
   var e = peEvById(id); if(!e) return;
   var fields = ['client_name','company','event_type','event_date','time_from','time_to','area','guests','min_spend','contact_name','contact_phone','contact_email','dietary','payment_terms','package_label','food_price_pp'];
@@ -494,11 +511,52 @@ async function peSaveEvent(id){
     else v = v || null;
     patch[f] = v;
   });
+  // what actually changed (normalise dates to yyyy-mm-dd so re-saves are quiet)
+  function norm(f,val){ return f==='event_date' && val ? String(val).slice(0,10) : val; }
+  var changed = [];
+  Object.keys(PE_AUDIT_FIELDS).forEach(function(f){
+    if(patch[f]===undefined) return;
+    if(String(norm(f,patch[f])||'') !== String(norm(f,e[f])||'')) changed.push(f);
+  });
+
+  // #2 — a signed agreement is a contract. Changing guests or the date breaks
+  // what the client signed, so require a deliberate re-sign.
+  var breaksContract = e.signed_at && (changed.indexOf('guests')>=0 || changed.indexOf('event_date')>=0);
+  if(breaksContract){
+    if(!confirm('This event is already SIGNED. Changing the '+
+        (changed.indexOf('guests')>=0 && changed.indexOf('event_date')>=0 ? 'guests and date' : (changed.indexOf('guests')>=0?'guest count':'date'))+
+        ' voids the signed agreement — the client will need to sign again.\n\nProceed and reset it to “Proposal sent”?')){
+      renderMain(); return;
+    }
+    patch.signed_at = null; patch.signed_name = null; patch.signed_designation = null; patch.contract_snapshot = null;
+    if(['confirmed','deposit','done'].indexOf(e.status)>=0) patch.status = 'sent';
+  }
+
   var r = await sb.from('events_desk').update(patch).eq('id', id);
   if(r.error){ peToast('NOT saved — '+(r.error.message||'check connection'), true); return; }
   Object.keys(patch).forEach(function(k){ e[k] = patch[k]; });
-  peToast('Saved ✓');
+
+  // #4 — audit log for money/contract fields on anything past draft
+  if(changed.length && e.status!=='draft'){
+    var detail = changed.map(function(f){ return PE_AUDIT_FIELDS[f]+' → '+(patch[f]==null||patch[f]===''?'—':patch[f]); }).join(' · ');
+    sb.from('event_log').insert({event_id:id, action:'edited', detail:detail.slice(0,400), actor:peActor()}).then(function(){ peLoadLog(id); });
+  }
+  if(breaksContract){
+    sb.from('event_log').insert({event_id:id, action:'unsigned', detail:'signed agreement voided by an edit — awaiting re-sign', actor:peActor()});
+    peToast('Saved — the signed agreement was reset. Re-send it for signature.');
+  } else {
+    peToast('Saved ✓');
+  }
   renderMain();
+}
+// #3 — other live events sharing this date + area (a real double-booking risk).
+function peConflicts(e){
+  if(!e || !e.event_date || !e.area) return [];
+  var d = String(e.event_date).slice(0,10);
+  return peState.events.filter(function(x){
+    return x.id!==e.id && ['lost','done'].indexOf(x.status)<0 &&
+      String(x.event_date||'').slice(0,10)===d && x.area===e.area;
+  });
 }
 async function peSaveField(id, field, value){
   var e = peEvById(id); if(!e) return;
@@ -583,7 +641,7 @@ async function peApplyPackage(eventId){
   if(!pack) return;
   var existing = (peState.items[eventId]||[]).map(function(i){ return i.dish_id; });
   var toAdd = (pack.dish_ids||[]).filter(function(d){ return existing.indexOf(d)<0; })
-    .map(function(d){ return {event_id:eventId, dish_id:d, pcs_per_guest:1}; });
+    .map(function(d){ return {event_id:eventId, dish_id:d, pcs_per_guest:1, qty_confirmed:false}; });
   if(toAdd.length){
     var r = await sb.from('event_items').insert(toAdd).select();
     if(r.error){ peToast('Package NOT applied — check connection', true); return; }
@@ -611,7 +669,7 @@ function peOpenDishPicker(eventId){
   document.body.insertAdjacentHTML('beforeend', h);
 }
 async function peAddItem(eventId, dishId){
-  var r = await sb.from('event_items').insert({event_id:eventId, dish_id:dishId, pcs_per_guest:1}).select().single();
+  var r = await sb.from('event_items').insert({event_id:eventId, dish_id:dishId, pcs_per_guest:1, qty_confirmed:false}).select().single();
   if(r.error || !r.data){ peToast('NOT added — check connection', true); return; }
   (peState.items[eventId]=peState.items[eventId]||[]).push(r.data);
   renderMain();
@@ -626,10 +684,10 @@ async function peRemoveItem(itemId){
 }
 async function peSetPcs(itemId, val){
   var v = Number(val); if(!(v>0)){ peToast('Enter a quantity above 0', true); renderMain(); return; }
-  var r = await sb.from('event_items').update({pcs_per_guest:v}).eq('id', itemId);
+  var r = await sb.from('event_items').update({pcs_per_guest:v, qty_confirmed:true}).eq('id', itemId);
   if(r.error){ peToast('NOT saved — check connection', true); return; }
   Object.keys(peState.items).forEach(function(k){
-    peState.items[k].forEach(function(i){ if(i.id===itemId) i.pcs_per_guest = v; });
+    peState.items[k].forEach(function(i){ if(i.id===itemId){ i.pcs_per_guest = v; i.qty_confirmed = true; } });
   });
   renderMain();
 }
@@ -642,7 +700,8 @@ async function peApplyClientSelection(eventId){
   var toAdd = want.filter(function(d){ return existing.indexOf(d)<0; })
     .map(function(d){
       var q = Number(qmap[d])||0;
-      return {event_id:eventId, dish_id:d, pcs_per_guest:(q&&g)?Math.round(q/g*100)/100:1};
+      var known = !!(q&&g);
+      return {event_id:eventId, dish_id:d, pcs_per_guest:known?Math.round(q/g*100)/100:1, qty_confirmed:known};
     });
   if(toAdd.length){
     var r = await sb.from('event_items').insert(toAdd).select();
@@ -701,6 +760,8 @@ function peProposalHTML(e){
   if(bev){
     body += '<div class="sec">Beverage</div><div class="dish">'+peEsc(bev.name)+(bev.duration_hours?' — '+bev.duration_hours+' hours':'')+
       (bev.includes?'<br><span class="d">'+peEsc(bev.includes)+'</span>':'')+'</div>';
+  } else if(e.bev_mode==='dry'){
+    body += '<div class="sec">Beverage</div><div class="dish">A dry event — no alcohol will be served<br><span class="d">Soft drinks and water throughout</span></div>';
   }
   // One complete, rounded figure — food and beverage together, for the party.
   if(t.total && e.guests){
@@ -726,7 +787,7 @@ function peFunctionSheetHTML(e){
   body += row('Area', e.area)+row('Guests', e.guests);
   body += row('Food', (e.package_label||'Bespoke selection')+(t.foodPP?' · AED '+peMoney(t.foodPP)+'/guest':'')+(t.pcs?' · '+(Math.round(t.pcs*10)/10)+' pcs/guest':''));
   var bev = e.bev_package_id ? peBevById(e.bev_package_id) : null;
-  body += row('Beverage', bev ? bev.name+' · AED '+peMoney(bev.price_pp)+'/guest' : '—');
+  body += row('Beverage', bev ? bev.name+' · AED '+peMoney(bev.price_pp)+'/guest' : (e.bev_mode==='dry'?'DRY EVENT — no alcohol served (soft drinks & water)':'—'));
   body += row('Estimated total', t.total ? 'AED '+peMoney(t.total) : '—')+row('Minimum spend', e.min_spend?'AED '+peMoney(e.min_spend):'—');
   body += row('Dietary', e.dietary)+row('Payment', e.payment_terms);
   body += row('Status', peStatusMeta(e.status).n)+row('Last update', new Date().toLocaleDateString('en-GB')+' · '+peActor());
@@ -746,7 +807,7 @@ function peKitchenPrepRows(e){
     var pcs = Number(it.pcs_per_guest)||0;
     var total = e.guests ? Math.ceil(pcs*Number(e.guests)) : null;
     var minFlag = (total!=null && d.min_order && total < d.min_order) ? d.min_order : null;
-    return {d:d, pcs:pcs, total:total, minFlag:minFlag, sort:(order[d.serve]!=null?order[d.serve]:9)};
+    return {d:d, pcs:pcs, total:total, minFlag:minFlag, unconfirmed:(it.qty_confirmed===false), sort:(order[d.serve]!=null?order[d.serve]:9)};
   }).filter(Boolean).sort(function(a,b){ return a.sort-b.sort; });
 }
 function peKitchenPrepHTML(e, t){
@@ -761,12 +822,13 @@ function peKitchenPrepHTML(e, t){
       h += '<tr><td colspan="3" style="background:#F3E9DA;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8A6A4F">'+(r.d.serve==='Dessert'?'Dolci':peEsc(r.d.serve))+'</td></tr>';
     }
     h += '<tr><td>'+peEsc(r.d.name)+' <span style="font-size:10px;color:#A5876B">('+((r.d.allergens||[]).join(')(')||'–')+')</span></td>'+
-      '<td>'+(Math.round(r.pcs*10)/10)+' pc</td>'+
+      '<td>'+(Math.round(r.pcs*10)/10)+' pc'+(r.unconfirmed?' <span style="color:#B08D3E;font-size:9px">default</span>':'')+'</td>'+
       '<td><b>'+(r.total!=null ? r.total+' pcs' : '— set guests')+'</b>'+(r.minFlag?' <span style="color:#B00020;font-size:10px">min order '+r.minFlag+'</span>':'')+'</td></tr>';
   });
-  var totalPcs = 0; rows.forEach(function(r){ if(r.total) totalPcs += r.total; });
+  var totalPcs = 0, anyDefault = false; rows.forEach(function(r){ if(r.total) totalPcs += r.total; if(r.unconfirmed) anyDefault = true; });
   if(e.guests && totalPcs) h += '<tr><td style="text-align:right"><b>Total</b></td><td>'+(Math.round((t||peCalcTotals(e)).pcs*10)/10)+' pc/guest</td><td><b>'+totalPcs+' pcs</b></td></tr>';
   h += '</table>';
+  if(anyDefault) h += '<div style="font-family:Arial,sans-serif;font-size:11px;color:#B08D3E;margin-top:5px">Items marked <b>default</b> are still at 1 pc/guest — confirm the real quantity with the events desk before prep.</div>';
   if(e.dietary) h += '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Dietary — read before prep:</b> '+peEsc(e.dietary)+'</div>';
   return h;
 }
@@ -784,7 +846,7 @@ function peCoordEmailHTML(e){
     li('Area', e.area)+
     li('No. People', e.guests?String(e.guests)+' guests':null)+
     li('Food package', (e.package_label||(t.items.length?'Bespoke canapé selection':null)))+
-    li('Beverage', bev?bev.name+(bev.duration_hours?' ('+bev.duration_hours+'h)':''):null)+
+    li('Beverage', bev?bev.name+(bev.duration_hours?' ('+bev.duration_hours+'h)':''):(e.bev_mode==='dry'?'DRY EVENT — no alcohol (soft drinks & water)':null))+
     li('Minimum spending', e.min_spend?'AED '+peMoney(e.min_spend):null)+
     li('Dietary', e.dietary)+
     '</table>'+
@@ -810,11 +872,12 @@ function peCoordPrepHTML(e){
     }
     if(r.total) totalPcs += r.total;
     h += '<tr><td style="padding:3px 8px;border:1px solid #ddd">'+peEsc(r.d.name)+' <span style="color:#999;font-size:11px">('+((r.d.allergens||[]).join(')(')||'–')+')</span></td>'+
-      '<td style="padding:3px 8px;border:1px solid #ddd">'+(Math.round(r.pcs*10)/10)+' pc</td>'+
+      '<td style="padding:3px 8px;border:1px solid #ddd">'+(Math.round(r.pcs*10)/10)+' pc'+(r.unconfirmed?' <span style="color:#B08D3E;font-size:10px">default</span>':'')+'</td>'+
       '<td style="padding:3px 8px;border:1px solid #ddd"><b>'+(r.total!=null?r.total+' pcs':'— set guests')+'</b>'+(r.minFlag?' <span style="color:#B00020;font-size:11px">min '+r.minFlag+'</span>':'')+'</td></tr>';
   });
   if(totalPcs) h += '<tr><td style="padding:3px 8px;border:1px solid #ddd;text-align:right"><b>Total</b></td><td style="padding:3px 8px;border:1px solid #ddd"></td><td style="padding:3px 8px;border:1px solid #ddd"><b>'+totalPcs+' pcs</b></td></tr>';
   h += '</table>';
+  if(rows.some(function(r){ return r.unconfirmed; })) h += '<p style="font-size:11px;color:#B08D3E;margin:4px 0 0">Items marked <b>default</b> are still at 1 pc/guest — quantities to be confirmed.</p>';
   return h;
 }
 async function peSendCoordEmail(id){
@@ -1308,14 +1371,15 @@ function peWizAvail(pool){
   pool.forEach(function(d){ if(a[d.tier]!=null) a[d.tier]++; });
   return a;
 }
-function peWizMix(foodPP, guests, pool){
+function peWizMix(foodPP, guests, pool, minPcs){
   // best tier mix (pcs of Signature 35 / Elevated 20 / Classic 10 per guest)
   // that spends as much of the food balance as possible without going over —
   // constrained to what the live library can actually serve (a dish carries
   // at most 2 pcs/guest, and the distinct-dish count must fit the variety cap).
   var avail = peWizAvail(pool), cap = peWizCap(guests);
+  var lo = minPcs || 8;
   var best = null;
-  for(var pcs=8; pcs<=12; pcs++){
+  for(var pcs=lo; pcs<=12; pcs++){
     for(var s=0; s<=pcs; s++){
       for(var e=0; e<=pcs-s; e++){
         var c = pcs-s-e;
@@ -1385,24 +1449,33 @@ function peWizCalc(){
   var bevTotal = bevPP*guests;
   var balance = budget - bevTotal;
   var foodPP = Math.floor(balance/guests);
-  if(foodPP < 80){
+  // Below AED 40/guest there isn't even a light reception to offer — stay honest.
+  if(foodPP < 40){
     var err = bev ? (balance<=0
       ? 'The '+bev.name+' alone is AED '+peMoney(bevTotal)+' — '+(balance<0?'AED '+peMoney(-balance)+' OVER the budget.':'the whole budget.')+' Pick a lighter package or raise the budget.'
-      : 'Only AED '+peMoney(foodPP)+'/guest left for food — the lightest proper selection needs AED 80/guest (8 Classic canapés). Pick a lighter package or raise the budget.')
-      : 'AED '+peMoney(foodPP)+'/guest is below the lightest selection (AED 80/guest — 8 Classic canapés).';
+      : 'Only AED '+peMoney(foodPP)+'/guest left for food — too little for a canapé reception. Pick a lighter package or raise the budget.')
+      : 'AED '+peMoney(foodPP)+'/guest is too little for a canapé reception (min ~AED 40/guest).';
     return {ready:false, err:err, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance, foodPP:foodPP, guests:guests, budget:budget};
   }
   var pool = peWizPool();
   var exclOn = PE_WIZ_EXCL.filter(function(x){ return peWiz.excl[x[0]]; }).map(function(x){ return x[1].toLowerCase(); });
-  var mix = peWizMix(foodPP, guests, pool);
+  // A tight budget (under AED 80/guest) still gets a proposal — a lighter one,
+  // clearly labelled, rather than a dead end.
+  var light = foodPP < 80;
+  var mix = peWizMix(foodPP, guests, pool, light ? 4 : 8);
   if(!mix) return {ready:false, err: exclOn.length
-    ? 'With '+exclOn.join(' + ')+' the library cannot serve a full selection (8 pcs/guest minimum) — relax one restriction or add matching canapés in the Chef corner.'
-    : 'The dish library cannot serve a full selection yet (8 pcs/guest minimum) — add more active canapés in the Chef corner.'};
+    ? 'With '+exclOn.join(' + ')+' the library cannot serve a full selection — relax one restriction or add matching canapés in the Chef corner.'
+    : 'The dish library cannot serve a selection yet — add more active canapés in the Chef corner.'};
   var picked = peWizPick(mix, guests, pool);
   var realFoodPP = 0; picked.forEach(function(p){ realFoodPP += (Number(p.dish.sell_price)||0)*p.pcs; });
   var total = (realFoodPP+bevPP)*guests;
+  // Ceiling: the canapé selection tops out (~12×35=420/guest). If a large chunk
+  // of the food balance can't be spent, say so instead of a misleading "✓".
+  var foodUnspentPP = foodPP - realFoodPP;
+  var bigGap = foodUnspentPP >= 50;
   return {ready:true, guests:guests, budget:budget, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance,
-          foodPP:foodPP, mix:mix, picked:picked, realFoodPP:realFoodPP, total:total, gap:budget-total, cap:peWizCap(guests), excl:exclOn};
+          foodPP:foodPP, mix:mix, picked:picked, realFoodPP:realFoodPP, total:total, gap:budget-total,
+          cap:peWizCap(guests), excl:exclOn, light:light, bigGap:bigGap, foodUnspentPP:foodUnspentPP};
 }
 function peRenderWizard(){
   var bevs = peState.bevs.filter(function(b){ return b.active!==false; });
@@ -1445,8 +1518,13 @@ function peWizOutHTML(){
     mrow('Balance for food', 'AED '+peMoney(w.balance)+' → AED '+peMoney(w.foodPP)+' / guest')+
     mrow('Canapé mix that fits', w.mix.pcs+' pcs/guest — '+[w.mix.s?w.mix.s+' Signature':null, w.mix.e?w.mix.e+' Elevated':null, w.mix.c?w.mix.c+' Classic':null].filter(Boolean).join(' + '))+
     mrow('Proposal total', w.guests+' × AED '+peMoney(w.realFoodPP+w.bevPP)+' = AED '+peMoney(w.total))+
-    '<div style="font-size:12px;margin-top:4px;color:'+(w.gap>=0?'#2E6B34':'#B00020')+'">'+(w.gap>=0?'AED '+peMoney(w.gap)+' under the AED '+peMoney(w.budget)+' budget ✓':'AED '+peMoney(-w.gap)+' OVER budget')+'</div>'+
-    '<div style="font-size:10.5px;color:#8B7355;margin-top:4px">Kitchen rules applied: 8–12 pieces per guest · '+w.guests+' guests → up to '+w.cap+' different canapés · minimum orders respected'+(w.excl&&w.excl.length?' · <b style="color:#400207">guest requests: '+w.excl.join(', ')+'</b>':'')+'.</div></div>';
+    (w.gap<0
+      ? '<div style="font-size:12px;margin-top:4px;color:#B00020">AED '+peMoney(-w.gap)+' OVER budget</div>'
+      : w.bigGap
+        ? '<div style="font-size:12px;margin-top:4px;color:#8A6400">▲ AED '+peMoney(w.gap)+' of the budget is unspent — canapés top out near AED 420/guest. Suggest a longer beverage package, an extra course, or a bespoke menu to use it.</div>'
+        : '<div style="font-size:12px;margin-top:4px;color:#2E6B34">AED '+peMoney(w.gap)+' under the AED '+peMoney(w.budget)+' budget ✓</div>')+
+    (w.light ? '<div style="font-size:12px;margin-top:4px;color:#8A6400">▲ Light selection — '+w.mix.pcs+' pcs/guest is below the usual 8–12. Fine for a short reception; raise the budget for a fuller spread.</div>' : '')+
+    '<div style="font-size:10.5px;color:#8B7355;margin-top:4px">Kitchen rules applied: '+(w.light?'light ':'8–12 ')+'pieces per guest · '+w.guests+' guests → up to '+w.cap+' different canapés · minimum orders respected'+(w.excl&&w.excl.length?' · <b style="color:#400207">guest requests: '+w.excl.join(', ')+'</b>':'')+'.</div></div>';
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
   h += '<div class="pe-card"><b style="color:#400207">Suggested menu — '+w.picked.length+' canapés</b>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 6px">Built from the live dish library. Create the draft, then swap any dish freely in the event before sending.</div>';

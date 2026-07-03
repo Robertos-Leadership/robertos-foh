@@ -152,7 +152,7 @@ function signedDocHtml(ev: any, items: any[], dishById: Record<string, any>, bev
     row("Area", esc(ev.area)) +
     row("Guests reserved for", esc(ev.guests)) + row("Minimum guaranteed guests", esc(n.guestsMin)) +
     row("Food", esc(ev.package_label || (items.length ? "Canapé selection" : ""))) +
-    row("Beverage", bev ? esc(bev.name) + (bev.duration_hours ? " — " + bev.duration_hours + " hours" : "") : "—") +
+    row("Beverage", bev ? esc(bev.name) + (bev.duration_hours ? " — " + bev.duration_hours + " hours" : "") : (ev.bev_mode === "dry" ? "Dry event — no alcohol served (soft drinks &amp; water)" : "—")) +
     row(n.pricingType === "min_spend" ? "Minimum spend" : "Quoted price",
       n.quoted != null ? "AED " + money(n.quoted) + " — inclusive of all taxes and service" : "—") +
     row("Deposit", n.pct > 0 ? n.pct + "% — AED " + money(n.deposit) : "None — balance on the day") +
@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
           client_name: ev.client_name, company: ev.company, event_type: ev.event_type,
           event_date: ev.event_date, time_from: ev.time_from, time_to: ev.time_to,
           area: ev.area, guests: ev.guests, guests_min: nums.guestsMin,
-          package_label: ev.package_label,
+          package_label: ev.package_label, bev_mode: ev.bev_mode || null,
         },
         menu,
         bev: bev ? { name: bev.name, duration_hours: bev.duration_hours, includes: bev.includes } : null,

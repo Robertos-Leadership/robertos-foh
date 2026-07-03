@@ -36,7 +36,10 @@
   .pr{font-size:11px;color:#400207;font-family:Arial,sans-serif;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.3}
   .qbox{flex-shrink:0;margin-left:8px;text-align:center}
   .qin{width:58px;border:1px solid #C9AD96;border-radius:7px;background:#fff;padding:6px 4px;font-family:Arial,sans-serif;font-size:13px;text-align:center}
-  body.nogc .sect{opacity:.35;pointer-events:none}
+  body.nogc .sect{opacity:.4}
+  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:#400207;color:#F3E7D8;border-radius:10px;padding:11px 14px;font-family:Arial,sans-serif;font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
+  .smallnote{margin:8px 22px 0;font-size:12px;color:#8A6A4F;font-family:Arial,sans-serif;line-height:1.5}
+  .smallnote a{color:#400207}
 </style>
 </head>
 <body>
@@ -54,8 +57,20 @@ function defaultQty(d){ return Math.max(guestCount||0, Number(d.min_order)||10);
 function allowedDishes(g){ return g>=30 ? 15 : (g>=20 ? 8 : (g>=15 ? 5 : 0)); }
 function pickedCount(){ return Object.keys(picked).filter(function(k){ return picked[k]; }).length; }
 
+var CONTACT_EMAIL = 'reservations@robertos.ae';
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function el(id){ return document.getElementById(id); }
+var flashTimer = null;
+// A branded in-page message instead of a native alert() — keeps the page elegant.
+function flash(msg){
+  var f = el('cl-flash');
+  if(!f){ f = document.createElement('div'); f.id='cl-flash'; f.className='flash'; document.body.appendChild(f); }
+  f.textContent = msg;
+  f.style.display = 'block';
+  if(flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(function(){ f.style.display='none'; }, 3800);
+}
+function focusGuests(){ var g = el('cl-gcount'); if(g){ g.focus(); g.scrollIntoView({behavior:'smooth', block:'center'}); } }
 
 function fail(msg){
   el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>';
@@ -130,9 +145,9 @@ function render(data){
 function toggle(node){
   var id = node.getAttribute('data-id');
   if(!picked[id]){
-    if(guestCount < 15){ alert('First tell us how many guests you will be (minimum 15).'); return; }
+    if(guestCount < 15){ flash('First, how many guests will you be? (minimum 15)'); focusGuests(); return; }
     var cap = allowedDishes(guestCount);
-    if(pickedCount() >= cap){ alert('With '+guestCount+' guests you can pick up to '+cap+' different canapés — untick one first, or increase the guest number.'); return; }
+    if(pickedCount() >= cap){ flash('With '+guestCount+' guests you can pick up to '+cap+' different canapés — untick one first, or add more guests.'); return; }
   }
   picked[id] = !picked[id];
   node.classList.toggle('on', picked[id]);
@@ -161,8 +176,8 @@ function onGuests(v){
   var al = el('cl-allow');
   var cap = allowedDishes(guestCount);
   if(al){
-    if(!guestCount) al.textContent = '';
-    else if(guestCount < 15) al.textContent = 'Canapé events start from 15 guests.';
+    if(!guestCount) al.innerHTML = '';
+    else if(guestCount < 15) al.innerHTML = 'Canapé receptions start from 15 guests. For a more intimate gathering we’d still love to host you — email <a href="mailto:'+CONTACT_EMAIL+'" style="color:#400207">'+CONTACT_EMAIL+'</a> and we’ll tailor something to you.';
     else al.textContent = 'Lovely — with '+guestCount+' guests you can pick up to '+cap+' different canapés.';
   }
   document.body.classList.toggle('nogc', guestCount < 15);
@@ -208,12 +223,12 @@ function counts(){
 }
 async function send(){
   var ids = Object.keys(picked).filter(function(k){ return picked[k]; });
-  if(!ids.length){ alert('Pick at least one canapé first.'); return; }
-  if(guestCount < 15){ alert('First tell us how many guests you will be (minimum 15).'); return; }
+  if(guestCount < 15){ flash('First, how many guests will you be? (minimum 15)'); focusGuests(); return; }
+  if(!ids.length){ flash('Pick at least one canapé first.'); return; }
   var cap = allowedDishes(guestCount);
-  if(ids.length > cap){ alert('With '+guestCount+' guests you can pick up to '+cap+' different canapés.'); return; }
+  if(ids.length > cap){ flash('With '+guestCount+' guests you can pick up to '+cap+' different canapés.'); return; }
   var lowMin = ids.filter(function(k){ var d=dishById[k]; return (qty[k]||defaultQty(d)) < (Number(d.min_order)||10); });
-  if(lowMin.length){ alert('Some quantities are below the minimum: '+lowMin.map(function(k){ return dishById[k].name+' (min '+(dishById[k].min_order||10)+')'; }).join(', ')); return; }
+  if(lowMin.length){ flash('Please check quantities — below the minimum for: '+lowMin.map(function(k){ return dishById[k].name+' (min '+(dishById[k].min_order||10)+')'; }).join(', ')); return; }
   var quantities = {};
   ids.forEach(function(k){ quantities[k] = qty[k] || defaultQty(dishById[k]); });
   var payload = { dish_ids:ids, quantities:quantities, note:(el('cl-note')||{}).value||'', guests:guestCount };
@@ -224,11 +239,11 @@ async function send(){
     payload.email = (el('cl-email')||{}).value||'';
     payload.event_date = (el('cl-date')||{}).value||'';
     payload.time_from = (el('cl-time')||{}).value||'';
-    if(!payload.name.trim()){ alert('Please tell us your name.'); return; }
-    if(!payload.phone.trim() && !payload.email.trim()){ alert('Please leave a phone number or email so we can reach you.'); return; }
-    if(!payload.event_date){ alert('Please tell us the date of your event.'); return; }
+    if(!payload.name.trim()){ flash('Please tell us your name.'); return; }
+    if(!payload.phone.trim() && !payload.email.trim()){ flash('Please leave a phone number or email so we can reach you.'); return; }
+    if(!payload.event_date){ flash('Please tell us the date of your event.'); return; }
     var todayISO = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
-    if(payload.event_date < todayISO){ alert('Please pick a date in the future.'); return; }
+    if(payload.event_date < todayISO){ flash('Please pick a date in the future.'); return; }
   }
   var btn = el('cl-send'); btn.disabled = true; btn.textContent = 'Sending…';
   try{
@@ -240,7 +255,7 @@ async function send(){
       '<div class="msg">Grazie! Your selection has been sent.<br><br>Valentina will be in touch shortly to confirm everything for your evening.</div>';
   }catch(e){
     btn.disabled = false; btn.textContent = 'Send selection to Roberto’s';
-    alert('Could not send — please try again. '+(e.message||''));
+    flash('Could not send — please try again. '+(e.message||''));
   }
 }
 load();
