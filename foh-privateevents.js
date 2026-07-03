@@ -399,6 +399,33 @@ function peRenderEvent(){
     '</select>'+
     (e.bev_package_id && peBevById(e.bev_package_id) ? '<div style="font-size:11.5px;color:#8B7355;margin-top:6px">'+peEsc(peBevById(e.bev_package_id).includes||'')+'</div>' : '')+
     '</div></div>';
+  // agreement (terms Valentina adjusts per event; guest signs via the link)
+  var agBase = (e.pricing_type==='min_spend') ? (Number(e.min_spend)||null) : t.total;
+  var agPct = e.deposit_pct==null ? 50 : Number(e.deposit_pct);
+  var agDep = (agBase!=null && agPct>0) ? Math.round(agBase*agPct/100) : 0;
+  h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Agreement</b>';
+  if(e.signed_at){
+    h += '<div style="font-size:12px;color:#2E6B34;background:#E7F0E4;border-radius:8px;padding:9px 11px;margin-top:8px">✓ Signed by <b>'+peEsc(e.signed_name||'')+'</b>'+(e.signed_designation?' ('+peEsc(e.signed_designation)+')':'')+' on '+peEsc(String(e.signed_at).slice(0,10))+
+      (e.contract_snapshot?' · <span style="text-decoration:underline;cursor:pointer" onclick="peViewSignedCopy(\''+e.id+'\')">open the signed copy</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:#8B7355;margin-top:6px">The signed terms are frozen — edits here no longer change what the client agreed to.</div>';
+  } else {
+    h += '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">These fill the agreement the guest signs. Changes save as you leave each field.</div>'+
+      '<div class="pe-grid3">'+
+      '<div><div class="pe-lbl">Pricing</div><select class="pe-in" onchange="peSaveField(\''+e.id+'\',\'pricing_type\',this.value)">'+
+        '<option value="set_price"'+(e.pricing_type!=='min_spend'?' selected':'')+'>Set price (from totals)</option>'+
+        '<option value="min_spend"'+(e.pricing_type==='min_spend'?' selected':'')+'>Minimum spend</option></select></div>'+
+      '<div><div class="pe-lbl">Deposit %</div><input class="pe-in" type="number" min="0" max="100" step="5" value="'+peEsc(agPct)+'" onchange="peSaveField(\''+e.id+'\',\'deposit_pct\',this.value===\'\'?null:Number(this.value))"></div>'+
+      '<div><div class="pe-lbl">Min. guaranteed guests</div><input class="pe-in" type="number" value="'+peEsc(e.guests_min!=null?e.guests_min:'')+'" placeholder="'+peEsc(e.guests||'')+'" onchange="peSaveField(\''+e.id+'\',\'guests_min\',this.value?parseInt(this.value,10):null)"></div>'+
+      '</div>'+
+      '<div style="margin-top:8px"><div class="pe-lbl">Extras / remarks on the agreement (cake, flowers, tobacco, set-up…)</div>'+
+      '<input class="pe-in" value="'+peEsc(e.agreement_remarks||'')+'" onchange="peSaveField(\''+e.id+'\',\'agreement_remarks\',this.value||null)"></div>'+
+      '<div style="font-size:12px;color:#6B4A33;margin-top:8px">'+
+      (agBase!=null
+        ? (e.pricing_type==='min_spend'?'Minimum spend':'Quoted price')+': <b style="color:#400207">AED '+peMoney(agBase)+'</b>'+(agPct>0?' · deposit '+agPct+'%: <b style="color:#400207">AED '+peMoney(agDep)+'</b>':' · no deposit — balance on the day')
+        : '<span style="color:#B00020">▲ '+(e.pricing_type==='min_spend'?'Set the minimum spend above first.':'Add guests + dishes (or a set food price) first — the quoted price comes from the live totals.')+'</span>')+
+      '</div>';
+  }
+  h += '</div>';
   // follow-ups
   h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Follow-up log</b>'+
     '<div style="display:flex;gap:6px;margin:8px 0"><input class="pe-in" id="pe-fu-note" placeholder="e.g. Called Ramona — waiting on final pax"><button class="pe-btn sm" onclick="peAddFollowup(\''+e.id+'\')">Add</button></div>'+
@@ -437,6 +464,8 @@ function peRenderEvent(){
     '<button class="pe-btn sec" onclick="peSendCoordEmail(\''+e.id+'\')">Coordination email\u2026</button>'+
     '<button class="pe-btn sec" onclick="peEmailProposal(\''+e.id+'\')"'+(e.contact_email?'':' disabled title="No client email on the event"')+'>Email proposal to client</button>'+
     '<button class="pe-btn sec" onclick="peWhatsApp(\''+e.id+'\')"'+(e.contact_phone?'':' disabled title="No phone on the event"')+'>WhatsApp the client</button>'+
+    '<button class="pe-btn sec" onclick="peEmailAgreement(\''+e.id+'\')"'+(e.contact_email?'':' disabled title="No client email on the event"')+'>Email proposal + agreement to sign</button>'+
+    '<button class="pe-btn sec" onclick="peCopyAgreementLink(\''+e.id+'\')">Copy agreement link</button>'+
     '<button class="pe-btn sec" onclick="peCopyClientLink(\''+e.id+'\')">Copy client selection link</button>'+
     (e.client_selection ? '<div style="font-size:11.5px;color:#2E6B34;background:#E7F0E4;border-radius:8px;padding:8px 10px">Client picked '+((e.client_selection.dish_ids||[]).length)+' dishes'+(e.client_selection.note?' · “'+peEsc(e.client_selection.note)+'”':'')+' <span style="text-decoration:underline;cursor:pointer" onclick="peApplyClientSelection(\''+e.id+'\')">apply to event</span></div>' : '')+
     '</div></div>';
@@ -781,6 +810,45 @@ function peCopyClientLink(id){
     peToast('Client link copied — paste it into your email/WhatsApp to the client');
   }).catch(function(){ prompt('Copy this link:', url); });
   sb.from('event_log').insert({event_id:id, action:'client_link', detail:'link copied', actor:peActor()});
+}
+function peAgreementUrl(e){
+  return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'client-agreement.html?t=' + e.client_token;
+}
+function peCopyAgreementLink(id){
+  var e = peEvById(id); if(!e) return;
+  var url = peAgreementUrl(e);
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){
+    peToast('Agreement link copied — the guest reads the proposal and signs on that page');
+  }).catch(function(){ prompt('Copy this link:', url); });
+  sb.from('event_log').insert({event_id:id, action:'agreement_link', detail:'link copied', actor:peActor()});
+}
+function peViewSignedCopy(id){
+  var e = peEvById(id); if(!e || !e.contract_snapshot) return;
+  var w = window.open('', '_blank');
+  if(!w){ peToast('Popup blocked — allow popups for this site', true); return; }
+  w.document.write(e.contract_snapshot); w.document.close();
+}
+async function peEmailAgreement(id){
+  var e = peEvById(id); if(!e || !e.contact_email) return;
+  if(!confirm('Email the proposal + agreement link to '+e.contact_email+' now?\nThe guest reads the menu and terms on one page and signs electronically.')) return;
+  var sender = state.userEmail || 'vdetoni@robertos.ae';
+  var url = peAgreementUrl(e);
+  var inner = '<div style="text-align:center;margin:24px 0 10px"><a href="'+url+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px">Read your proposal &amp; sign</a></div>'+
+    '<p style="font-size:12px;color:#8B7355;text-align:center">The page shows your menu, the beverage selection and the agreement — signing takes under a minute.</p>';
+  var intro = 'Thank you for choosing Roberto’s'+(e.event_date?' for '+peDLabel(e.event_date):'')+'. Your proposal and event agreement are ready — the button below opens everything on one page, where you can review and sign electronically.';
+  try{
+    var r = await sb.functions.invoke('send-event-email', { body:{
+      to:[e.contact_email, sender], reply_to:sender,
+      subject: 'Your event proposal & agreement — Roberto’s'+(e.event_date?' · '+peDLabel(e.event_date):''),
+      html: peGuestEmailHTML('Your Event Agreement', intro, e.contact_name||e.client_name, null, inner)
+    }});
+    if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
+    peToast('Sent to '+e.contact_email+' ✓ — the events desk is emailed the moment they sign');
+    if(e.status==='draft') peSetStatus(id, 'sent');
+    sb.from('event_log').insert({event_id:id, action:'email', detail:'proposal + agreement link → '+e.contact_email, actor:peActor()}).then(function(){ peLoadLog(id); });
+  }catch(err){
+    peToast('NOT sent — '+String(err&&err.message||err).slice(0,120), true);
+  }
 }
 
 // ── library (chef dishes / Manuel beverage / packages) ───────────────────────

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Roberto's — Your Event Agreement</title>
+<style>
+  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  .wrap{max-width:640px;margin:0 auto;padding:18px 14px 40px}
+  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden;padding-bottom:26px}
+  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .rule{width:70px;height:1px;background:#C9A84C;margin:10px auto}
+  .h2{font-size:15px;letter-spacing:2px;color:#7A8B4A;text-align:center;font-weight:normal;text-transform:uppercase}
+  .sub{font-size:13px;color:#8A6A4F;text-align:center;margin-top:4px}
+  .sect{border-top:1px solid #E3D5C2;margin:18px 22px 0;padding-top:14px}
+  .sect-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7A8B4A;margin-bottom:6px}
+  .cath{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8A9A5B;margin:12px 0 2px;text-align:center;font-family:Arial,sans-serif}
+  .dish{text-align:center;font-size:13.5px;margin:7px 0}
+  .dish .cd{font-size:10.5px;color:#A5876B}
+  .dish .ds{font-size:12px;color:#8A6A4F}
+  .facts td{padding:5px 8px;border:1px solid #E3D5C2;font-size:12.5px}
+  .facts td.l{width:38%;color:#8B7355;font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:Arial,sans-serif}
+  .facts{width:100%;border-collapse:collapse}
+  .total{background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin-top:14px}
+  .total b{font-size:17px;color:#400207}
+  .total .d{font-size:11.5px;color:#8A6A4F;margin-top:3px}
+  .fld{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:10px 11px;font-family:Arial,sans-serif;font-size:13px;margin-bottom:9px}
+  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer;margin-top:6px}
+  .btn:disabled{opacity:.5}
+  .tick{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:#3A2A1E;margin:6px 0 10px;cursor:pointer;font-family:Arial,sans-serif}
+  .tick input{width:17px;height:17px;accent-color:#400207;flex-shrink:0;margin-top:1px}
+  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin:16px 22px 0;line-height:1.7;font-family:Arial,sans-serif}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+  .ok{background:#E7F0E4;color:#2E6B34;border-radius:10px;padding:14px;text-align:center;font-size:13.5px;margin-top:10px}
+  .err{color:#B00020;font-size:12.5px;margin-top:8px;text-align:center;font-family:Arial,sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card">
+  <div class="msg">Loading your agreement…</div>
+</div></div>
+<script>
+var FN_BASE = 'https://paoaivwtkzujmrgrfjuq.supabase.co/functions/v1/event-agreement';
+var token = new URLSearchParams(location.search).get('t') || '';
+var state = null;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function money(n){ var v=Number(n); return isNaN(v)?'—':Math.round(v).toLocaleString('en-US'); }
+function dLabel(ds){ if(!ds) return '—'; var d=new Date(String(ds).slice(0,10)+'T12:00:00'); return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
+function el(id){ return document.getElementById(id); }
+function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+
+async function load(){
+  if(!token) return fail('This link is not valid.');
+  try{
+    var r = await fetch(FN_BASE + '?t=' + encodeURIComponent(token));
+    var data = await r.json();
+    if(!r.ok || data.error) return fail(data.error || 'This link is no longer available.');
+    state = data;
+    render(data);
+  }catch(e){ fail('Could not load your agreement — please check your connection and reopen the link.'); }
+}
+
+function render(data){
+  var ev = data.event || {};
+  var h = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div>'+
+    '<div class="h2">Your Event Proposal &amp; Agreement</div>'+
+    '<div class="sub">'+(ev.client_name?'Prepared for '+esc(ev.client_name)+' · ':'')+esc(dLabel(ev.event_date))+(ev.area?' · '+esc(ev.area):'')+'</div>';
+
+  // booking facts
+  function row(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
+  h += '<div class="sect"><div class="sect-h">Your reservation</div><table class="facts">'+
+    row('Event type', esc(ev.event_type))+
+    row('Date', esc(dLabel(ev.event_date)))+
+    row('Timing', esc([ev.time_from, ev.time_to].filter(Boolean).join(' – ')))+
+    row('Area', esc(ev.area))+
+    row('Guests reserved for', esc(ev.guests))+
+    row('Minimum guaranteed guests', esc(ev.guests_min))+
+    '</table></div>';
+
+  // menu
+  var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
+  var menu = data.menu||[];
+  if(menu.length || ev.package_label){
+    h += '<div class="sect"><div class="sect-h">The food'+(ev.package_label?' — '+esc(ev.package_label):'')+'</div>';
+    groups.forEach(function(g){
+      var list = menu.filter(function(d){ return d.serve===g[0]; });
+      if(!list.length) return;
+      h += '<div class="cath">'+g[1]+'</div>';
+      list.forEach(function(d){
+        h += '<div class="dish">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+
+          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</div>';
+      });
+    });
+    h += '</div>';
+  }
+
+  // beverage
+  if(data.bev){
+    h += '<div class="sect"><div class="sect-h">The beverages</div>'+
+      '<div class="dish">'+esc(data.bev.name)+(data.bev.duration_hours?' — '+data.bev.duration_hours+' hours':'')+
+      (data.bev.includes?'<br><span class="ds">'+esc(data.bev.includes)+'</span>':'')+'</div></div>';
+  }
+
+  // the one figure
+  if(data.quoted!=null){
+    h += '<div class="sect"><div class="total"><b>'+
+      (data.pricing_type==='min_spend' ? 'Minimum spend — AED '+money(data.quoted) : (ev.guests?ev.guests+' guests · ':'')+'AED '+money(data.quoted))+
+      '</b><div class="d">Everything included — food'+(data.bev?' and beverage package':'')+', inclusive of all taxes and service'+
+      (data.deposit_pct>0?'<br>Deposit to confirm: '+data.deposit_pct+'% — AED '+money(data.deposit):'')+'</div></div></div>';
+  }
+
+  // terms (server-rendered — the same HTML is frozen when you sign)
+  h += '<div class="sect"><div class="sect-h">Terms &amp; conditions</div>'+(data.termsHtml||'')+'</div>';
+
+  // sign block
+  if(data.signed){
+    h += '<div class="sect"><div class="ok">Signed by '+esc(data.signed.name)+(data.signed.designation?' — '+esc(data.signed.designation):'')+
+      ' on '+esc(String(data.signed.at).slice(0,10))+'.<br>A copy has been emailed to you. A presto!</div></div>';
+  } else {
+    h += '<div class="sect"><div class="sect-h">Sign the agreement</div>'+
+      '<input class="fld" id="sg-name" placeholder="Your full name" autocomplete="name">'+
+      '<input class="fld" id="sg-desig" placeholder="Designation / relation to the booking (optional)">'+
+      '<label class="tick"><input type="checkbox" id="sg-tick"> I have read and understood the General Terms &amp; Conditions of Special Event Reservations at Roberto’s, and I agree to them on behalf of the Client.</label>'+
+      '<button class="btn" id="sg-btn" onclick="sign()">Sign &amp; confirm</button>'+
+      '<div class="err" id="sg-err"></div></div>';
+  }
+
+  h += '<div class="ft">Roberto’s Club LTD · Gate Village No. 1, DIFC, Dubai<br>All prices are in AED and inclusive of 5% VAT, 7% DIFC authority fee and 10% service charge.<br>D - Dairy | E - Egg | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+  el('card').innerHTML = h;
+}
+
+async function sign(){
+  var name = (el('sg-name').value||'').trim();
+  var err = el('sg-err');
+  err.textContent = '';
+  if(name.length < 3){ err.textContent = 'Please type your full name to sign.'; return; }
+  if(!el('sg-tick').checked){ err.textContent = 'Please tick that you have read and agree to the terms.'; return; }
+  var btn = el('sg-btn'); btn.disabled = true; btn.textContent = 'Signing…';
+  try{
+    var r = await fetch(FN_BASE, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ t: token, action:'sign', name:name, designation:(el('sg-desig').value||'').trim() }) });
+    var data = await r.json();
+    if(!r.ok || data.error) throw new Error(data.error || 'Could not sign — please try again.');
+    state.signed = data.signed;
+    render(state);
+    window.scrollTo(0, document.body.scrollHeight);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Sign & confirm';
+    err.textContent = String(e.message||e);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
