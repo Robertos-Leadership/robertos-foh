@@ -730,8 +730,45 @@ function peFunctionSheetHTML(e){
   body += row('Estimated total', t.total ? 'AED '+peMoney(t.total) : '—')+row('Minimum spend', e.min_spend?'AED '+peMoney(e.min_spend):'—');
   body += row('Dietary', e.dietary)+row('Payment', e.payment_terms);
   body += row('Status', peStatusMeta(e.status).n)+row('Last update', new Date().toLocaleDateString('en-GB')+' · '+peActor());
-  body += '</table><div class="ft">Amounts inclusive of 5% VAT, subject to 7% DIFC fee & 10% service charge.</div>';
+  body += '</table>';
+  body += peKitchenPrepHTML(e, t);
+  body += '<div class="ft">All prices inclusive of 5% VAT, 7% DIFC authority fee and 10% service charge.</div>';
   return peDocShell('Function sheet', body);
+}
+// The chef's half of the sheet: every selected dish with the quantity to
+// prepare (pcs/guest × guests), grouped like the kitchen works — cold, hot,
+// dolci — with allergens and the dietary note in one place.
+function peKitchenPrepRows(e){
+  var t = peCalcTotals(e);
+  var order = {Cold:0, Hot:1, Dessert:2};
+  return t.items.map(function(it){
+    var d = peDishById(it.dish_id); if(!d) return null;
+    var pcs = Number(it.pcs_per_guest)||0;
+    var total = e.guests ? Math.ceil(pcs*Number(e.guests)) : null;
+    var minFlag = (total!=null && d.min_order && total < d.min_order) ? d.min_order : null;
+    return {d:d, pcs:pcs, total:total, minFlag:minFlag, sort:(order[d.serve]!=null?order[d.serve]:9)};
+  }).filter(Boolean).sort(function(a,b){ return a.sort-b.sort; });
+}
+function peKitchenPrepHTML(e, t){
+  var rows = peKitchenPrepRows(e);
+  if(!rows.length) return '';
+  var h = '<div class="fs-h" style="margin-top:16px">KITCHEN — MENU &amp; QUANTITIES TO PREPARE</div><table>';
+  h += '<tr><td class="l">Dish</td><td class="l" style="width:18%">Per guest</td><td class="l" style="width:22%">Total to prepare</td></tr>';
+  var lastServe = null;
+  rows.forEach(function(r){
+    if(r.d.serve!==lastServe){
+      lastServe = r.d.serve;
+      h += '<tr><td colspan="3" style="background:#F3E9DA;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8A6A4F">'+(r.d.serve==='Dessert'?'Dolci':peEsc(r.d.serve))+'</td></tr>';
+    }
+    h += '<tr><td>'+peEsc(r.d.name)+' <span style="font-size:10px;color:#A5876B">('+((r.d.allergens||[]).join(')(')||'–')+')</span></td>'+
+      '<td>'+(Math.round(r.pcs*10)/10)+' pc</td>'+
+      '<td><b>'+(r.total!=null ? r.total+' pcs' : '— set guests')+'</b>'+(r.minFlag?' <span style="color:#B00020;font-size:10px">min order '+r.minFlag+'</span>':'')+'</td></tr>';
+  });
+  var totalPcs = 0; rows.forEach(function(r){ if(r.total) totalPcs += r.total; });
+  if(e.guests && totalPcs) h += '<tr><td style="text-align:right"><b>Total</b></td><td>'+(Math.round((t||peCalcTotals(e)).pcs*10)/10)+' pc/guest</td><td><b>'+totalPcs+' pcs</b></td></tr>';
+  h += '</table>';
+  if(e.dietary) h += '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Dietary — read before prep:</b> '+peEsc(e.dietary)+'</div>';
+  return h;
 }
 function pePrintFunctionSheet(id){ var e = peEvById(id); if(e) pePrintHTML(peFunctionSheetHTML(e)); }
 function peCoordEmailHTML(e){
@@ -751,8 +788,34 @@ function peCoordEmailHTML(e){
     li('Minimum spending', e.min_spend?'AED '+peMoney(e.min_spend):null)+
     li('Dietary', e.dietary)+
     '</table>'+
+    peCoordPrepHTML(e)+
     '<p style="color:#666;font-size:12px">Sent automatically from the Events module · status: '+peStatusMeta(e.status).n+'</p>'+
     '<p>Kind regards,<br>'+peEsc(peActor())+'</p></div>';
+}
+// @Danilo's half of the coordination email — the selected menu with the
+// quantities the kitchen has to prepare, so nobody has to call to ask.
+function peCoordPrepHTML(e){
+  var rows = peKitchenPrepRows(e);
+  if(!rows.length) return '';
+  var h = '<p style="margin:14px 0 4px"><b>Menu — quantities to prepare (@Danilo):</b></p>'+
+    '<table style="border-collapse:collapse;font-size:13px">'+
+    '<tr><td style="padding:3px 8px;border:1px solid #ddd;background:#f5f0e8"><b>Dish</b></td>'+
+    '<td style="padding:3px 8px;border:1px solid #ddd;background:#f5f0e8"><b>Per guest</b></td>'+
+    '<td style="padding:3px 8px;border:1px solid #ddd;background:#f5f0e8"><b>Total</b></td></tr>';
+  var lastServe = null, totalPcs = 0;
+  rows.forEach(function(r){
+    if(r.d.serve!==lastServe){
+      lastServe = r.d.serve;
+      h += '<tr><td colspan="3" style="padding:3px 8px;border:1px solid #ddd;color:#8A6A4F;font-size:11px;text-transform:uppercase;letter-spacing:1px">'+(r.d.serve==='Dessert'?'Dolci':peEsc(r.d.serve))+'</td></tr>';
+    }
+    if(r.total) totalPcs += r.total;
+    h += '<tr><td style="padding:3px 8px;border:1px solid #ddd">'+peEsc(r.d.name)+' <span style="color:#999;font-size:11px">('+((r.d.allergens||[]).join(')(')||'–')+')</span></td>'+
+      '<td style="padding:3px 8px;border:1px solid #ddd">'+(Math.round(r.pcs*10)/10)+' pc</td>'+
+      '<td style="padding:3px 8px;border:1px solid #ddd"><b>'+(r.total!=null?r.total+' pcs':'— set guests')+'</b>'+(r.minFlag?' <span style="color:#B00020;font-size:11px">min '+r.minFlag+'</span>':'')+'</td></tr>';
+  });
+  if(totalPcs) h += '<tr><td style="padding:3px 8px;border:1px solid #ddd;text-align:right"><b>Total</b></td><td style="padding:3px 8px;border:1px solid #ddd"></td><td style="padding:3px 8px;border:1px solid #ddd"><b>'+totalPcs+' pcs</b></td></tr>';
+  h += '</table>';
+  return h;
 }
 async function peSendCoordEmail(id){
   var e = peEvById(id); if(!e) return;
@@ -1221,21 +1284,36 @@ async function peSavePack(id){
 // the app does ALL the math on her own library — beverage total, balance for
 // food per guest, then a canapé mix that fits it under the kitchen rules
 // (8–12 pcs/guest, variety cap by guest count, min orders). No AI, no guessing.
-var peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', busy:false };
-function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', busy:false }; }
+var peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, busy:false };
+function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, busy:false }; }
 function peWizSet(f, v){ peWiz[f] = v; peWizPaint(); }
+function peWizTogl(k){ peWiz.excl[k] = !peWiz.excl[k]; renderMain(); }
 function peWizCap(guests){ return guests>=30 ? 15 : (guests>=20 ? 8 : 5); }
-function peWizAvail(){
+// What the guest doesn't want, applied to the live library before any math —
+// so the mix the wizard proposes is always actually serveable.
+var PE_WIZ_EXCL = [['beef','No beef','Beef'],['chicken','No chicken','Chicken'],['fish','No fish / shellfish','Fish'],['dessert','No dessert','Dessert'],['vegonly','Vegetarian only',null]];
+function peWizPool(){
+  return peState.dishes.filter(function(d){
+    if(!d.active) return false;
+    if(peWiz.excl.vegonly && d.category!=='Vegetarian' && d.category!=='Dessert') return false;
+    if(peWiz.excl.beef && d.category==='Beef') return false;
+    if(peWiz.excl.chicken && d.category==='Chicken') return false;
+    if(peWiz.excl.fish && d.category==='Fish') return false;
+    if(peWiz.excl.dessert && d.category==='Dessert') return false;
+    return true;
+  });
+}
+function peWizAvail(pool){
   var a = {Signature:0, Elevated:0, Classic:0};
-  peState.dishes.forEach(function(d){ if(d.active && a[d.tier]!=null) a[d.tier]++; });
+  pool.forEach(function(d){ if(a[d.tier]!=null) a[d.tier]++; });
   return a;
 }
-function peWizMix(foodPP, guests){
+function peWizMix(foodPP, guests, pool){
   // best tier mix (pcs of Signature 35 / Elevated 20 / Classic 10 per guest)
   // that spends as much of the food balance as possible without going over —
   // constrained to what the live library can actually serve (a dish carries
   // at most 2 pcs/guest, and the distinct-dish count must fit the variety cap).
-  var avail = peWizAvail(), cap = peWizCap(guests);
+  var avail = peWizAvail(pool), cap = peWizCap(guests);
   var best = null;
   for(var pcs=8; pcs<=12; pcs++){
     for(var s=0; s<=pcs; s++){
@@ -1252,10 +1330,11 @@ function peWizMix(foodPP, guests){
   }
   return best;
 }
-function peWizPick(mix, guests){
-  // turn the tier mix into real dishes from the live library, balancing
+function peWizPick(mix, guests, pool){
+  // turn the tier mix into real dishes from the guest-allowed pool, balancing
   // cold/hot/dolci (~40/40/20 of pieces) and spreading categories.
-  var cap = peWizCap(guests), avail = peWizAvail();
+  var cap = peWizCap(guests), avail = peWizAvail(pool);
+  var hasDessert = pool.some(function(d){ return d.serve==='Dessert'; });
   var plan = [['Signature',mix.s],['Elevated',mix.e],['Classic',mix.c]]
     .filter(function(t){ return t[1]>0; })
     .map(function(t){ return {tier:t[0], pcs:t[1], distinct:Math.min(t[1], avail[t[0]])}; });
@@ -1268,7 +1347,7 @@ function peWizPick(mix, guests){
     cand.distinct--;
   }
   var used = {}, servePcs = {Cold:0, Hot:0, Dessert:0}, catCount = {}, totalAssigned = 0;
-  var target = {Cold:.4, Hot:.4, Dessert:.2};
+  var target = hasDessert ? {Cold:.4, Hot:.4, Dessert:.2} : {Cold:.5, Hot:.5, Dessert:0};
   var picked = [];
   plan.forEach(function(p){
     for(var i=0; i<p.distinct; i++){
@@ -1276,19 +1355,19 @@ function peWizPick(mix, guests){
       var pcsHere = Math.min(2, p.pcs - (p.distinct-1-i));
       if(pcsHere < 1) pcsHere = 1;
       p.pcs -= pcsHere;
-      var pool = peState.dishes.filter(function(d){
-        return d.active && d.tier===p.tier && !used[d.id] && (d.min_order||10) <= guests*pcsHere;
+      var cand = pool.filter(function(d){
+        return d.tier===p.tier && !used[d.id] && (d.min_order||10) <= guests*pcsHere;
       });
-      if(!pool.length) pool = peState.dishes.filter(function(d){ return d.active && d.tier===p.tier && !used[d.id]; });
-      if(!pool.length) continue;
-      pool.sort(function(a,b){
+      if(!cand.length) cand = pool.filter(function(d){ return d.tier===p.tier && !used[d.id]; });
+      if(!cand.length) continue;
+      cand.sort(function(a,b){
         var pa = servePcs[a.serve]-target[a.serve]*(totalAssigned||1), pb = servePcs[b.serve]-target[b.serve]*(totalAssigned||1);
         if(pa!==pb) return pa-pb;
         var ca = catCount[a.category]||0, cb = catCount[b.category]||0;
         if(ca!==cb) return ca-cb;
         return (b.description?1:0)-(a.description?1:0);
       });
-      var d = pool[0];
+      var d = cand[0];
       used[d.id] = true;
       servePcs[d.serve] += pcsHere; catCount[d.category] = (catCount[d.category]||0)+1; totalAssigned += pcsHere;
       picked.push({dish:d, pcs:pcsHere});
@@ -1313,13 +1392,17 @@ function peWizCalc(){
       : 'AED '+peMoney(foodPP)+'/guest is below the lightest selection (AED 80/guest — 8 Classic canapés).';
     return {ready:false, err:err, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance, foodPP:foodPP, guests:guests, budget:budget};
   }
-  var mix = peWizMix(foodPP, guests);
-  if(!mix) return {ready:false, err:'The dish library cannot serve a full selection yet (8 pcs/guest minimum) — add more active canapés in the Chef corner.'};
-  var picked = peWizPick(mix, guests);
+  var pool = peWizPool();
+  var exclOn = PE_WIZ_EXCL.filter(function(x){ return peWiz.excl[x[0]]; }).map(function(x){ return x[1].toLowerCase(); });
+  var mix = peWizMix(foodPP, guests, pool);
+  if(!mix) return {ready:false, err: exclOn.length
+    ? 'With '+exclOn.join(' + ')+' the library cannot serve a full selection (8 pcs/guest minimum) — relax one restriction or add matching canapés in the Chef corner.'
+    : 'The dish library cannot serve a full selection yet (8 pcs/guest minimum) — add more active canapés in the Chef corner.'};
+  var picked = peWizPick(mix, guests, pool);
   var realFoodPP = 0; picked.forEach(function(p){ realFoodPP += (Number(p.dish.sell_price)||0)*p.pcs; });
   var total = (realFoodPP+bevPP)*guests;
   return {ready:true, guests:guests, budget:budget, bev:bev, bevPP:bevPP, bevTotal:bevTotal, balance:balance,
-          foodPP:foodPP, mix:mix, picked:picked, realFoodPP:realFoodPP, total:total, gap:budget-total, cap:peWizCap(guests)};
+          foodPP:foodPP, mix:mix, picked:picked, realFoodPP:realFoodPP, total:total, gap:budget-total, cap:peWizCap(guests), excl:exclOn};
 }
 function peRenderWizard(){
   var bevs = peState.bevs.filter(function(b){ return b.active!==false; });
@@ -1338,7 +1421,11 @@ function peRenderWizard(){
     '<select class="pe-in" onchange="peWizSet(\'bev\',this.value)"><option value="" '+(peWiz.bev===''?'selected':'')+'>Choose…</option>'+
     '<option value="none"'+(peWiz.bev==='none'?' selected':'')+'>No beverage package — whole budget on food</option>'+
     bevs.map(function(b){ return '<option value="'+b.id+'"'+(peWiz.bev===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest</option>'; }).join('')+
-    '</select></div></div>';
+    '</select></div>'+
+    '<div style="margin-top:8px"><div class="pe-lbl">The guest doesn’t want… (tap to exclude)</div>'+
+    PE_WIZ_EXCL.map(function(x){
+      return '<span class="pe-chip'+(peWiz.excl[x[0]]?' on':'')+'" onclick="peWizTogl(\''+x[0]+'\')">'+x[1]+'</span>';
+    }).join('')+'</div></div>';
   h += '<div id="pe-wiz-out">'+peWizOutHTML()+'</div>';
   return h+PE_FOOT;
 }
@@ -1359,7 +1446,7 @@ function peWizOutHTML(){
     mrow('Canapé mix that fits', w.mix.pcs+' pcs/guest — '+[w.mix.s?w.mix.s+' Signature':null, w.mix.e?w.mix.e+' Elevated':null, w.mix.c?w.mix.c+' Classic':null].filter(Boolean).join(' + '))+
     mrow('Proposal total', w.guests+' × AED '+peMoney(w.realFoodPP+w.bevPP)+' = AED '+peMoney(w.total))+
     '<div style="font-size:12px;margin-top:4px;color:'+(w.gap>=0?'#2E6B34':'#B00020')+'">'+(w.gap>=0?'AED '+peMoney(w.gap)+' under the AED '+peMoney(w.budget)+' budget ✓':'AED '+peMoney(-w.gap)+' OVER budget')+'</div>'+
-    '<div style="font-size:10.5px;color:#8B7355;margin-top:4px">Kitchen rules applied: 8–12 pieces per guest · '+w.guests+' guests → up to '+w.cap+' different canapés · minimum orders respected.</div></div>';
+    '<div style="font-size:10.5px;color:#8B7355;margin-top:4px">Kitchen rules applied: 8–12 pieces per guest · '+w.guests+' guests → up to '+w.cap+' different canapés · minimum orders respected'+(w.excl&&w.excl.length?' · <b style="color:#400207">guest requests: '+w.excl.join(', ')+'</b>':'')+'.</div></div>';
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
   h += '<div class="pe-card"><b style="color:#400207">Suggested menu — '+w.picked.length+' canapés</b>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 6px">Built from the live dish library. Create the draft, then swap any dish freely in the event before sending.</div>';
@@ -1395,6 +1482,7 @@ async function peWizCreate(){
                 time_from: peWiz.time||null, time_to: timeTo,
                 area: peWiz.area||null, guests: w.guests,
                 bev_package_id: w.bev ? w.bev.id : null,
+                dietary: (w.excl&&w.excl.length) ? 'Guest requests: '+w.excl.join(', ') : null,
                 payment_terms:'50% deposit to confirm, balance on the day' };
     var r = await sb.from('events_desk').insert(row).select().single();
     if(r.error || !r.data) throw (r.error||{message:'no data'});
@@ -1406,7 +1494,7 @@ async function peWizCreate(){
       peState.items[r.data.id] = ri.data||[];
     }
     await sb.from('event_log').insert({event_id:r.data.id, action:'created',
-      detail:'Budget proposal: AED '+peMoney(w.budget)+' · '+(w.bev?w.bev.name+' AED '+peMoney(w.bevTotal):'no beverage')+' · food AED '+peMoney(w.realFoodPP)+'/guest ('+w.mix.pcs+' pcs) · total AED '+peMoney(w.total),
+      detail:'Budget proposal: AED '+peMoney(w.budget)+' · '+(w.bev?w.bev.name+' AED '+peMoney(w.bevTotal):'no beverage')+' · food AED '+peMoney(w.realFoodPP)+'/guest ('+w.mix.pcs+' pcs)'+(w.excl&&w.excl.length?' · guest requests: '+w.excl.join(', '):'')+' · total AED '+peMoney(w.total),
       actor:peActor()});
     peWiz.busy = false;
     peToast('Draft created ✓ — review it, then print or email the proposal');
