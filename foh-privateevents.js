@@ -910,11 +910,12 @@ function peRenderBevLib(){
     h += '<div class="pe-card"><b style="color:#400207">'+(ed.id?'Edit package':'Add a beverage package')+'</b>'+
       '<div class="pe-grid3" style="margin-top:10px">'+
       '<div style="grid-column:1/3"><div class="pe-lbl">Package name</div><input class="pe-in" id="pe-b-name" value="'+peEsc(ed.name||'')+'"></div>'+
-      '<div><div class="pe-lbl">Hours</div><input class="pe-in" id="pe-b-duration_hours" type="number" step="0.5" value="'+peEsc(ed.duration_hours!=null?ed.duration_hours:3)+'"></div>'+
+      '<div><div class="pe-lbl">Hours (blank if per-drink)</div><input class="pe-in" id="pe-b-duration_hours" type="number" step="0.5" value="'+peEsc(ed.duration_hours!=null?ed.duration_hours:(ed.id?'':3))+'"></div>'+
       '</div><div class="pe-grid2" style="margin-top:8px">'+
       '<div><div class="pe-lbl">Price / guest (AED)</div><input class="pe-in" id="pe-b-price_pp" type="number" value="'+peEsc(ed.price_pp!=null?ed.price_pp:'')+'"></div>'+
-      '<div><div class="pe-lbl">Includes</div><input class="pe-in" id="pe-b-includes" value="'+peEsc(ed.includes||'')+'" placeholder="House wine, beers, soft drinks, water"></div>'+
-      '</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<div><div class="pe-lbl">Cost / guest (AED) — our cost, never shown to clients</div><input class="pe-in" id="pe-b-cost_pp" type="number" step="0.01" value="'+peEsc(ed.cost_pp!=null?ed.cost_pp:'')+'"></div>'+
+      '</div><div style="margin-top:8px"><div class="pe-lbl">Includes</div><input class="pe-in" id="pe-b-includes" value="'+peEsc(ed.includes||'')+'" placeholder="House wine, beers, soft drinks, water"></div>'+
+      '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="pe-btn" onclick="peSaveBev(\''+(ed.id||'')+'\')">Save package</button>'+
       '<button class="pe-btn sec" onclick="peState.editBevId=null;renderMain()">Cancel</button>'+
       (ed.id?'<button class="pe-btn sec" style="margin-left:auto;color:#B00020;border-color:#B00020" onclick="peToggleBev(\''+ed.id+'\','+(ed.active===false?'true':'false')+')">'+(ed.active===false?'Reactivate':'Retire package')+'</button>':'')+
@@ -923,7 +924,10 @@ function peRenderBevLib(){
     h += '<div style="margin-bottom:10px"><button class="pe-btn" onclick="peState.editBevId=\'new\';renderMain()">+ Add a beverage package</button></div>';
   }
   h += '<div class="pe-card">'+(peState.bevs.length?peState.bevs.map(function(b){
-    return '<div class="pe-dishrow" style="opacity:'+(b.active===false?.45:1)+'"><span><b>'+peEsc(b.name)+'</b> · '+(b.duration_hours?b.duration_hours+'h · ':'')+'AED '+peMoney(b.price_pp)+'/guest<br><span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span>'+
+    var pour = (b.cost_pp!=null && Number(b.price_pp)>0) ? Math.round(Number(b.cost_pp)/Number(b.price_pp)*100) : null;
+    return '<div class="pe-dishrow" style="opacity:'+(b.active===false?.45:1)+'"><span><b>'+peEsc(b.name)+'</b> · '+(b.duration_hours?b.duration_hours+'h · ':'')+'AED '+peMoney(b.price_pp)+'/guest'+
+      (pour!=null?' · <span style="color:'+(pour>=30?'#B00020':'#2E6B34')+'">cost AED '+peMoney(b.cost_pp)+' → '+pour+'%</span>':' · <span style="color:#B08D3E">no cost yet</span>')+
+      '<br><span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span>'+
       '<button class="pe-btn sec sm" onclick="peState.editBevId=\''+b.id+'\';renderMain()">Edit</button></div>';
   }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet.</div>')+'</div>';
   return h;
@@ -933,7 +937,8 @@ async function peSaveBev(id){
   if(!g('name')){ peToast('Package name is required', true); return; }
   if(!g('price_pp')){ peToast('Price per guest is required', true); return; }
   var row = { name:g('name'), duration_hours:g('duration_hours')?Number(g('duration_hours')):null,
-              price_pp:Number(g('price_pp')), includes:g('includes')||null, created_by:peActor() };
+              price_pp:Number(g('price_pp')), cost_pp:g('cost_pp')?Number(g('cost_pp')):null,
+              includes:g('includes')||null, created_by:peActor() };
   var r = id ? await sb.from('event_bev_packages').update(row).eq('id', id).select().single()
              : await sb.from('event_bev_packages').insert(row).select().single();
   if(r.error || !r.data){ peToast('NOT saved — '+String(r.error&&r.error.message||'').slice(0,100), true); return; }
