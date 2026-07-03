@@ -24,7 +24,7 @@ var peState = {
   editDishId:null, editBevId:null, editPackId:null
 };
 
-var PE_TEAM_CC = ['astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','asacchi@skelmore.com'];
+var PE_TEAM_CC = ['dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','asacchi@skelmore.com'];
 var PE_TARGETS = {
   cells: {'Vegetarian|Cold':7,'Fish|Cold':7,'Beef|Cold':6,'Vegetarian|Hot':7,'Fish|Hot':6,'Beef|Hot':7,'Dessert|Dessert':5},
   serve: {Cold:20, Hot:20, Dessert:5},
@@ -992,18 +992,22 @@ function peCoordEmailHTML(e){
     '<p>Dear Team,</p>'+
     '<table style="border-collapse:collapse">'+
     li('Event', (e.client_name||'')+(e.company?' — '+e.company:''))+
+    li('Type', e.event_type)+
     li('Date', peDLabel(e.event_date))+
     li('Time', (e.time_from||'')+(e.time_to?' to '+e.time_to:''))+
     li('Area', e.area)+
     li('No. People', e.guests?String(e.guests)+' guests':null)+
+    li('Contact', [e.contact_name, e.contact_phone, e.contact_email].filter(Boolean).join(' · '))+
     li('Food package', (e.package_label||(t.items.length?'Bespoke canapé selection':null)))+
     li('Beverage', bev?bev.name+(bev.duration_hours?' ('+bev.duration_hours+'h)':''):(e.bev_mode==='dry'?'DRY EVENT — no alcohol (soft drinks & water)':null))+
     li('Minimum spending', e.min_spend?'AED '+peMoney(e.min_spend):null)+
+    li('Estimated total', t.total?'AED '+peMoney(t.total):null)+
+    li('Payment', e.payment_terms)+
     li('Dietary', e.dietary)+
     '</table>'+
     peCoordSetMenuHTML(e)+
     peCoordPrepHTML(e)+
-    '<p style="color:#666;font-size:12px">Sent automatically from the Events module · status: '+peStatusMeta(e.status).n+'</p>'+
+    '<p style="color:#666;font-size:12px">Full event brief · sent automatically from the Events module · status: '+peStatusMeta(e.status).n+'</p>'+
     '<p>Kind regards,<br>'+peEsc(peActor())+'</p></div>';
 }
 // @Danilo's half of the coordination email — the selected menu with the
