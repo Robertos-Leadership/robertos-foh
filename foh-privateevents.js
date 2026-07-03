@@ -508,13 +508,14 @@ function peRenderEvent(){
     '<button class="pe-btn sec" onclick="peEmailProposal(\''+e.id+'\')"'+noMail+'>Send proposal only (menu &amp; price)</button>'+
     '<button class="pe-btn sec" onclick="peCopyClientLink(\''+e.id+'\')">Let the guest choose their dishes</button>'+
     '<div style="display:flex;gap:7px"><button class="pe-btn sec" style="flex:1" onclick="peWhatsApp(\''+e.id+'\')"'+noPhone+'>WhatsApp</button>'+
-    '<button class="pe-btn sec" style="flex:1" onclick="peCopyAgreementLink(\''+e.id+'\')">Copy link</button></div>'+
+    '<button class="pe-btn sec" style="flex:1" onclick="peCopyAgreementLink(\''+e.id+'\')">Copy link</button>'+
+    '<button class="pe-btn sec" style="flex:1" onclick="pePrintProposal(\''+e.id+'\')">Print PDF</button></div>'+
     (e.client_selection ? '<div style="font-size:11.5px;color:#2E6B34;background:#E7F0E4;border-radius:8px;padding:8px 10px">Client picked '+((e.client_selection.dish_ids||[]).length)+' dishes'+(e.client_selection.note?' · “'+peEsc(e.client_selection.note)+'”':'')+' <span style="text-decoration:underline;cursor:pointer" onclick="peApplyClientSelection(\''+e.id+'\')">apply to event</span></div>' : '')+
     '</div>'+
     '<div style="'+grpLbl+';margin-top:12px">For the team</div>'+
     '<div style="display:flex;flex-direction:column;gap:7px">'+
-    '<button class="pe-btn sec" onclick="peSendCoordEmail(\''+e.id+'\')">Coordination email…</button>'+
-    '<button class="pe-btn sec" onclick="pePrintProposal(\''+e.id+'\')">Print proposal / function sheet</button>'+
+    '<button class="pe-btn" onclick="peSendCoordEmail(\''+e.id+'\')">Send event brief to the team</button>'+
+    '<button class="pe-btn sec" onclick="pePrintFunctionSheet(\''+e.id+'\')">Print the event brief</button>'+
     '</div></div>';
   h += '</div></div>';
   return h+'</div>';
@@ -876,10 +877,12 @@ function peProposalHTML(e){
   return peDocShell('Roberto\'s proposal', body);
 }
 function pePrintProposal(id){ var e = peEvById(id); if(e) pePrintHTML(peProposalHTML(e)); }
-function peFunctionSheetHTML(e){
+// The branded internal Event Brief — the whole team's one-page source of truth.
+// Used both for the printout and for the email to the team (same document).
+function peBriefBodyHTML(e){
   var t = peCalcTotals(e);
   function row(l,v){ return '<tr><td class="l">'+l+'</td><td>'+peEsc(v==null||v===''?'—':v)+'</td></tr>'; }
-  var body = '<div class="brand">R O B E R T O ’ S</div><div class="fs-h">FUNCTION SHEET</div><table>';
+  var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div><div class="fs-h">EVENT BRIEF</div><table>';
   body += row('Booking name', e.client_name)+row('Company', e.company)+row('Contact', (e.contact_name||'')+(e.contact_phone?' · '+e.contact_phone:'')+(e.contact_email?' · '+e.contact_email:''));
   body += row('Event date', peDLabel(e.event_date))+row('Type', e.event_type)+row('Timing', (e.time_from||'')+(e.time_to?' – '+e.time_to:''));
   body += row('Area', e.area)+row('Guests', e.guests);
@@ -893,8 +896,9 @@ function peFunctionSheetHTML(e){
   body += peSetMenuPrepHTML(e);
   body += peKitchenPrepHTML(e, t);
   body += '<div class="ft">All prices inclusive of 5% VAT, 7% DIFC authority fee and 10% service charge.</div>';
-  return peDocShell('Function sheet', body);
+  return body;
 }
+function peFunctionSheetHTML(e){ return peDocShell('Roberto’s — event brief', peBriefBodyHTML(e)); }
 // Set-menu prep for the kitchen: fixed courses = one portion per guest; the
 // choose course carries the exact per-option headcount the chef cooks.
 function peSetMenuPrepHTML(e){
@@ -991,30 +995,9 @@ function peKitchenPrepHTML(e, t){
 }
 function pePrintFunctionSheet(id){ var e = peEvById(id); if(e) pePrintHTML(peFunctionSheetHTML(e)); }
 function peCoordEmailHTML(e){
-  var t = peCalcTotals(e);
-  var bev = e.bev_package_id ? peBevById(e.bev_package_id) : null;
-  function li(l,v){ return v ? '<tr><td style="padding:3px 10px 3px 0;color:#666;white-space:nowrap"><b>'+l+':</b></td><td style="padding:3px 0">'+peEsc(v)+'</td></tr>' : ''; }
-  return '<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">'+
-    '<p>Dear Team,</p>'+
-    '<table style="border-collapse:collapse">'+
-    li('Event', (e.client_name||'')+(e.company?' — '+e.company:''))+
-    li('Type', e.event_type)+
-    li('Date', peDLabel(e.event_date))+
-    li('Time', (e.time_from||'')+(e.time_to?' to '+e.time_to:''))+
-    li('Area', e.area)+
-    li('No. People', e.guests?String(e.guests)+' guests':null)+
-    li('Contact', [e.contact_name, e.contact_phone, e.contact_email].filter(Boolean).join(' · '))+
-    li('Food package', (e.package_label||(t.items.length?'Bespoke canapé selection':null)))+
-    li('Beverage', bev?bev.name+(bev.duration_hours?' ('+bev.duration_hours+'h)':''):(e.bev_mode==='dry'?'DRY EVENT — no alcohol (soft drinks & water)':null))+
-    li('Minimum spending', e.min_spend?'AED '+peMoney(e.min_spend):null)+
-    li('Estimated total', t.total?'AED '+peMoney(t.total):null)+
-    li('Payment', e.payment_terms)+
-    li('Dietary', e.dietary)+
-    '</table>'+
-    peCoordSetMenuHTML(e)+
-    peCoordPrepHTML(e)+
-    '<p style="color:#666;font-size:12px">Full event brief · sent automatically from the Events module · status: '+peStatusMeta(e.status).n+'</p>'+
-    '<p>Kind regards,<br>'+peEsc(peActor())+'</p></div>';
+  // The team's brief arrives as a full branded Roberto's document (same as the
+  // printout), not a small plain table.
+  return peDocShell('Roberto’s — event brief', peBriefBodyHTML(e));
 }
 // @Danilo's half of the coordination email — the selected menu with the
 // quantities the kitchen has to prepare, so nobody has to call to ask.
@@ -1106,19 +1089,19 @@ function peSendCoordEmail(id){
   var standard = (state.userEmail?[state.userEmail]:[]).concat(PE_TEAM_CC);
   standard = standard.filter(function(x,i){ return standard.indexOf(x)===i; });
   pePickRecipients({
-    title:'Coordination email', subtitle:(e.client_name||'Event')+' · '+peDLabel(e.event_date),
+    title:'Send the event brief', subtitle:(e.client_name||'Event')+' · '+peDLabel(e.event_date),
     standard:standard, checked:standard, you:state.userEmail,
     onSend:function(list){ peDoSendCoord(id, list); }
   });
 }
 async function peDoSendCoord(id, list){
   var e = peEvById(id); if(!e || !list.length) return;
-  var subject = "Private Event "+(e.event_date?peDLabel(e.event_date):'')+(e.client_name?' — '+e.client_name:'');
+  var subject = "Event brief — "+(e.client_name||'event')+(e.event_date?' · '+peDLabel(e.event_date):'');
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{ to:list, subject:subject, html:peCoordEmailHTML(e) } });
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
-    peToast('Email sent to '+list.length+' recipient'+(list.length>1?'s':'')+' ✓');
-    sb.from('event_log').insert({event_id:id, action:'email', detail:'coordination email → '+list.join(', '), actor:peActor()}).then(function(){ peLoadLog(id); });
+    peToast('Event brief sent to '+list.length+' '+(list.length>1?'people':'person')+' ✓');
+    sb.from('event_log').insert({event_id:id, action:'email', detail:'event brief → '+list.join(', '), actor:peActor()}).then(function(){ peLoadLog(id); });
   }catch(err){
     peToast('Email NOT sent — '+String(err&&err.message||err).slice(0,120), true);
   }
