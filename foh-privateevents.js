@@ -719,9 +719,13 @@ async function peSendCoordEmail(id){
 async function peEmailProposal(id){
   var e = peEvById(id); if(!e || !e.contact_email) return;
   if(!confirm('Send the branded proposal to '+e.contact_email+' now?')) return;
+  // The sender is copied (her inbox record of exactly what the client got)
+  // and set as reply-to, so the client's answer reaches a person.
+  var sender = state.userEmail || 'vdetoni@robertos.ae';
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
-      to:[e.contact_email],
+      to:[e.contact_email, sender],
+      reply_to: sender,
       subject: 'Your canap\u00e9 proposal \u2014 Roberto\u2019s'+(e.event_date?' \u00b7 '+peDLabel(e.event_date):''),
       html: peProposalHTML(e)
     }});
