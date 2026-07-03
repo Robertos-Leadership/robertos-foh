@@ -18,7 +18,6 @@
 // ════════════════════════════════════════════════════════════
 const FROM = "Roberto's DIFC Events <reports@kitchenteam.robertos.ae>";
 const NOTIFY = "vdetoni@robertos.ae";
-const PAY_URL = "https://robertosrestaurants.com/dubai/payment-gateway/pg-telr-advance-payment";
 const BANK = { name: "Roberto's Club LTD", bank: "Commercial Bank of Dubai", iban: "AE830230000001002196200", swift: "CBDUAEADXXX" };
 
 const cors = {
@@ -101,10 +100,9 @@ function termsHtml(ev: any, bev: any, totals: { total: number | null }): string 
       (ev.agreement_remarks ? "<br><b>Agreed for this event:</b> " + esc(ev.agreement_remarks) : "")) +
     sec("Booking &amp; deposit", depositClause) +
     sec("Payment",
-      "The remaining balance, including any additional items consumed, is settled on the date of the event by cash or credit card. Special payment arrangements require the approval of the Chief Financial Officer.<br>" +
-      "Bank transfers: <b>" + BANK.name + "</b> · " + BANK.bank + " · IBAN " + BANK.iban + " · SWIFT " + BANK.swift +
-      " · Reference: the name under which the reservation is made.<br>" +
-      'Card payments can be made <a href="' + PAY_URL + '" style="color:#400207">here</a>.') +
+      "Once this agreement is signed, we will send you a secure payment link to settle the deposit by card. The remaining balance, including any additional items consumed, is settled on the date of the event by cash or credit card. Special payment arrangements require the approval of the Chief Financial Officer.<br>" +
+      "Bank transfers may also be made to: <b>" + BANK.name + "</b> · " + BANK.bank + " · IBAN " + BANK.iban + " · SWIFT " + BANK.swift +
+      " · Reference: the name under which the reservation is made.") +
     sec("Unauthorized extras",
       "Unless instructed in writing, the Client is liable for all charges and services incurred by the Client or attendees during the event, including any bar service not included in the agreed menus.") +
     sec("Cancellation policy",
