@@ -10,7 +10,7 @@
 
 var peState = {
   loaded:false, loading:false,
-  view:'list',            // list | calendar | event | library | report
+  view:'list',            // list | calendar | event | library | report | packs | packsfood | packsbev | packlib
   libTab:'dishes',        // dishes | bev | packages
   filter:'open',          // open | all | draft | sent | confirmed | deposit | done
   q:'',                   // search text on the events list
@@ -45,6 +45,16 @@ var PE_TYPES = ['Gathering','Private gathering','Dinner','Lunch','Reception','Fu
 var PE_ALL_CODES = ['D','E','H','N','R','S','V'];
 var PE_GROSS = 1.23585;   // 10% SC + 7% DIFC + 5% VAT compounding — net = gross / PE_GROSS
 var PE_TIERS = [{n:'Classic',p:10},{n:'Elevated',p:20},{n:'Signature',p:35}];
+// The three designed set menus (PDFs live in menus/ inside this repo, so they
+// deploy with the app and the email links always match the site being served).
+var PE_SET_MENUS = [
+  {key:'terra', name:'Terra set menu', price:370, pdf:'menus/set-menu-terra.pdf',
+   line:'Burrata · homemade tortelli, ricotta and spinach with truffle cream · choice of branzino, polletto or insalata 4 semi · tiramisù'},
+  {key:'mare', name:'Mare set menu', price:440, pdf:'menus/set-menu-mare.pdf',
+   line:'Burrata, bresaola and tonno battuto · Il Bosco truffle risotto · choice of angus ribeye, branzino or melanzane · torta al limone'},
+  {key:'fuoco', name:'Fuoco set menu', price:525, pdf:'menus/set-menu-fuoco.pdf',
+   line:'Burrata, bresaola and tonno battuto · raviolo alla Genovese · choice of wagyu ribeye, moro toothfish or melanzane · Choc-Choc'}
+];
 
 function peStatusMeta(k){ for(var i=0;i<PE_STATUS.length;i++) if(PE_STATUS[i].k===k) return PE_STATUS[i]; return PE_STATUS[0]; }
 function peEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -166,7 +176,8 @@ function peGo(view, id){
   '.pe-report{width:100%;border-collapse:collapse;font-size:11.5px}'+
   '.pe-report th{background:var(--vino);color:var(--cream);padding:6px 7px;text-align:left;font-weight:600;font-size:10.5px;letter-spacing:.03em}'+
   '.pe-report td{padding:6px 7px;border-bottom:1px solid rgba(107,31,42,0.12);vertical-align:top}'+
-  '@media(max-width:700px){.pe-2col{grid-template-columns:1fr}.pe-grid3{grid-template-columns:1fr 1fr}.pe-row{grid-template-columns:1.4fr 1fr 0.9fr}.pe-row .pe-hide-m{display:none}}';
+  '.pe-packtiles{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}'+
+  '@media(max-width:700px){.pe-2col{grid-template-columns:1fr}.pe-packtiles{grid-template-columns:1fr}.pe-grid3{grid-template-columns:1fr 1fr}.pe-row{grid-template-columns:1.4fr 1fr 0.9fr}.pe-row .pe-hide-m{display:none}}';
   var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 })();
 
@@ -180,6 +191,9 @@ function renderPrivateEvents(){
   if(v==='chef')     return peRenderChefCorner();
   if(v==='bev')      return peRenderBevCorner();
   if(v==='packs')    return peRenderPacksView();
+  if(v==='packsfood') return peRenderFoodPacks();
+  if(v==='packsbev')  return peRenderBevPacks();
+  if(v==='packlib')   return peRenderPacksLibView();
   if(v==='library')  return peRenderChefCorner();
   if(v==='report')   return peRenderReport();
   return peRenderList();
@@ -771,10 +785,123 @@ function peRenderBevCorner(){
   return h+PE_FOOT;
 }
 function peRenderPacksView(){
+  var nBev = peState.bevs.filter(function(b){ return b.active!==false; }).length;
+  function tile(view, title, sub, count){
+    return '<div class="pe-card" style="cursor:pointer;text-align:center;padding:26px 18px;margin-bottom:0" onclick="peGo(\''+view+'\')">'+
+      '<div style="font-family:\'Playfair Display\',serif;font-size:20px;color:#400207">'+title+'</div>'+
+      '<div style="font-size:12px;color:#8B7355;margin:6px 0 10px;line-height:1.5">'+sub+'</div>'+
+      '<span style="font-size:11px;color:#A88930;letter-spacing:.08em;text-transform:uppercase">'+count+' →</span></div>';
+  }
   var h = peHeader('packs');
-  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Ready-made menu packages (like Canape Cortile) that start a quotation with one tap.</div>';
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Guest-ready packages — open, tick and email to a guest in under a minute.</div>';
+  h += '<div class="pe-packtiles">'+
+    tile('packsfood','Food packages','The three set menus — Terra, Mare and Fuoco — as the designed menus, ready to send.', PE_SET_MENUS.length+' set menus')+
+    tile('packsbev','Beverage packages','Manuel’s live packages with guest prices — house to premium, per hour or per drink.', nBev+' packages')+
+    '</div>';
+  h += '<div style="font-size:11.5px;color:#8B7355;margin-top:12px">Looking for the canapé quotation templates (like Canape Cortile)? <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peGo(\'packlib\')">They live here</span>.</div>';
+  return h+PE_FOOT;
+}
+function peRenderPacksLibView(){
+  var h = peHeader('packs');
+  h += peBackToPacks();
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Ready-made canapé packages (like Canape Cortile) that start a quotation with one tap.</div>';
   h += peRenderPackLib();
   return h+PE_FOOT;
+}
+function peBackToPacks(){
+  return '<div style="font-size:12px;color:#8B7355;margin-bottom:10px;cursor:pointer" onclick="peGo(\'packs\')">← Menu packages</div>';
+}
+function peRenderFoodPacks(){
+  var h = peHeader('packs');
+  h += peBackToPacks();
+  h += '<div class="pe-card"><b style="color:#400207">Food packages — the set menus</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF. Tick the ones the guest should receive — the email carries a button to each menu.</div>'+
+    PE_SET_MENUS.map(function(m){
+      return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-key="'+m.key+'" checked style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+        '<b>'+m.name+'</b> · AED '+m.price+' / person</label><br>'+
+        '<span style="font-size:11px;color:#8B7355">'+m.line+'</span></span>'+
+        '<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button></div>';
+    }).join('')+'</div>';
+  h += peMenuPackEmailForm('food');
+  return h+PE_FOOT;
+}
+function peRenderBevPacks(){
+  var h = peHeader('packs');
+  var bevs = peState.bevs.filter(function(b){ return b.active!==false; });
+  h += peBackToPacks();
+  h += '<div class="pe-card"><b style="color:#400207">Beverage packages</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner. Tick the packages the guest should receive.</div>'+
+    (bevs.length?bevs.map(function(b){
+      return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-key="'+b.id+'" checked style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+        '<b>'+peEsc(b.name)+'</b>'+(b.duration_hours?' · '+b.duration_hours+'h':'')+' · AED '+peMoney(b.price_pp)+' / guest</label><br>'+
+        '<span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span></div>';
+    }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
+  h += peMenuPackEmailForm('bev');
+  return h+PE_FOOT;
+}
+function peMenuPackEmailForm(kind){
+  return '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Email to a guest</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">The guest receives a branded email'+(kind==='food'?' with a button to open each menu':'')+'. You are copied, and their reply comes straight to you.</div>'+
+    '<div class="pe-grid2"><div><div class="pe-lbl">Guest name</div><input class="pe-in" id="pe-mp-name" placeholder="e.g. Sara"></div>'+
+    '<div><div class="pe-lbl">Guest email</div><input class="pe-in" id="pe-mp-email" type="email" placeholder="guest@email.com"></div></div>'+
+    '<div style="margin-top:8px"><div class="pe-lbl">Personal note (optional — appears at the top of the email)</div>'+
+    '<input class="pe-in" id="pe-mp-note" placeholder="e.g. It was lovely speaking with you today — as promised…"></div>'+
+    '<div style="margin-top:10px"><button class="pe-btn" id="pe-mp-send" onclick="peSendMenuPack(\''+kind+'\')">Send to the guest</button></div></div>';
+}
+function peBaseUrl(){ return location.origin + location.pathname.replace(/[^\/]*$/, ''); }
+function peGuestEmailHTML(title, intro, name, note, inner){
+  var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div>'+
+    '<h2>'+peEsc(title)+'</h2>'+
+    '<div class="sub">DIFC, Dubai · private dining &amp; events</div>'+
+    '<p style="font-size:13.5px;margin-top:24px">Dear '+peEsc(name||'guest')+',</p>'+
+    (note?'<p style="font-size:13.5px">'+peEsc(note)+'</p>':'')+
+    '<p style="font-size:13.5px">'+intro+'</p>'+
+    inner+
+    '<p style="font-size:13.5px;margin-top:26px">Simply reply to this email to check availability or tailor anything to your occasion — it will be our pleasure.</p>'+
+    '<div class="ft">All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
+    'Our Chefs will do their best to accommodate your dietary requirements.</div>';
+  return peDocShell(title, body);
+}
+function peFoodPackEmailHTML(keys, name, note){
+  var inner = PE_SET_MENUS.filter(function(m){ return keys.indexOf(m.key)>=0; }).map(function(m){
+    return '<div class="sec">'+m.name+' — AED '+m.price+' / person</div>'+
+      '<div class="dish"><span class="d">'+m.line+'</span></div>'+
+      '<div style="text-align:center;margin:10px 0 20px"><a href="'+peBaseUrl()+m.pdf+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the full menu</a></div>';
+  }).join('');
+  return peGuestEmailHTML('Set Menus', 'Thank you for thinking of Roberto’s for your occasion. Please find our set menus below — the button under each one opens the full menu.', name, note, inner);
+}
+function peBevPackEmailHTML(keys, name, note){
+  var inner = keys.map(peBevById).filter(Boolean).map(function(b){
+    return '<div class="sec">'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+' hours':'')+' · AED '+peMoney(b.price_pp)+' / person</div>'+
+      (b.includes?'<div class="dish"><span class="d">'+peEsc(b.includes)+'</span></div>':'');
+  }).join('');
+  return peGuestEmailHTML('Beverage Packages', 'Thank you for thinking of Roberto’s for your occasion. Please find our beverage packages below.', name, note, inner);
+}
+async function peSendMenuPack(kind){
+  var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+  var email = g('pe-mp-email'), name = g('pe-mp-name'), note = g('pe-mp-note');
+  if(email.indexOf('@')<1){ peToast('Type the guest’s email first', true); return; }
+  var keys = []; document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){ keys.push(el.getAttribute('data-key')); });
+  if(!keys.length){ peToast('Tick at least one package to send', true); return; }
+  var what = keys.length+' '+(kind==='food'?'set menu':'beverage package')+(keys.length>1?'s':'');
+  if(!confirm('Send '+what+' to '+email+' now?')) return;
+  // The sender is copied and set as reply-to, same as client proposals.
+  var sender = state.userEmail || 'vdetoni@robertos.ae';
+  var btn = document.getElementById('pe-mp-send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  try{
+    var r = await sb.functions.invoke('send-event-email', { body:{
+      to:[email, sender], reply_to:sender,
+      subject: kind==='food' ? 'Roberto’s — our set menus' : 'Roberto’s — beverage packages for your occasion',
+      html: kind==='food' ? peFoodPackEmailHTML(keys, name, note) : peBevPackEmailHTML(keys, name, note)
+    }});
+    if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
+    peToast('Sent to '+email+' ✓ — you are copied and replies come to you');
+    if(btn){ btn.disabled=false; btn.textContent='Send to the guest'; }
+    var el = document.getElementById('pe-mp-email'); if(el) el.value='';
+  }catch(err){
+    peToast('NOT sent — '+String(err&&err.message||err).slice(0,120), true);
+    if(btn){ btn.disabled=false; btn.textContent='Send to the guest'; }
+  }
 }
 function peBuildGoal(){
   var have = { serve:{}, tiers:{}, cells:{} };
