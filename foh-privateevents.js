@@ -13,6 +13,7 @@ var peState = {
   view:'list',            // list | calendar | event | library | report | packs | packlib | wizard
   libTab:'dishes',        // dishes | bev | packages
   filter:'open',          // open | all | draft | sent | confirmed | deposit | done
+  focus:null,             // null | 'send' | 'sign' | 'week' — a summary-pill spotlight on the list
   q:'',                   // search text on the events list
   fcFrom:null, fcTo:null, fcRun:false,
   currentId:null,
@@ -40,6 +41,16 @@ var PE_STATUS = [
   {k:'done',      n:'Event done',     pill:'pe-p-done'},
   {k:'lost',      n:'Lost',           pill:'pe-p-lost'}
 ];
+// One source of truth for the status colours (bg · text · border) so the calendar
+// legend and the event pills always read the same and every pill carries a border.
+var PE_STATUS_COL = {
+  draft:    {bg:'#E4DBCC', t:'#4E4433', b:'#B9A98C'},
+  sent:     {bg:'#F5D98A', t:'#6B4A00', b:'#C99A12'},
+  confirmed:{bg:'#B8DEB4', t:'#1C5A25', b:'#4E9E56'},
+  deposit:  {bg:'#B3D2EC', t:'#12456E', b:'#3E7FBB'},
+  done:     {bg:'#D2D2D2', t:'#3D3D3D', b:'#9E9E9E'},
+  lost:     {bg:'#EDB9B0', t:'#7E1A0C', b:'#BB3A28'}
+};
 var PE_AREAS = ['Restaurant','Scala bar & lounge','Scala lounge','Cortile terrace','Piemonte room','Private dining','Full venue'];
 var PE_TYPES = ['Gathering','Private gathering','Dinner','Lunch','Reception','Full buyout'];
 var PE_ALL_CODES = ['D','E','H','N','R','S','V'];
@@ -359,6 +370,7 @@ function peScrollTopBtn(){
   '.pe-step-btn:hover{background:rgba(107,31,42,0.08)}'+
   '.pe-totop{position:fixed;right:18px;bottom:18px;z-index:120;background:var(--vino);color:var(--cream);border:none;border-radius:20px;padding:9px 16px;font-size:12.5px;font-weight:700;box-shadow:0 3px 10px rgba(64,2,7,0.32);cursor:pointer}'+
   '.pe-totop:hover{background:var(--vino-dark)}'+
+  '.pe-statpill[onclick]:hover{box-shadow:0 2px 9px rgba(64,2,7,0.15);transform:translateY(-1px)}'+
   '.pe-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}'+
   '.pe-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}'+
   '.pe-2col{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;align-items:start}'+
@@ -370,13 +382,17 @@ function peScrollTopBtn(){
   '.pe-flag{display:flex;gap:6px;align-items:flex-start;font-size:12px;padding:4px 0}'+
   '.pe-chip{font-size:11px;border:1px solid rgba(107,31,42,0.3);border-radius:10px;padding:3px 9px;cursor:pointer;display:inline-block;margin:0 4px 4px 0;color:var(--vino)}'+
   '.pe-chip.on{background:var(--vino);color:var(--cream)}'+
-  '.pe-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}'+
-  '.pe-cal-h{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8B7355;text-align:center;padding:4px 0}'+
-  '.pe-cal-d{min-height:74px;background:#fff;border:1px solid rgba(107,31,42,0.12);border-radius:8px;padding:4px 5px;font-size:11px}'+
-  '.pe-cal-d.dim{opacity:.4}'+
-  '.pe-cal-d.today{border-color:var(--vino);border-width:2px}'+
-  '.pe-cal-n{color:#8B7355;font-size:10px;margin-bottom:2px}'+
-  '.pe-cal-ev{border-radius:5px;padding:2px 5px;margin-bottom:2px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:600}'+
+  '.pe-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}'+
+  '.pe-cal-h{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8B7355;text-align:center;padding:6px 0;font-weight:700;background:#F3EEE6;border-radius:7px}'+
+  '.pe-cal-h.we{color:#A88930}'+
+  '.pe-cal-d{min-height:92px;background:#fff;border:1px solid rgba(107,31,42,0.12);border-radius:9px;padding:5px 6px;font-size:11px}'+
+  '.pe-cal-d.dim{opacity:.4;background:transparent;border-style:dashed}'+
+  '.pe-cal-d.we{background:#FBF7F0}'+
+  '.pe-cal-d.today{border-color:var(--vino);border-width:2px;box-shadow:0 2px 8px rgba(64,2,7,0.12)}'+
+  '.pe-cal-n{color:#8B7355;font-size:11px;margin-bottom:3px;text-align:right;min-height:18px}'+
+  '.pe-cal-today{background:var(--vino);color:var(--cream);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;font-weight:700;font-size:11px}'+
+  '.pe-cal-ev{border-radius:6px;padding:3px 6px;margin-bottom:3px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:600;line-height:1.3}'+
+  '.pe-cal-ev:hover{filter:brightness(.96)}'+
   '.pe-agenda{display:none}'+
   '@media(max-width:640px){.pe-cal{display:none}.pe-agenda{display:block}}'+
   '.pe-log{font-size:12px;padding:6px 0;border-bottom:1px solid rgba(107,31,42,0.08)}'+
@@ -387,6 +403,11 @@ function peScrollTopBtn(){
   '.pe-step{font-size:12px;padding:9px 15px;border-radius:11px;border:1px solid rgba(107,31,42,0.25);color:#8B7355;cursor:pointer;min-height:20px;display:inline-flex;align-items:center}'+
   '.pe-step.cur{background:var(--vino);color:var(--cream);border-color:var(--vino)}'+
   '.pe-report{width:100%;border-collapse:collapse;font-size:11.5px}'+
+  '.pe-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}'+
+  '.pe-kpi{background:#fff;border:1px solid rgba(107,31,42,0.14);border-radius:12px;padding:13px 15px 14px;box-shadow:0 1px 3px rgba(64,2,7,0.05)}'+
+  '.pe-kpi-l{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#8B7355;margin-bottom:7px}'+
+  '.pe-kpi-v{font-family:\'Playfair Display\',serif;font-size:22px;color:#400207;line-height:1.05}'+
+  '.pe-kpi-s{font-size:11px;color:#8B7355;margin-top:5px}'+
   '.pe-report th{background:var(--vino);color:var(--cream);padding:6px 7px;text-align:left;font-weight:600;font-size:10.5px;letter-spacing:.03em}'+
   '.pe-report td{padding:6px 7px;border-bottom:1px solid rgba(107,31,42,0.12);vertical-align:top}'+
   '@media(max-width:700px){.pe-2col{grid-template-columns:1fr}.pe-grid3{grid-template-columns:1fr 1fr}.pe-row{grid-template-columns:1.4fr 1fr 0.9fr}.pe-row .pe-hide-m{display:none}}';
@@ -448,11 +469,31 @@ function pePassesStatus(e, f){
   if(f==='open') return ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0;
   return e.status===f;
 }
+// A summary-pill spotlight: narrows the list to just the events that pill counts.
+// 'send' = drafts with an email that still need the proposal sent · 'sign' = sent
+// and waiting on a signature · 'week' = open bookings happening within 7 days.
+function peFocusMatch(e){
+  var f = peState.focus;
+  if(!f) return true;
+  if(f==='week') return peTimeBucket(e)==='week' && ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0;
+  var ns = peNextStep(e);
+  if(f==='send') return ns.label==='Send proposal';
+  if(f==='sign') return ns.label==='Chase signature';
+  return true;
+}
 function peFilteredEvents(){
   var f = peState.filter, q = (peState.q||'').toLowerCase();
   return peState.events.filter(function(e){
-    return peEventMatchesQuery(e, q) && pePassesStatus(e, f);
+    return peEventMatchesQuery(e, q) && pePassesStatus(e, f) && peFocusMatch(e);
   });
+}
+// Tapping a summary pill spotlights those events (tap again to clear). We widen
+// the status filter to Open so the spotlighted bookings are guaranteed visible.
+function pePillFocus(kind){
+  peState.focus = (peState.focus===kind) ? null : kind;
+  if(peState.focus) peState.filter = 'open';
+  renderMain();
+  var mc = document.getElementById('main-content'); if(mc) mc.scrollTop = 0;
 }
 // Colours for the "next step" chips — plain code Valentina reads on the phone:
 // red = something missing, amber = do it now, blue = waiting on the client, green = done.
@@ -504,8 +545,15 @@ function peLandingStats(){
   });
   return s;
 }
-function peStatPill(n, label, bg, border, numCol, lblCol, onclick){
-  return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:7px 12px;font-size:12.5px'+(onclick?';cursor:pointer':'')+'"'+(onclick?' onclick="'+onclick+'"':'')+'><b style="font-size:16px;color:'+numCol+'">'+n+'</b> <span style="color:'+lblCol+'">'+label+'</span></div>';
+// A summary pill. When it has an onclick it becomes a filter chip: an arrow hints
+// it's tappable, and the active one gets a ring + the arrow flips to ✕ (tap to clear).
+function peStatPill(n, label, bg, border, numCol, lblCol, onclick, active){
+  var base = 'background:'+bg+';border:1.5px solid '+border+';border-radius:11px;padding:8px 13px;font-size:12.5px;display:inline-flex;align-items:center;gap:7px;transition:box-shadow .12s,transform .08s';
+  var tap = onclick ? ';cursor:pointer' : '';
+  var act = active ? ';box-shadow:0 0 0 3px '+numCol+'33,0 2px 7px rgba(64,2,7,.16);transform:translateY(-1px)' : '';
+  var cue = onclick ? '<span style="font-size:11px;font-weight:700;color:'+lblCol+';opacity:.75">'+(active?'✕':'›')+'</span>' : '';
+  return '<div class="pe-statpill" style="'+base+tap+act+'"'+(onclick?' onclick="'+onclick+'"':'')+'>'+
+    '<span><b style="font-size:17px;color:'+numCol+'">'+n+'</b> <span style="color:'+lblCol+'">'+label+'</span></span>'+cue+'</div>';
 }
 function peListRow(e){
   var ns = peNextStep(e);
@@ -537,22 +585,31 @@ function peRenderList(){
   var h = peHeader('list');
   h += '<div style="margin-bottom:10px"><div class="pe-title">Events</div>'+
     '<div style="font-size:12px;color:#8B7355">Create a booking, quote it, send the agreement.</div></div>';
-  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">'+
-    peStatPill(st.week,'this week','#fff','#C9A84C','#400207','#6B4A33')+
-    peStatPill(st.send,'to send','#F5D98A','#C99A12','#6B4A00','#6B4A00')+
-    peStatPill(st.sign,'waiting to sign','#B3D2EC','#3E7FBB','#12456E','#12456E')+
+  var fo = peState.focus;
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:'+(fo?'8px':'12px')+'">'+
+    peStatPill(st.week,'this week','#FBF6EC','#C9A84C','#8A6400','#6B4A33','pePillFocus(\'week\')',fo==='week')+
+    peStatPill(st.send,'to send','#F5D98A','#C99A12','#6B4A00','#6B4A00','pePillFocus(\'send\')',fo==='send')+
+    peStatPill(st.sign,'waiting to sign','#B3D2EC','#3E7FBB','#12456E','#12456E','pePillFocus(\'sign\')',fo==='sign')+
     (st.empty?peStatPill(st.empty,'empty draft'+(st.empty>1?'s':''),'#E4DBCC','#B9A98C','#4E4433','#4E4433','peTidyDrafts()'):'')+
   '</div>';
+  if(fo){
+    var fLbl = {send:'events that still need the proposal sent', sign:'events sent and waiting for a signature', week:'events happening this week'}[fo];
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#FBF3DE;border:1px solid #C9A84C;border-radius:10px;padding:9px 13px;margin-bottom:12px;font-size:12.5px;color:#6B4A00">'+
+      '<span>Showing <b>'+fLbl+'</b></span>'+
+      '<span style="color:#400207;text-decoration:underline;cursor:pointer;white-space:nowrap" onclick="peState.focus=null;renderMain()">Show all events</span></div>';
+  }
   h += '<div class="pe-card">';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(107,31,42,0.1);padding-bottom:10px;margin-bottom:4px">'+filters.map(function(f){
-    return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';renderMain()">'+f[1]+'</span>';
+    return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';peState.focus=null;renderMain()">'+f[1]+'</span>';
   }).join('')+
   '<input class="pe-in" style="width:210px;margin-left:auto" placeholder="Search name, company, date or area\u2026" value="'+peEsc(peState.q||'')+'" oninput="peState.q=this.value;renderMain();var el=document.querySelectorAll(\'input[placeholder^=Search]\')[0];if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}">'+
   '</div>';
   if(!all.length){
     var qNow = (peState.q||'').toLowerCase();
     var inAll = peState.events.filter(function(e){ return peEventMatchesQuery(e, qNow); }).length;
-    if(peState.filter!=='all' && inAll){
+    if(peState.focus){
+      h += '<div style="text-align:center;padding:22px;color:#8B7355;font-size:13px">Nothing here right now — everything in this group is handled. <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peState.focus=null;renderMain()">Show all events</span></div>';
+    } else if(peState.filter!=='all' && inAll){
       h += '<div style="text-align:center;padding:22px;color:#8B7355;font-size:13px">No results in <b>'+filterName[peState.filter]+'</b> — '+inAll+' more in <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peState.filter=\'all\';renderMain()">All</span>.</div>';
     } else if(qNow){
       h += '<div style="text-align:center;padding:22px;color:#8B7355;font-size:13px">Nothing matches your search. <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peState.q=\'\';renderMain()">Clear search</span></div>';
@@ -637,27 +694,37 @@ function peRenderCalendar(){
     if(e.event_date && peMonthKey(e.event_date)===mk) (byDate[String(e.event_date).slice(0,10)]=byDate[String(e.event_date).slice(0,10)]||[]).push(e);
   });
   var mLbl = first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  var monthCount = Object.keys(byDate).reduce(function(a,k){ return a + byDate[k].length; }, 0);
   var h = peHeader('calendar');
-  h += '<div class="pe-top" style="margin-bottom:8px"><span style="display:flex;gap:6px"><button class="pe-btn sec sm" onclick="peCalShift(-1)">‹ Prev</button>'+
-       '<button class="pe-btn sec sm" onclick="peCalToday()">Today</button></span>'+
-       '<div class="pe-title" style="font-size:17px">'+mLbl+'</div>'+
-       '<button class="pe-btn sec sm" onclick="peCalShift(1)">Next ›</button></div>';
-  // inline colour legend
+  h += '<div style="margin-bottom:12px"><div class="pe-title">Calendar</div>'+
+    '<div style="font-size:12px;color:#8B7355">Every booking on the day it lands. Tap one to open it.</div></div>';
+  // Month header — a calm branded bar: prev · month + count · today · next
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--vino);color:var(--cream);border-radius:12px;padding:11px 14px;margin-bottom:12px">'+
+       '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(-1)">‹ Prev</button>'+
+       '<div style="text-align:center;line-height:1.25"><div style="font-family:\'Playfair Display\',serif;font-size:20px">'+mLbl+'</div>'+
+         '<div style="font-size:10.5px;letter-spacing:.06em;opacity:.85">'+(monthCount?monthCount+' event'+(monthCount>1?'s':''):'no events yet')+'</div></div>'+
+       '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalToday()">Today</button>'+
+       '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button></span></div>';
+  // colour legend — a tidy card so the meaning of each colour is always in view
   var legend = [['sent','Proposal sent'],['confirmed','Confirmed'],['deposit','Deposit paid'],['draft','Draft'],['done','Done'],['lost','Lost']];
-  var pillColors = {draft:'#E4DBCC;color:#4E4433', sent:'#F5D98A;color:#6B4A00', confirmed:'#B8DEB4;color:#1C5A25', deposit:'#B3D2EC;color:#12456E', done:'#D2D2D2;color:#3D3D3D', lost:'#EDB9B0;color:#7E1A0C'};
-  h += '<div style="display:flex;flex-wrap:wrap;gap:5px 12px;margin-bottom:10px;font-size:11px;color:#6B4A33">'+legend.map(function(l){
-    return '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:3px;background:'+pillColors[l[0]].split(';')[0]+';border:1px solid rgba(0,0,0,.12)"></span>'+l[1]+'</span>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:7px 14px;background:#FBF7F1;border:1px solid rgba(107,31,42,0.14);border-radius:10px;padding:9px 13px;margin-bottom:12px;font-size:11.5px;color:#5A3A1E">'+legend.map(function(l){
+    var c = PE_STATUS_COL[l[0]];
+    return '<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:13px;height:13px;border-radius:4px;background:'+c.bg+';border:1px solid '+c.b+'"></span>'+l[1]+'</span>';
   }).join('')+'</div>';
   var today = peToday();
   // wide screens: the month grid
-  h += '<div class="pe-cal">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){ return '<div class="pe-cal-h">'+d+'</div>'; }).join('');
+  h += '<div class="pe-cal">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d,i){ return '<div class="pe-cal-h'+(i>=5?' we':'')+'">'+d+'</div>'; }).join('');
   for(var i=0;i<startDow;i++) h += '<div class="pe-cal-d dim"></div>';
   for(var d=1; d<=days; d++){
+    var dow = (startDow+d-1)%7;
     var ds = y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     var evs = byDate[ds]||[];
-    h += '<div class="pe-cal-d'+(ds===today?' today':'')+'"><div class="pe-cal-n">'+d+'</div>'+
+    var isToday = ds===today;
+    var num = isToday ? '<div class="pe-cal-n"><span class="pe-cal-today">'+d+'</span></div>' : '<div class="pe-cal-n">'+d+'</div>';
+    h += '<div class="pe-cal-d'+(isToday?' today':'')+(dow>=5?' we':'')+'">'+num+
       evs.map(function(e){
-        return '<div class="pe-cal-ev" style="background:'+(pillColors[e.status]||pillColors.draft)+'" onclick="peGo(\'event\',\''+e.id+'\')" title="'+peEsc(e.client_name||e.company||'')+'">'+peEsc((e.client_name||e.company||'?'))+(e.guests?' · '+e.guests:'')+'</div>';
+        var c = PE_STATUS_COL[e.status]||PE_STATUS_COL.draft;
+        return '<div class="pe-cal-ev" style="background:'+c.bg+';color:'+c.t+';border:1px solid '+c.b+'" onclick="peGo(\'event\',\''+e.id+'\')" title="'+peEsc(e.client_name||e.company||'')+'">'+peEsc((e.client_name||e.company||'?'))+(e.guests?' · '+e.guests:'')+'</div>';
       }).join('')+'</div>';
   }
   h += '</div>';
@@ -675,7 +742,6 @@ function peRenderCalendar(){
     });
   });
   h += '</div>';
-  h += '<div style="font-size:11px;color:#8B7355;margin-top:8px">Tap an event to open it.</div>';
   return h+PE_FOOT;
 }
 function peCalToday(){ peState.month = peMonthKey(peToday()); renderMain(); }
@@ -2781,16 +2847,17 @@ function peKpis(){
     if(['draft','sent'].indexOf(e.status)>=0){ k.pipe.n++; k.pipe.v+=v; }
     if(conf && d && d.slice(0,4)===today.slice(0,4)){ k.ytd.n++; k.ytd.v+=v; }
   });
-  function card(lbl, v, sub){
-    return '<div class="pe-card" style="padding:11px 12px;margin-bottom:0"><div class="pe-lbl">'+lbl+'</div>'+
-      '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(v.v)+'</div>'+
-      '<div style="font-size:11px;color:#8B7355">'+v.n+' '+sub+'</div></div>';
+  function card(lbl, v, sub, accent){
+    return '<div class="pe-kpi" style="border-top:3px solid '+accent+'">'+
+      '<div class="pe-kpi-l">'+lbl+'</div>'+
+      '<div class="pe-kpi-v">AED '+peMoney(v.v)+'</div>'+
+      '<div class="pe-kpi-s">'+v.n+' '+sub+'</div></div>';
   }
-  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">'+
-    card('This month', k.m, 'confirmed events')+
-    card('Next 30 days', k.n30, 'events coming')+
-    card('Open pipeline', k.pipe, 'enquiries in play')+
-    card(new Date().getFullYear()+' to date', k.ytd, 'confirmed events')+
+  return '<div class="pe-kpis">'+
+    card('This month', k.m, 'confirmed events', '#6B1F2A')+
+    card('Next 30 days', k.n30, 'events coming', '#C9A84C')+
+    card('Open pipeline', k.pipe, 'enquiries in play', '#3E7FBB')+
+    card(new Date().getFullYear()+' to date', k.ytd, 'confirmed events', '#4E9E56')+
   '</div>';
 }
 function peForecastData(){
@@ -2866,28 +2933,41 @@ function peRenderReport(){
   ];
   var monthEvents = peState.events.filter(function(e){ return e.event_date && peMonthKey(e.event_date)===mk; })
     .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
+  var secHd = function(t){ return '<div style="font-family:\'Playfair Display\',serif;font-size:16px;color:#400207;margin:24px 2px 11px">'+t+'</div>'; };
   var h = peHeader('report');
+  h += '<div style="margin-bottom:14px"><div class="pe-title">Monthly report</div>'+
+    '<div style="font-size:12px;color:#8B7355">Where the events business stands \u2014 confirmed, coming and in play.</div></div>';
+  h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance</div>';
   h += peKpis();
   var fc = peState.fcRun ? peForecastData() : null;
-  h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)">'+
-    '<div style="font-size:12.5px;color:#6B4A33;margin-bottom:8px"><b style="color:#400207">Forecast any period</b> \u2014 confirmed vs pipeline for the dates you pick:</div>'+
+  h += secHd('Forecast any period');
+  h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.55);background:#FDFBF6">'+
+    '<div style="font-size:12.5px;color:#6B4A33;margin-bottom:12px">Confirmed vs pipeline value for any dates you choose.</div>'+
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+    '<span style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#8B7355">From</span>'+
     '<input class="pe-in" style="width:auto" type="date" id="pe-fc-from" value="'+peEsc(peState.fcFrom||'')+'">'+
-    '<span style="font-size:12px;color:#8B7355">to</span>'+
+    '<span style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#8B7355">to</span>'+
     '<input class="pe-in" style="width:auto" type="date" id="pe-fc-to" value="'+peEsc(peState.fcTo||'')+'">'+
     '<button class="pe-btn sm" onclick="peRunForecast()">Run forecast</button>'+
-    '<button class="pe-btn sec sm"'+(fc?'':' style="opacity:.55"')+' onclick="'+(fc?'pePrintForecastDoc()':'peToast(\'Run a forecast first\',true)')+'">Print / PDF</button>'+
-    '<button class="pe-btn sec sm"'+(fc?'':' style="opacity:.55"')+' onclick="'+(fc?'peEmailForecast()':'peToast(\'Run a forecast first\',true)')+'">Email report</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'+
+    '<button class="pe-btn sec sm"'+(fc?'':' style="opacity:.5"')+' onclick="'+(fc?'pePrintForecastDoc()':'peToast(\'Run a forecast first\',true)')+'">Print / PDF</button>'+
+    '<button class="pe-btn sec sm"'+(fc?'':' style="opacity:.5"')+' onclick="'+(fc?'peEmailForecast()':'peToast(\'Run a forecast first\',true)')+'">Email report</button>'+
     '</div>'+
     (fc?'':'<div style="font-size:11px;color:#8B7355;margin-top:6px">Pick the dates and tap <b>Run forecast</b> — then you can print or email it.</div>')+
-    (fc?'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:#5A3A1E">'+
-      '<span><b style="color:#2E6B34">Confirmed &amp; definite:</b> AED '+peMoney(fc.conf.v)+' \u00b7 '+fc.conf.n+' events</span>'+
-      '<span><b style="color:#8A6400">Pipeline:</b> AED '+peMoney(fc.pipe.v)+' \u00b7 '+fc.pipe.n+' enquiries</span>'+
-      '<span><b style="color:#933">Lost:</b> '+fc.lost+'</span></div>':'')+
+    (fc?'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
+      '<div style="flex:1;min-width:145px;background:#EEF6EC;border:1px solid #BAD9B4;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#2E6B34">Confirmed &amp; definite</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#1C5A25">AED '+peMoney(fc.conf.v)+'</div><div style="font-size:11px;color:#5C7A55">'+fc.conf.n+' event'+(fc.conf.n===1?'':'s')+'</div></div>'+
+      '<div style="flex:1;min-width:145px;background:#FBF3DE;border:1px solid #DFC680;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8A6400">Pipeline</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#6B4A00">AED '+peMoney(fc.pipe.v)+'</div><div style="font-size:11px;color:#8A7340">'+fc.pipe.n+' enquir'+(fc.pipe.n===1?'y':'ies')+'</div></div>'+
+      '<div style="flex:1;min-width:110px;background:#F7E9E6;border:1px solid #DDBBB4;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#933">Lost</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#7E1A0C">'+fc.lost+'</div><div style="font-size:11px;color:#9A6258">in this window</div></div>'+
+    '</div>':'')+
   '</div>';
-  h += '<div class="pe-top" style="margin-bottom:8px"><button class="pe-btn sec sm" onclick="peCalShift(-1)">‹ Prev</button>'+
-       '<div class="pe-title" style="font-size:17px">'+mLbl+'</div>'+
-       '<span><button class="pe-btn sec sm" onclick="peCalShift(1)">Next ›</button> <button class="pe-btn sm" onclick="pePrintReport()">Print / PDF</button></span></div>';
+  // ── Month detail — branded month navigator section ──
+  h += secHd('Month by month');
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--vino);color:var(--cream);border-radius:12px;padding:10px 14px;margin-bottom:14px">'+
+       '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(-1)">‹ Prev</button>'+
+       '<div style="font-family:\'Playfair Display\',serif;font-size:19px">'+mLbl+'</div>'+
+       '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button>'+
+       '<button class="pe-btn sec sm" style="background:var(--cream);border-color:var(--cream);color:var(--vino);font-weight:700" onclick="pePrintReport()">Print / PDF</button></span></div>';
   var ytd = 0, mtot = 0;
   peState.events.forEach(function(e){
     if(['deposit','done','confirmed'].indexOf(e.status)<0) return;
@@ -2899,7 +2979,8 @@ function peRenderReport(){
     var isLost = g.st.length===1 && g.st[0]==='lost';
     if(isLost && !peState.lostReasons) peLoadLostReasons();
     var list = monthEvents.filter(function(e){ return g.st.indexOf(e.status)>=0; });
-    h += '<div class="pe-lbl" style="margin:14px 0 6px;font-size:11px">'+g.n+' ('+list.length+')</div>';
+    var dotc = PE_STATUS_COL[g.st[0]]||PE_STATUS_COL.draft;
+    h += '<div style="display:flex;align-items:center;gap:7px;margin:18px 2px 7px"><span style="width:9px;height:9px;border-radius:50%;background:'+dotc.bg+';border:1px solid '+dotc.b+'"></span><span class="pe-lbl" style="margin:0;font-size:11px">'+g.n+' ('+list.length+')</span></div>';
     h += '<div class="pe-card" style="overflow-x:auto"><table class="pe-report"><tr><th>Date</th><th>Name / Company</th><th>Venue</th><th>Type</th><th>Time</th><th>Pax</th><th>Package</th><th>Min spend</th><th>Contact</th>'+(isLost?'<th>Why lost</th>':'')+'</tr>';
     if(!list.length) h += '<tr><td colspan="'+(isLost?10:9)+'" style="color:#8B7355">—</td></tr>';
     list.forEach(function(e){
@@ -2913,8 +2994,10 @@ function peRenderReport(){
     });
     h += '</table></div>';
   });
-  h += '<div class="pe-tot" style="max-width:380px"><div class="pe-tot-row"><span>'+mLbl+' confirmed value</span><b>AED '+peMoney(mtot)+'</b></div>'+
-       '<div class="pe-tot-row"><span>'+mk.slice(0,4)+' YTD confirmed value</span><b>AED '+peMoney(ytd)+'</b></div></div>';
+  h += '<div style="max-width:440px;margin-top:22px;background:#F7EEE2;border:1px solid rgba(201,168,76,0.45);border-radius:12px;padding:14px 16px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 0"><span style="font-size:12.5px;color:#6B4A33">'+mLbl+' confirmed value</span><b style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(mtot)+'</b></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-top:1px solid rgba(201,168,76,0.3);margin-top:4px"><span style="font-size:12.5px;color:#6B4A33">'+mk.slice(0,4)+' YTD confirmed value</span><b style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(ytd)+'</b></div>'+
+  '</div>';
   h += peScrollTopBtn();
   return h+PE_FOOT;
 }
