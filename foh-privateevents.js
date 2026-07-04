@@ -51,7 +51,7 @@ var PE_STATUS_COL = {
   done:     {bg:'#D2D2D2', t:'#3D3D3D', b:'#9E9E9E'},
   lost:     {bg:'#EDB9B0', t:'#7E1A0C', b:'#BB3A28'}
 };
-var PE_AREAS = ['Restaurant','Scala bar & lounge','Scala lounge','Cortile terrace','Piemonte room','Private dining','Full venue'];
+var PE_AREAS = ['Piemonte','Cortile','Restaurant terrace','Scala and Bar','Scala lounge','Scala terrace','Full venue'];
 var PE_TYPES = ['Gathering','Private gathering','Dinner','Lunch','Reception','Full buyout'];
 var PE_ALL_CODES = ['D','E','H','N','R','S','V'];
 var PE_ALLERGEN_WORDS = {D:'dairy', E:'egg', H:'homemade', N:'nuts', R:'raw', S:'shellfish', V:'vegetarian'};
@@ -131,6 +131,24 @@ function peConfirm(opts){
     m.querySelector('[data-pecf="no"]').addEventListener('click', function(){ done(false); });
     bg.appendChild(m); document.body.appendChild(bg);
   });
+}
+// A plausible email = has an "@" (not first char) with a "." somewhere after it.
+// Deliberately loose — we only block obvious mistakes (a missing "@"), never
+// try to fully validate an address.
+function peIsEmail(v){
+  v = String(v==null?'':v).trim();
+  var at = v.indexOf('@');
+  return at>0 && v.indexOf('.', at+2) >= 0 && !/\s/.test(v);
+}
+// Show / clear a small red message right under a facts-card input (el). Passing an
+// empty message removes it. Used so a bad email is flagged inline, not just a toast.
+function peInlineErr(el, msg){
+  if(!el) return;
+  var host = el.parentNode; if(!host) return;
+  var s = host.querySelector('.pe-inline-err');
+  if(!msg){ if(s) s.parentNode.removeChild(s); return; }
+  if(!s){ s = document.createElement('div'); s.className='pe-inline-err'; s.style.cssText='font-size:11px;color:#8A2A1A;margin:3px 2px 0'; host.appendChild(s); }
+  s.textContent = msg;
 }
 // The single next thing to do ON THIS event — drives the strip at the top of the
 // editor so Valentina is never lost on that long screen. Points her at the exact
@@ -477,8 +495,8 @@ function peFocusMatch(e){
   if(!f) return true;
   if(f==='week') return peTimeBucket(e)==='week' && ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0;
   var ns = peNextStep(e);
-  if(f==='send') return ns.label==='Send proposal';
-  if(f==='sign') return ns.label==='Chase signature';
+  if(f==='send') return ns.label==='Send the proposal now';
+  if(f==='sign') return ns.label==='Chase the signature';
   return true;
 }
 function peFilteredEvents(){
@@ -515,8 +533,8 @@ function peNextStep(e){
     if(!e.area) return {label:'Add the area', kind:'danger'};
   }
   // No email = nothing to send to — the chip must ask for the email, not promise a send.
-  if(e.status==='draft') return e.contact_email ? {label:'Send proposal', kind:'warn'} : {label:'Add the client email', kind:'danger'};
-  if(e.status==='sent') return e.signed_at ? {label:'Confirm the booking', kind:'warn'} : {label:'Chase signature', kind:'info'};
+  if(e.status==='draft') return e.contact_email ? {label:'Send the proposal now', kind:'warn'} : {label:'Add the client email', kind:'danger'};
+  if(e.status==='sent') return e.signed_at ? {label:'Confirm the booking', kind:'warn'} : {label:'Chase the signature', kind:'info'};
   if(e.status==='confirmed' || e.status==='deposit') return {label:'Send team brief', kind:'warn'};
   return {label:'', kind:'neutral'};
 }
@@ -540,8 +558,8 @@ function peLandingStats(){
     var d = e.event_date ? String(e.event_date).slice(0,10) : null;
     if(open && d && d>=today && d<=wkEnd) s.week++;
     var ns = peNextStep(e);
-    if(ns.label==='Send proposal') s.send++;
-    else if(ns.label==='Chase signature') s.sign++;
+    if(ns.label==='Send the proposal now') s.send++;
+    else if(ns.label==='Chase the signature') s.sign++;
   });
   return s;
 }
@@ -849,7 +867,11 @@ function peGuideEventView(){
     var days = last ? peDaysSince(last.created_at) : null;
     title = 'Waiting for the signature';
     sub = 'Sent to '+peEsc(name)+(days!=null?(days===0?' today':' '+days+' day'+(days>1?'s':'')+' ago'):'')+'. Not signed yet.';
-    body = pbtn(e.contact_phone?'Send a friendly reminder':'Re-send the proposal', "peGuideReminder('"+e.id+"')") +
+    // Name the channel the reminder actually uses — matches peGuideReminder's pick.
+    var remLabel = e.contact_phone ? 'Open WhatsApp to remind '+peEsc(name)
+                 : (e.contact_email ? 'Re-send the email to '+peEsc(name)
+                 : 'Add a phone or email to remind '+peEsc(name));
+    body = pbtn(remLabel, "peGuideReminder('"+e.id+"')") +
            sbtn('Copy the signing link', "peCopyAgreementLink('"+e.id+"')");
   } else if(e.status==='sent' && e.signed_at){
     title = peEsc(name)+' signed';
@@ -1133,8 +1155,13 @@ function peIn(lbl, field, e, type){
   return '<div><div class="pe-lbl">'+lbl+'</div><input class="pe-in" id="pe-f-'+field+'" type="'+(type||'text')+'" value="'+peEsc(v==null?'':v)+'" onchange="peFact(this,\''+field+'\',\''+e.id+'\')"></div>';
 }
 function peSel(lbl, field, e, opts){
+  // Keep an older saved value (e.g. area "Restaurant" from before the list
+  // changed) as a selectable option so editing an old event never loses it.
+  var list = opts.slice();
+  var cur = e[field];
+  if(cur && list.indexOf(cur)===-1) list = [cur].concat(list);
   return '<div><div class="pe-lbl">'+lbl+'</div><select class="pe-in" id="pe-f-'+field+'" onchange="peFact(this,\''+field+'\',\''+e.id+'\')">'+
-    '<option value=""></option>'+opts.map(function(o){ return '<option'+(e[field]===o?' selected':'')+'>'+o+'</option>'; }).join('')+
+    '<option value=""></option>'+list.map(function(o){ return '<option'+(cur===o?' selected':'')+'>'+o+'</option>'; }).join('')+
   '</select></div>';
 }
 // Fields whose change is money-relevant / contract-relevant — logged for
@@ -1150,6 +1177,11 @@ var PE_FACT_NUM = { min_spend:1, food_price_pp:1 };
 async function peFact(el, field, id){
   var e = peEvById(id); if(!e) return;
   var raw = el.value;
+  // A typed client email must look like one — flag it inline and don't save the mistake.
+  if(field==='contact_email'){
+    if(raw.trim() && !peIsEmail(raw)){ peInlineErr(el, 'That doesn’t look like an email — check for a missing “@”.'); return; }
+    peInlineErr(el, '');
+  }
   var v;
   if(PE_FACT_INT[field]) v = raw.trim() ? parseInt(raw,10) : null;
   else if(PE_FACT_NUM[field]) v = raw.trim() ? Number(raw) : null;
@@ -2162,7 +2194,9 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note){
 async function peSendMenuPack(){
   var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
   var email = g('pe-mp-email'), name = g('pe-mp-name'), note = g('pe-mp-note');
-  if(email.indexOf('@')<1){ peToast('Type the guest’s email first', true); return; }
+  if(!email){ peToast('Type the guest’s email first', true); peInlineErr(document.getElementById('pe-mp-email'),'Type the guest’s email first.'); return; }
+  if(!peIsEmail(email)){ peToast('That email looks off — check for a missing “@”', true); peInlineErr(document.getElementById('pe-mp-email'),'That doesn’t look like an email — check for a missing “@”.'); return; }
+  peInlineErr(document.getElementById('pe-mp-email'),'');
   var food = [], bev = [];
   document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){
     (el.getAttribute('data-kind')==='food' ? food : bev).push(el.getAttribute('data-key'));
@@ -2424,8 +2458,8 @@ async function peSavePack(id){
 // the app does ALL the math on her own library — beverage total, balance for
 // food per guest, then a canapé mix that fits it under the kitchen rules
 // (8–12 pcs/guest, variety cap by guest count, min orders). No AI, no guessing.
-var peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, dry:false, busy:false };
-function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, busy:false }; }
+var peWiz = { client:'', date:'', time:'', area:'Scala and Bar', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, dry:false, busy:false };
+function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala and Bar', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, busy:false }; }
 function peWizSet(f, v){ peWiz[f] = v; peWizPaint(); }
 function peWizTogl(k){ peWiz.excl[k] = !peWiz.excl[k]; renderMain(); }
 function peWizToglVeg(){ peWiz.vegonly = !peWiz.vegonly; renderMain(); }
@@ -2679,7 +2713,7 @@ async function peWizCreate(){
 // Sits ON TOP of the free-form editor: collect the essentials in 4 calm steps,
 // then hand off to the full event (already filled in). Never removes a capability.
 var peGuide = null;
-function peGuideFresh(){ return { step:0, name:'', company:'', email:'', phone:'', date:'', time:'', area:'Scala bar & lounge', guests:'', foodMode:'', packId:'', setKey:'', bevId:'', busy:false }; }
+function peGuideFresh(){ return { step:0, name:'', company:'', email:'', phone:'', date:'', time:'', area:'Scala and Bar', guests:'', foodMode:'', packId:'', setKey:'', bevId:'', busy:false }; }
 function peStartGuide(){ peGuide = peGuideFresh(); peGo('guided'); }
 function peGuideSet(f, v){ peGuide[f] = v; }
 function peGuideFood(mode){ peGuide.foodMode = mode; renderMain(); }
@@ -2687,6 +2721,8 @@ function peGuideBack(){ if(!peGuide){ peGo('list'); return; } if(peGuide.step>0)
 function peGuideNext(){
   var g = peGuide;
   if(g.step===0 && !(g.name && g.name.trim())){ peToast('Add a name to continue', true); return; }
+  if(g.step===0 && g.email && g.email.trim() && !peIsEmail(g.email)){ g.emailErr=true; peToast('That email looks off — check for a missing “@”', true); renderMain(); return; }
+  if(g.step===0) g.emailErr=false;
   if(g.step===1){
     if(!g.date){ peToast('Add the date to continue', true); return; }
     if(!g.guests){ peToast('Add the number of guests', true); return; }
@@ -2713,7 +2749,8 @@ function peRenderGuided(){
       '<div style="font-size:12px;color:#8B7355;margin:2px 0 12px">Just a name is fine — you can add the rest as you go.</div>'+
       '<div class="pe-lbl">Name</div><input class="pe-in" value="'+peEsc(g.name)+'" oninput="peGuideSet(\'name\',this.value)" placeholder="e.g. Giovanna">'+
       '<div class="pe-lbl" style="margin-top:10px">Company (optional)</div><input class="pe-in" value="'+peEsc(g.company)+'" oninput="peGuideSet(\'company\',this.value)">'+
-      '<div class="pe-lbl" style="margin-top:10px">Client email <span style="text-transform:none;letter-spacing:0;color:#A5876B">— so you can send the proposal</span></div><input class="pe-in" type="email" value="'+peEsc(g.email)+'" oninput="peGuideSet(\'email\',this.value)" placeholder="name@email.com">'+
+      '<div class="pe-lbl" style="margin-top:10px">Client email <span style="text-transform:none;letter-spacing:0;color:#A5876B">— so you can send the proposal</span></div><input class="pe-in" type="email" value="'+peEsc(g.email)+'" oninput="peGuideSet(\'email\',this.value);peGuide.emailErr=false" placeholder="name@email.com">'+
+      (g.emailErr?'<div style="font-size:11px;color:#8A2A1A;margin:3px 2px 0">That doesn’t look like an email — check for a missing “@”.</div>':'')+
       '<div class="pe-lbl" style="margin-top:10px">Client phone (optional)</div><input class="pe-in" value="'+peEsc(g.phone)+'" oninput="peGuideSet(\'phone\',this.value)">';
   } else if(g.step===1){
     h += '<div class="pe-title" style="font-size:19px">When and where?</div>'+
@@ -2796,6 +2833,7 @@ async function peGuideFinish(action){
   var g = peGuide; if(!g || g.busy) return;
   var buildMode = !((g.foodMode==='package' && g.packId) || (g.foodMode==='setmenu' && g.setKey));
   if(action==='send' && !g.email){ peToast('Add the client email in step 1 to send', true); g.step=0; renderMain(); return; }
+  if(action==='send' && !peIsEmail(g.email)){ g.emailErr=true; peToast('That email looks off — check for a missing “@”', true); g.step=0; renderMain(); return; }
   g.busy = true; renderMain();
   try{
     var gBev = (g.bevId && g.bevId!=='dry') ? peBevById(g.bevId) : null;
