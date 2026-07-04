@@ -1441,38 +1441,38 @@ function peRenderBevCorner(){
   return h+PE_FOOT;
 }
 function peRenderPacksView(){
-  var tab = peState.packsTab || 'setmenu';
+  var tab = peState.packsTab || 'menus';
   var bevs = peState.bevs.filter(function(b){ return b.active!==false; });
   var h = peHeader('packs');
-  // #15 — canapé packages are now a first-class tab, not a grey footer link.
-  var tabs = [['canape','Canapé packages'],['setmenu','Set menus'],['bev','Beverage']];
+  // #15 — canapé packages are now a first-class tab (not a grey footer link).
+  // Set menus + beverage stay on ONE screen so the guest still gets everything
+  // ticked — a set menu, a few beverage packages, or a mix — in ONE email, one tap.
+  var tabs = [['menus','Set menus & beverage'],['canape','Canapé packages']];
   h += '<div class="pe-tabs" style="margin-bottom:12px">'+tabs.map(function(t){
     return '<span class="pe-tab'+(tab===t[0]?' on':'')+'" onclick="peState.packsTab=\''+t[0]+'\';renderMain()">'+t[1]+'</span>';
   }).join('')+'</div>';
   if(tab==='canape'){
     h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Ready-made canapé packages (like Canape Cortile) that start a quotation in one tap from an event’s Food card.</div>';
     h += peRenderPackLib();
-  } else if(tab==='bev'){
-    h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick the beverage packages to send — the guest receives one branded email. Guest prices only; costs never leave the Beverage corner.</div>';
-    h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
-      (bevs.length?bevs.map(function(b){
-        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="bev" data-key="'+b.id+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
-          '<b>'+peEsc(b.name)+'</b>'+(b.duration_hours?' · '+b.duration_hours+'h':'')+' · AED '+peMoney(b.price_pp)+' / guest</label><br>'+
-          '<span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span></div>';
-      }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
-    h += peMenuPackEmailForm();
-  } else {
-    h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick the set menus to send — the guest receives one branded email with a button to each menu’s PDF.</div>';
-    h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Set menus</b>'+peSelLinks('food')+'</div>'+
-      '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF — the email carries a button to each ticked menu.</div>'+
-      PE_SET_MENUS.map(function(m){
-        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
-          '<b>'+m.name+'</b> · AED '+m.price+' / person</label><br>'+
-          '<span style="font-size:11px;color:#8B7355">'+m.line+'</span></span>'+
-          '<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button></div>';
-      }).join('')+'</div>';
-    h += peMenuPackEmailForm();
+    return h+PE_FOOT;
   }
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick anything from either section — one set menu, a few beverage packages, or a mix — the guest receives it all in ONE branded email.</div>';
+  h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Food packages — the set menus</b>'+peSelLinks('food')+'</div>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF — the email carries a button to each ticked menu.</div>'+
+    PE_SET_MENUS.map(function(m){
+      return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+        '<b>'+m.name+'</b> · AED '+m.price+' / person</label><br>'+
+        '<span style="font-size:11px;color:#8B7355">'+m.line+'</span></span>'+
+        '<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button></div>';
+    }).join('')+'</div>';
+  h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner.</div>'+
+    (bevs.length?bevs.map(function(b){
+      return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="bev" data-key="'+b.id+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+        '<b>'+peEsc(b.name)+'</b>'+(b.duration_hours?' · '+b.duration_hours+'h':'')+' · AED '+peMoney(b.price_pp)+' / guest</label><br>'+
+        '<span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span></div>';
+    }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
+  h += peMenuPackEmailForm();
   return h+PE_FOOT;
 }
 function peSelLinks(kind){
