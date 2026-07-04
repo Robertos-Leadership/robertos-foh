@@ -235,6 +235,7 @@ function renderPrivateEvents(){
   if(v==='packs' || v==='packsfood' || v==='packsbev') return peRenderPacksView();
   if(v==='packlib')   return peRenderPacksLibView();
   if(v==='wizard')   return peRenderWizard();
+  if(v==='guided')   return peRenderGuided();
   if(v==='library')  return peRenderChefCorner();
   if(v==='report')   return peRenderReport();
   return peRenderList();
@@ -253,6 +254,7 @@ function peHeader(active){
     '<div class="pe-shell">'+
     '<div class="pe-side">'+
       '<button class="pe-btn pe-primary" onclick="peNewEvent()">+ New event</button>'+
+      '<button class="pe-btn sec" onclick="peStartGuide()">New? Set up step by step</button>'+
       '<div style="'+secLbl+'">My events</div>'+
       mine.map(function(t){ return snav(t[0], t[1]); }).join('')+
       '<div style="'+secLbl+'">Tools</div>'+
@@ -2190,6 +2192,139 @@ async function peWizCreate(){
     peGo('event', r.data.id);
   }catch(err){
     peWiz.busy = false; peWizPaint();
+    peToast('NOT created — '+String(err&&err.message||err).slice(0,120), true);
+  }
+}
+
+// ── guided setup — one question per screen, for a nervous first-timer ────────
+// Sits ON TOP of the free-form editor: collect the essentials in 4 calm steps,
+// then hand off to the full event (already filled in). Never removes a capability.
+var peGuide = null;
+function peGuideFresh(){ return { step:0, name:'', company:'', email:'', phone:'', date:'', time:'', area:'Scala bar & lounge', guests:'', foodMode:'', packId:'', setKey:'', bevId:'', dry:false, busy:false }; }
+function peStartGuide(){ peGuide = peGuideFresh(); peGo('guided'); }
+function peGuideSet(f, v){ peGuide[f] = v; }
+function peGuideFood(mode){ peGuide.foodMode = mode; renderMain(); }
+function peGuideSetDry(on){ peGuide.dry = on; if(on && peGuide.bevId){ var b = peBevById(peGuide.bevId); if(b && !b.non_alcoholic) peGuide.bevId=''; } renderMain(); }
+function peGuideBack(){ if(!peGuide){ peGo('list'); return; } if(peGuide.step>0){ peGuide.step--; renderMain(); } else { peGuide=null; peGo('list'); } }
+function peGuideNext(){
+  var g = peGuide;
+  if(g.step===0 && !(g.name && g.name.trim())){ peToast('Add a name to continue', true); return; }
+  if(g.step===1){
+    if(!g.date){ peToast('Add the date to continue', true); return; }
+    if(!g.guests){ peToast('Add the number of guests', true); return; }
+  }
+  g.step++; renderMain();
+}
+function peRenderGuided(){
+  if(!peGuide) peGuide = peGuideFresh();
+  var g = peGuide;
+  var names = ['Who','When','Food','Send'];
+  var h = '<div class="pe-wrap" style="max-width:520px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+    '<span class="pe-tab" onclick="peGuideBack()">‹ '+(g.step===0?'Cancel':'Back')+'</span>'+
+    '<span style="font-size:11.5px;color:#8B7355">Step '+(g.step+1)+' of 4 · '+names[g.step]+'</span></div>';
+  h += '<div style="display:flex;gap:5px;margin-bottom:16px">'+[0,1,2,3].map(function(i){
+    return '<span style="flex:1;height:4px;border-radius:2px;background:'+(i<=g.step?'#400207':'#E3D5C2')+'"></span>';
+  }).join('')+'</div>';
+  h += '<div class="pe-card">';
+  if(g.step===0){
+    h += '<div class="pe-title" style="font-size:19px">Who’s the booking for?</div>'+
+      '<div style="font-size:12px;color:#8B7355;margin:2px 0 12px">Just a name is fine — you can add the rest as you go.</div>'+
+      '<div class="pe-lbl">Name</div><input class="pe-in" value="'+peEsc(g.name)+'" oninput="peGuideSet(\'name\',this.value)" placeholder="e.g. Giovanna">'+
+      '<div class="pe-lbl" style="margin-top:10px">Company (optional)</div><input class="pe-in" value="'+peEsc(g.company)+'" oninput="peGuideSet(\'company\',this.value)">'+
+      '<div class="pe-lbl" style="margin-top:10px">Client email <span style="text-transform:none;letter-spacing:0;color:#A5876B">— so you can send the proposal</span></div><input class="pe-in" type="email" value="'+peEsc(g.email)+'" oninput="peGuideSet(\'email\',this.value)" placeholder="name@email.com">'+
+      '<div class="pe-lbl" style="margin-top:10px">Client phone (optional)</div><input class="pe-in" value="'+peEsc(g.phone)+'" oninput="peGuideSet(\'phone\',this.value)">';
+  } else if(g.step===1){
+    h += '<div class="pe-title" style="font-size:19px">When and where?</div>'+
+      '<div class="pe-grid2" style="margin-top:12px"><div><div class="pe-lbl">Date</div><input class="pe-in" type="date" min="'+peToday()+'" value="'+peEsc(g.date)+'" oninput="peGuideSet(\'date\',this.value)"></div>'+
+      '<div><div class="pe-lbl">Start time (optional)</div><input class="pe-in" type="time" value="'+peEsc(g.time)+'" oninput="peGuideSet(\'time\',this.value)"></div></div>'+
+      '<div style="margin-top:10px"><div class="pe-lbl">Area</div><select class="pe-in" onchange="peGuideSet(\'area\',this.value)">'+PE_AREAS.map(function(a){ return '<option'+(g.area===a?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>'+
+      '<div style="margin-top:10px"><div class="pe-lbl">How many guests?</div><input class="pe-in" type="number" min="1" value="'+peEsc(g.guests)+'" oninput="peGuideSet(\'guests\',this.value)" placeholder="e.g. 25"></div>';
+  } else if(g.step===2){
+    var card = function(mode, title, sub){
+      var on = g.foodMode===mode;
+      return '<div onclick="peGuideFood(\''+mode+'\')" style="border:'+(on?'2px solid #400207':'1px solid #C9AD96')+';border-radius:10px;background:'+(on?'#F7EEE2':'#fff')+';padding:11px 12px;margin-bottom:8px;cursor:pointer">'+
+        '<div style="font-size:13.5px;color:'+(on?'#400207':'#2C1810')+';font-weight:'+(on?'600':'400')+'">'+title+'</div>'+
+        (sub?'<div style="font-size:11px;color:#8B7355">'+sub+'</div>':'')+'</div>';
+    };
+    h += '<div class="pe-title" style="font-size:19px">What are they eating?</div>'+
+      '<div style="font-size:12px;color:#8B7355;margin:2px 0 12px">Not sure? Start with a canapé package — you can change every dish later.</div>'+
+      card('package','Canapé package','Pick a ready-made spread')+
+      card('build','Build the menu myself','Add dishes one by one later')+
+      card('setmenu','A plated set menu','Terra, Mare or Fuoco');
+    if(g.foodMode==='package'){
+      h += '<div style="margin-top:4px"><div class="pe-lbl">Which package?</div><select class="pe-in" onchange="peGuideSet(\'packId\',this.value)"><option value="">Choose a package…</option>'+
+        peState.packs.map(function(p){ return '<option value="'+p.id+'"'+(g.packId===p.id?' selected':'')+'>'+peEsc(p.name)+' — AED '+peMoney(p.price_pp)+'/guest</option>'; }).join('')+'</select></div>';
+    } else if(g.foodMode==='setmenu'){
+      h += '<div style="margin-top:4px"><div class="pe-lbl">Which set menu?</div><select class="pe-in" onchange="peGuideSet(\'setKey\',this.value)"><option value="">Choose a set menu…</option>'+
+        PE_SET_MENUS.map(function(m){ return '<option value="'+m.key+'"'+(g.setKey===m.key?' selected':'')+'>'+peEsc(m.name)+' — AED '+m.price+'/guest</option>'; }).join('')+'</select></div>';
+    }
+    var bevs = peState.bevs.filter(function(b){ return b.active!==false && (!g.dry || b.non_alcoholic); });
+    h += '<div style="border-top:1px dashed rgba(107,31,42,0.15);margin-top:12px;padding-top:12px"><div class="pe-lbl">Drinks (optional)</div>'+
+      '<select class="pe-in" onchange="peGuideSet(\'bevId\',this.value)"><option value="">No beverage package</option>'+
+      bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select>'+
+      '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#6B4A33;margin-top:8px;cursor:pointer"><input type="checkbox" '+(g.dry?'checked':'')+' style="accent-color:#400207" onchange="peGuideSetDry(this.checked)"> Dry event — no alcohol served</label></div>';
+  } else {
+    var foodPP = null, foodLbl = '';
+    if(g.foodMode==='setmenu' && g.setKey){ var m2 = peSetMenuByKey(g.setKey); if(m2){ foodPP = m2.price; foodLbl = m2.name; } }
+    else if(g.foodMode==='package' && g.packId){ var pk = null; peState.packs.forEach(function(p){ if(p.id===g.packId) pk=p; }); if(pk){ foodPP = Number(pk.price_pp); foodLbl = pk.name; } }
+    else if(g.foodMode==='build'){ foodLbl = 'Menu built dish by dish'; }
+    var bev = (!g.dry && g.bevId) ? peBevById(g.bevId) : null;
+    var bevPP = bev ? Number(bev.price_pp) : 0;
+    var guests = parseInt(g.guests,10)||0;
+    var total = (foodPP!=null) ? (foodPP+bevPP)*guests : null;
+    h += '<div class="pe-title" style="font-size:19px">Ready to send</div>'+
+      '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
+      '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
+      '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+(total!=null?' · AED '+peMoney(total):'')+'</div>'+
+      '<div style="font-size:11px;color:#8B7355">'+peEsc(foodLbl||'Food added later')+(bev?' · '+peEsc(bev.name):(g.dry?' · dry event':''))+(total!=null?' — everything included':'')+'</div></div>';
+    if(total==null) h += '<div style="font-size:11.5px;color:#8A6400;margin-bottom:10px">You’ll set the price on the next screen once the menu is built.</div>';
+    h += '<div style="font-size:11.5px;color:#2E6B34;margin-bottom:12px">Nothing is sent until you choose below.</div>';
+    if(g.email){
+      h += '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:8px" onclick="peGuideFinish(\'send\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Send proposal (they sign online)')+'</button>';
+    } else {
+      h += '<button class="pe-btn" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:2px;opacity:.55" onclick="peToast(\'Add the client email in step 1 to send\',true);peGuide.step=0;renderMain()">Send proposal (they sign online)</button>'+
+        '<div style="font-size:11px;color:#8A2A1A;margin:0 0 8px">Add the client email in step 1 to send it to them.</div>';
+    }
+    h += '<button class="pe-btn sec" style="width:100%;box-sizing:border-box;padding:12px" onclick="peGuideFinish(\'save\')"'+(g.busy?' disabled':'')+'>Save and open the event</button>'+
+      '<div style="font-size:10.5px;color:#8B7355;margin-top:10px;text-align:center">You can change anything later.</div>';
+  }
+  h += '</div>';
+  if(g.step<3){
+    h += '<div style="margin-top:14px"><button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px" onclick="peGuideNext()">Continue ›</button></div>';
+  }
+  return h+'</div>';
+}
+async function peGuideFinish(action){
+  var g = peGuide; if(!g || g.busy) return;
+  if(action==='send' && !g.email){ peToast('Add the client email in step 1 to send', true); g.step=0; renderMain(); return; }
+  g.busy = true; renderMain();
+  try{
+    var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
+      client_name:g.name||null, company:g.company||null,
+      contact_name:g.name||null, contact_email:g.email||null, contact_phone:g.phone||null,
+      event_date:g.date||null, time_from:g.time||null, area:g.area||null,
+      guests:g.guests?parseInt(g.guests,10):null,
+      bev_package_id:(!g.dry && g.bevId)?g.bevId:null, bev_mode:g.dry?'dry':null,
+      payment_terms:'50% deposit to confirm, balance on the day' };
+    var pk = null;
+    if(g.foodMode==='setmenu' && g.setKey){ var m = peSetMenuByKey(g.setKey); if(m){ row.set_menu={key:m.key, choices:{}}; row.package_label=m.name; row.food_price_pp=m.price; } }
+    else if(g.foodMode==='package' && g.packId){ peState.packs.forEach(function(p){ if(p.id===g.packId) pk=p; }); if(pk){ row.package_label=pk.name; row.food_price_pp=Number(pk.price_pp); } }
+    var r = await sb.from('events_desk').insert(row).select().single();
+    if(r.error || !r.data) throw (r.error||{message:'no data'});
+    peState.events.push(r.data);
+    if(pk && (pk.dish_ids||[]).length){
+      var items = (pk.dish_ids||[]).map(function(d){ return {event_id:r.data.id, dish_id:d, pcs_per_guest:1, qty_confirmed:false}; });
+      var ri = await sb.from('event_items').insert(items).select();
+      if(!ri.error) peState.items[r.data.id] = ri.data||[];
+    }
+    sb.from('event_log').insert({event_id:r.data.id, action:'created', detail:'guided setup', actor:peActor()});
+    var id = r.data.id; peGuide = null;
+    peGo('event', id);
+    if(action==='send') peEmailAgreement(id);
+    else peToast('Event created ✓ — review it, then send when you’re ready');
+  }catch(err){
+    if(peGuide) peGuide.busy = false; renderMain();
     peToast('NOT created — '+String(err&&err.message||err).slice(0,120), true);
   }
 }
