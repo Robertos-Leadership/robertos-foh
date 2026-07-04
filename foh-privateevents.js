@@ -424,8 +424,7 @@ function peHeader(active){
     }).join('')+'</div>'+
     '<div class="pe-shell">'+
     '<div class="pe-side">'+
-      '<button class="pe-btn pe-primary" onclick="peNewEvent()">+ New event</button>'+
-      '<button class="pe-btn sec" onclick="peStartGuide()">New? Set up step by step</button>'+
+      '<button class="pe-btn pe-primary" onclick="peStartGuide()">+ New event</button>'+
       '<div style="'+secLbl+'">My events</div>'+
       mine.map(function(t){ return snav(t[0], t[1]); }).join('')+
       '<div style="'+secLbl+'">Tools</div>'+
@@ -944,23 +943,19 @@ function peRenderEvent(){
       (t.items.length?'<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peClearMenu(\''+e.id+'\')">Clear menu</button>':'')+'</div>';
   }
   h += '</div></div>';
-  // beverage
-  var dry = e.bev_mode==='dry';
-  // On a dry event only alcohol-free packages may be offered (and charged).
-  var bevOpts = peState.bevs.filter(function(b){
-    if(b.active===false && b.id!==e.bev_package_id) return false;
-    if(dry && !b.non_alcoholic) return false;
-    return true;
-  });
+  // beverage — one dropdown carries the whole choice: no package · no alcohol
+  // (soft drinks & water) · or a package (alcohol-free ones are labelled).
+  var bevOpts = peState.bevs.filter(function(b){ return b.active!==false || b.id===e.bev_package_id; });
+  var bevIsDry = (e.bev_mode==='dry' && !e.bev_package_id);
   h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Beverage</b>'+
-    '<div style="margin-top:8px"><label style="font-size:12px;color:#6B4A33;cursor:pointer;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" '+(dry?'checked':'')+' style="accent-color:#400207" onchange="peSetDryEvent(\''+e.id+'\',this.checked)"> Dry event — no alcohol served</label></div>'+
-    (dry
-      ? '<div style="font-size:12px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:8px 10px;margin-top:8px">No alcohol will be served — this is stated on every document and the beverage charge is AED 0. Only alcohol-free packages (marked in the Beverage corner) can be added.</div>'
-      : '')+
-    '<div style="margin-top:8px"><select class="pe-in" id="pe-f-bev_package_id" onchange="peSaveField(\''+e.id+'\',\'bev_package_id\',this.value||null)">'+
-      '<option value="">'+(dry?'No package — soft drinks &amp; water':'No beverage package')+'</option>'+
+    '<div style="margin-top:8px"><select class="pe-in" id="pe-f-bev_package_id" onchange="peSetBeverage(\''+e.id+'\',this.value)">'+
+      '<option value=""'+(!e.bev_package_id && !bevIsDry?' selected':'')+'>No beverage package</option>'+
+      '<option value="dry"'+(bevIsDry?' selected':'')+'>No alcohol — soft drinks &amp; water</option>'+
       bevOpts.map(function(b){ return '<option value="'+b.id+'"'+(e.bev_package_id===b.id?' selected':'')+'>'+peEsc(b.name)+' — '+(b.duration_hours?b.duration_hours+'h — ':'')+'AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+(b.active===false?' (retired)':'')+'</option>'; }).join('')+
     '</select>'+
+    (bevIsDry
+      ? '<div style="font-size:12px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:8px 10px;margin-top:8px">No alcohol will be served — this is stated on every document and the beverage charge is AED 0.</div>'
+      : '')+
     (e.bev_package_id && peBevById(e.bev_package_id) ? '<div style="font-size:11.5px;color:#8B7355;margin-top:6px">'+peEsc(peBevById(e.bev_package_id).includes||'')+'</div>' : '')+
     '</div></div>';
   // agreement (terms Valentina adjusts per event; guest signs via the link)
@@ -1216,27 +1211,19 @@ async function peSaveField(id, field, value, opts){
   if(!opts.silent) peToast('Saved ✓');
   renderMain();
 }
-// P0 — dry event: turning it on clears any alcoholic (not alcohol-free) package
-// so the "no alcohol" promise and the beverage charge can never contradict.
-async function peSetDryEvent(id, on){
+// One beverage choice sets BOTH bev_package_id and bev_mode — no separate toggle,
+// no way to contradict: '' = no package · 'dry' = no alcohol (soft drinks & water,
+// AED 0) · a package id = that package (alcohol-free ones still charge normally).
+async function peSetBeverage(id, val){
   var e = peEvById(id); if(!e) return;
-  var patch = { bev_mode: on ? 'dry' : null, updated_at:new Date().toISOString() };
-  var cleared = false;
-  if(on && e.bev_package_id){
-    var bev = peBevById(e.bev_package_id);
-    if(bev && !bev.non_alcoholic){
-      if(!(await peConfirm({title:'This package includes alcohol',
-          html:'“'+peEsc(bev.name||'The selected package')+'” includes alcohol. A dry event serves no alcohol, so it will be removed from this event.<br><br>Mark this a dry event?',
-          ok:'Yes, dry event', cancel:'Keep the package', danger:true}))){
-        peToast('Not changed — this is still a normal event with the alcohol package'); renderMain(); return;
-      }
-      patch.bev_package_id = null; cleared = true;
-    }
-  }
+  var patch = { updated_at:new Date().toISOString() };
+  if(val==='dry'){ patch.bev_package_id = null; patch.bev_mode = 'dry'; }
+  else if(!val){ patch.bev_package_id = null; patch.bev_mode = null; }
+  else { patch.bev_package_id = val; patch.bev_mode = null; }
   var r = await sb.from('events_desk').update(patch).eq('id', id);
   if(r.error){ peToast('NOT saved — check connection', true); return; }
   Object.keys(patch).forEach(function(k){ e[k] = patch[k]; });
-  peToast(on ? (cleared ? 'Dry event set ✓ — alcohol package removed' : 'Dry event set ✓ — no alcohol, beverage charge AED 0') : 'Dry event turned off ✓');
+  peToast('Saved ✓');
   renderMain();
 }
 async function peDeleteEvent(id){
@@ -2372,11 +2359,10 @@ async function peSavePack(id){
 // food per guest, then a canapé mix that fits it under the kitchen rules
 // (8–12 pcs/guest, variety cap by guest count, min orders). No AI, no guessing.
 var peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, dry:false, busy:false };
-function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, dry:false, busy:false }; }
+function peWizReset(){ peWiz = { client:'', date:'', time:'', area:'Scala bar & lounge', guests:'', budget:'', bev:'', excl:{}, dietaryNote:'', vegonly:false, busy:false }; }
 function peWizSet(f, v){ peWiz[f] = v; peWizPaint(); }
 function peWizTogl(k){ peWiz.excl[k] = !peWiz.excl[k]; renderMain(); }
 function peWizToglVeg(){ peWiz.vegonly = !peWiz.vegonly; renderMain(); }
-function peWizToglDry(){ peWiz.dry = !peWiz.dry; if(peWiz.dry){ var b=peWiz.bev?peBevById(peWiz.bev):null; if(b && !b.non_alcoholic){ peWiz.bev=''; peToast('Dry event — alcohol packages hidden ✓'); } else peToast('Dry event set ✓'); } else peToast('Dry event turned off ✓'); renderMain(); }
 function peWizCap(guests){ return guests>=30 ? 15 : (guests>=20 ? 8 : 5); }
 // What the guest doesn't want, applied to the live library before any math —
 // so the mix the wizard proposes is always actually serveable.
@@ -2468,9 +2454,7 @@ function peWizPick(mix, guests, pool){
 function peWizCalc(){
   var guests = parseInt(peWiz.guests,10)||0;
   var budget = Number(peWiz.budget)||0;
-  var bev = peWiz.bev==='none' ? null : (peWiz.bev ? peBevById(peWiz.bev) : undefined);
-  // Dry event: an alcoholic package never counts toward the budget.
-  if(peWiz.dry && bev && !bev.non_alcoholic) bev = null;
+  var bev = (peWiz.bev==='none' || peWiz.bev==='dry') ? null : (peWiz.bev ? peBevById(peWiz.bev) : undefined);
   if(!guests || !budget || bev===undefined) return {ready:false};
   if(guests < 15) return {ready:false, err:'Canapé receptions start at 15 guests — for smaller groups use a normal event.'};
   var bevPP = bev ? Number(bev.price_pp)||0 : 0;
@@ -2507,7 +2491,7 @@ function peWizCalc(){
           cap:peWizCap(guests), excl:exclOn, light:light, bigGap:bigGap, foodUnspentPP:foodUnspentPP};
 }
 function peRenderWizard(){
-  var bevs = peState.bevs.filter(function(b){ return b.active!==false && (!peWiz.dry || b.non_alcoholic); })
+  var bevs = peState.bevs.filter(function(b){ return b.active!==false; })
     .sort(function(a,b){ return (a.name||'').localeCompare(b.name||'') || (Number(a.duration_hours)||0)-(Number(b.duration_hours)||0); });
   var h = peHeader('wizard');
   h += '<div class="pe-top"><div class="pe-title">New quote from a budget</div></div>';
@@ -2523,9 +2507,9 @@ function peRenderWizard(){
     '</div><div style="margin-top:8px"><div class="pe-lbl">Beverage package the guest wants</div>'+
     '<select class="pe-in" onchange="peWizSet(\'bev\',this.value)"><option value="" '+(peWiz.bev===''?'selected':'')+'>Choose…</option>'+
     '<option value="none"'+(peWiz.bev==='none'?' selected':'')+'>No beverage package — whole budget on food</option>'+
+    '<option value="dry"'+(peWiz.bev==='dry'?' selected':'')+'>No alcohol — soft drinks &amp; water (beverage charge AED 0)</option>'+
     bevs.map(function(b){ return '<option value="'+b.id+'"'+(peWiz.bev===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+
-    '</select>'+
-    '<div style="margin-top:8px"><label style="font-size:12.5px;color:#6B4A33;cursor:pointer;display:inline-flex;align-items:center;gap:7px"><input type="checkbox" '+(peWiz.dry?'checked':'')+' style="accent-color:#400207" onclick="peWizToglDry()"> Dry event — no alcohol served (beverage charge AED 0)</label></div></div>'+
+    '</select></div>'+
     '<div style="margin-top:8px"><div class="pe-lbl">The guest doesn’t want… (tap to exclude)</div>'+
     PE_WIZ_EXCL.map(function(x){
       return '<span class="pe-chip'+(peWiz.excl[x[0]]?' on':'')+'" onclick="peWizTogl(\''+x[0]+'\')">'+x[1]+'</span>';
@@ -2553,7 +2537,7 @@ function peWizOutHTML(){
     '<div style="font-size:14.5px;color:#400207;font-weight:600;margin-bottom:8px">'+summary+'</div>'+
     '<div class="pe-lbl" style="color:#8A6A4F">The math — every number from your own prices</div>'+
     (w.bev ? mrow('Beverage — '+peEsc(w.bev.name)+(w.bev.duration_hours?' ('+w.bev.duration_hours+'h)':''), w.guests+' × AED '+peMoney(w.bevPP)+' = AED '+peMoney(w.bevTotal))
-           : mrow('Beverage', peWiz.dry ? 'dry event — no alcohol (AED 0)' : 'none — whole budget on food'))+
+           : mrow('Beverage', peWiz.bev==='dry' ? 'no alcohol — soft drinks & water (AED 0)' : 'none — whole budget on food'))+
     mrow('Balance for food', 'AED '+peMoney(w.balance)+' → AED '+peMoney(w.foodPP)+' / guest')+
     mrow('Canapé mix that fits', w.mix.pcs+' pieces/guest — '+[w.mix.s?w.mix.s+' Signature':null, w.mix.e?w.mix.e+' Elevated':null, w.mix.c?w.mix.c+' Classic':null].filter(Boolean).join(' + '))+
     mrow('Proposal total', w.guests+' × AED '+peMoney(w.realFoodPP+w.bevPP)+' = AED '+peMoney(w.total))+
@@ -2601,7 +2585,7 @@ async function peWizCreate(){
                 time_from: peWiz.time||null, time_to: timeTo,
                 area: peWiz.area||null, guests: w.guests,
                 bev_package_id: w.bev ? w.bev.id : null,
-                bev_mode: peWiz.dry ? 'dry' : null,
+                bev_mode: peWiz.bev==='dry' ? 'dry' : null,
                 dietary: dietParts.length ? dietParts.join(' · ') : null,
                 payment_terms:'50% deposit to confirm, balance on the day' };
     var r = await sb.from('events_desk').insert(row).select().single();
@@ -2629,11 +2613,10 @@ async function peWizCreate(){
 // Sits ON TOP of the free-form editor: collect the essentials in 4 calm steps,
 // then hand off to the full event (already filled in). Never removes a capability.
 var peGuide = null;
-function peGuideFresh(){ return { step:0, name:'', company:'', email:'', phone:'', date:'', time:'', area:'Scala bar & lounge', guests:'', foodMode:'', packId:'', setKey:'', bevId:'', dry:false, busy:false }; }
+function peGuideFresh(){ return { step:0, name:'', company:'', email:'', phone:'', date:'', time:'', area:'Scala bar & lounge', guests:'', foodMode:'', packId:'', setKey:'', bevId:'', busy:false }; }
 function peStartGuide(){ peGuide = peGuideFresh(); peGo('guided'); }
 function peGuideSet(f, v){ peGuide[f] = v; }
 function peGuideFood(mode){ peGuide.foodMode = mode; renderMain(); }
-function peGuideSetDry(on){ peGuide.dry = on; if(on && peGuide.bevId){ var b = peBevById(peGuide.bevId); if(b && !b.non_alcoholic) peGuide.bevId=''; } renderMain(); }
 function peGuideBack(){ if(!peGuide){ peGo('list'); return; } if(peGuide.step>0){ peGuide.step--; renderMain(); } else { peGuide=null; peGo('list'); } }
 function peGuideNext(){
   var g = peGuide;
@@ -2652,9 +2635,12 @@ function peRenderGuided(){
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
     '<span class="pe-tab" onclick="peGuideBack()">‹ '+(g.step===0?'Cancel':'Back')+'</span>'+
     '<span style="font-size:11.5px;color:#8B7355">Step '+(g.step+1)+' of 4 · '+names[g.step]+'</span></div>';
-  h += '<div style="display:flex;gap:5px;margin-bottom:16px">'+[0,1,2,3].map(function(i){
+  h += '<div style="display:flex;gap:5px;margin-bottom:10px">'+[0,1,2,3].map(function(i){
     return '<span style="flex:1;height:4px;border-radius:2px;background:'+(i<=g.step?'#400207':'#E3D5C2')+'"></span>';
   }).join('')+'</div>';
+  // Escape hatch — an experienced user skips the questions and jumps into the full
+  // editor, carrying whatever's been entered so far. Reuses peGuideFinish('save').
+  h += '<div style="text-align:right;margin:-2px 0 14px"><span style="font-size:11.5px;color:#8A6A4F;text-decoration:underline;cursor:pointer'+(g.busy?';opacity:.5;pointer-events:none':'')+'" onclick="peGuideFinish(\'save\')">Skip the steps — open the full form ›</span></div>';
   h += '<div class="pe-card">';
   if(g.step===0){
     h += '<div class="pe-title" style="font-size:19px">Who’s the booking for?</div>'+
@@ -2688,12 +2674,13 @@ function peRenderGuided(){
       h += '<div style="margin-top:4px"><div class="pe-lbl">Which set menu?</div><select class="pe-in" onchange="peGuideSet(\'setKey\',this.value)"><option value="">Choose a set menu…</option>'+
         PE_SET_MENUS.map(function(m){ return '<option value="'+m.key+'"'+(g.setKey===m.key?' selected':'')+'>'+peEsc(m.name)+' — AED '+m.price+'/guest</option>'; }).join('')+'</select></div>';
     }
-    var bevs = peState.bevs.filter(function(b){ return b.active!==false && (!g.dry || b.non_alcoholic); })
+    var bevs = peState.bevs.filter(function(b){ return b.active!==false; })
       .sort(function(a,b){ return (a.name||'').localeCompare(b.name||'') || (Number(a.duration_hours)||0)-(Number(b.duration_hours)||0); });
     h += '<div style="border-top:1px dashed rgba(107,31,42,0.15);margin-top:12px;padding-top:12px"><div class="pe-lbl">Drinks (optional)</div>'+
-      '<select class="pe-in" onchange="peGuideSet(\'bevId\',this.value)"><option value="">No beverage package</option>'+
-      bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select>'+
-      '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#6B4A33;margin-top:8px;cursor:pointer"><input type="checkbox" '+(g.dry?'checked':'')+' style="accent-color:#400207" onchange="peGuideSetDry(this.checked)"> Dry event — no alcohol served</label></div>';
+      '<select class="pe-in" onchange="peGuideSet(\'bevId\',this.value)">'+
+      '<option value=""'+(g.bevId===''?' selected':'')+'>No beverage package</option>'+
+      '<option value="dry"'+(g.bevId==='dry'?' selected':'')+'>No alcohol — soft drinks &amp; water</option>'+
+      bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select></div>';
   } else {
     // Food is only "ready" if a package or set menu was actually chosen. If she
     // picked "build myself" (or nothing), there is NO menu yet — she must build it
@@ -2702,7 +2689,7 @@ function peRenderGuided(){
     var foodPP = null, foodLbl = '';
     if(g.foodMode==='setmenu' && g.setKey){ var m2 = peSetMenuByKey(g.setKey); if(m2){ foodPP = m2.price; foodLbl = m2.name; } }
     else if(g.foodMode==='package' && g.packId){ var pk = null; peState.packs.forEach(function(p){ if(p.id===g.packId) pk=p; }); if(pk){ foodPP = Number(pk.price_pp); foodLbl = pk.name; } }
-    var bev = (!g.dry && g.bevId) ? peBevById(g.bevId) : null;
+    var bev = (g.bevId && g.bevId!=='dry') ? peBevById(g.bevId) : null;
     var bevPP = bev ? Number(bev.price_pp) : 0;
     var guests = parseInt(g.guests,10)||0;
     if(hasFood && foodPP!=null){
@@ -2711,7 +2698,7 @@ function peRenderGuided(){
         '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
         '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
         '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+' · AED '+peMoney(total)+'</div>'+
-        '<div style="font-size:11px;color:#8B7355">'+peEsc(foodLbl)+(bev?' · '+peEsc(bev.name):(g.dry?' · dry event':''))+' — everything included</div></div>'+
+        '<div style="font-size:11px;color:#8B7355">'+peEsc(foodLbl)+(bev?' · '+peEsc(bev.name):(g.bevId==='dry'?' · no alcohol — soft drinks & water':''))+' — everything included</div></div>'+
         '<div style="font-size:11.5px;color:#2E6B34;margin-bottom:12px">Nothing is sent until you choose below.</div>';
       if(g.email){
         h += '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:8px" onclick="peGuideFinish(\'send\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Send proposal (they sign online)')+'</button>';
@@ -2727,7 +2714,7 @@ function peRenderGuided(){
         '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
         '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
         '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+'</div>'+
-        '<div style="font-size:11px;color:#8B7355">'+(bev?peEsc(bev.name):(g.dry?'Dry event':'No drinks yet'))+' · menu not built yet</div></div>'+
+        '<div style="font-size:11px;color:#8B7355">'+(bev?peEsc(bev.name):(g.bevId==='dry'?'No alcohol — soft drinks & water':'No drinks yet'))+' · menu not built yet</div></div>'+
         '<div style="font-size:12px;color:#8A6400;background:#FAF0DA;border-radius:8px;padding:10px 12px;margin-bottom:12px">Your menu isn’t built yet, so there’s nothing to send. Save this and add the dishes on the next screen — you can send the proposal once the food is on it.</div>'+
         '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px" onclick="peGuideFinish(\'save\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Save and build the menu')+'</button>'+
         '<div style="font-size:10.5px;color:#8B7355;margin-top:10px;text-align:center">This won’t send anything to the guest.</div>';
@@ -2745,14 +2732,14 @@ async function peGuideFinish(action){
   if(action==='send' && !g.email){ peToast('Add the client email in step 1 to send', true); g.step=0; renderMain(); return; }
   g.busy = true; renderMain();
   try{
-    var gBev = (!g.dry && g.bevId) ? peBevById(g.bevId) : null;
+    var gBev = (g.bevId && g.bevId!=='dry') ? peBevById(g.bevId) : null;
     var gEnd = g.time ? peAddHoursTime(g.time, (gBev && gBev.duration_hours)?Number(gBev.duration_hours):3) : null;
     var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
       client_name:g.name||null, company:g.company||null,
       contact_email:g.email||null, contact_phone:g.phone||null,
       event_date:g.date||null, time_from:g.time||null, time_to:gEnd, area:g.area||null,
       guests:g.guests?parseInt(g.guests,10):null,
-      bev_package_id:(!g.dry && g.bevId)?g.bevId:null, bev_mode:g.dry?'dry':null,
+      bev_package_id:(g.bevId && g.bevId!=='dry')?g.bevId:null, bev_mode:g.bevId==='dry'?'dry':null,
       payment_terms:'50% deposit to confirm, balance on the day' };
     var pk = null;
     if(g.foodMode==='setmenu' && g.setKey){ var m = peSetMenuByKey(g.setKey); if(m){ row.set_menu={key:m.key, choices:{}}; row.package_label=m.name; row.food_price_pp=m.price; } }
