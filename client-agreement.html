@@ -69,7 +69,7 @@ function render(data){
     '<div class="sub">'+(ev.client_name?'Prepared for '+esc(ev.client_name)+' · ':'')+esc(dLabel(ev.event_date))+(ev.area?' · '+esc(ev.area):'')+'</div>';
 
   // booking facts
-  function row(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
+  function row(l,v){ if(v==null||v===''||v==='—') return ''; return '<tr><td class="l">'+l+'</td><td>'+v+'</td></tr>'; }
   h += '<div class="sect"><div class="sect-h">Your reservation</div><table class="facts">'+
     row('Event type', esc(ev.event_type))+
     row('Date', esc(dLabel(ev.event_date)))+

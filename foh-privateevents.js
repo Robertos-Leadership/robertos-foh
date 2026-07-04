@@ -93,9 +93,36 @@ function peActor(){ return (state.access && state.access.name) || state.userEmai
 // A disabled action explains itself out loud: toast the reason and jump to the
 // empty field (touch users never see hover tooltips).
 function peScrollToField(fid, msg){
-  peToast(msg, true);
+  if(msg) peToast(msg, true);
   var el = document.getElementById('pe-f-'+fid);
   if(el){ try{ el.focus(); }catch(e){} if(el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'center'}); }
+}
+function peScrollToCard(name){
+  var el = document.getElementById('pe-card-'+name);
+  if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+// The single next thing to do ON THIS event — drives the strip at the top of the
+// editor so Valentina is never lost on that long screen. Points her at the exact
+// field/card, or triggers the next action.
+function peEditorNext(e){
+  if(e.status==='done' || e.status==='lost') return null;
+  var name = e.client_name || e.company;
+  var items = peState.items[e.id]||[];
+  var hasFood = items.length>0 || !!e.set_menu || (e.food_price_pp!=null && e.food_price_pp!=='');
+  var t = peCalcTotals(e);
+  var hasPrice = !!t.total || !!e.min_spend;
+  if(!name) return {label:'Add a booking name', act:"peScrollToField('client_name')"};
+  if(!e.event_date) return {label:'Add the event date', act:"peScrollToField('event_date')"};
+  if(!e.guests) return {label:'Add the guest count', act:"peScrollToField('guests')"};
+  if(!hasFood) return {label:'Build the menu', act:"peScrollToCard('food')"};
+  if(!hasPrice) return {label:'Set the price', act:"peScrollToField('min_spend')"};
+  if((e.status==='draft' || e.status==='sent') && !e.signed_at){
+    return e.contact_email
+      ? {label:'Send the proposal to the guest', act:"peScrollToCard('docs')"}
+      : {label:'Add the client email, then send', act:"peScrollToField('contact_email')"};
+  }
+  if(e.status==='sent' && e.signed_at) return {label:'Signed — mark it Confirmed', act:"peSetStatus('"+e.id+"','confirmed')"};
+  return null;   // confirmed/deposit are handled by the green "this event is ON" banner
 }
 function peToday(){ return localISO(new Date()); }
 function peMonthKey(d){ return String(d).slice(0,7); }
@@ -595,6 +622,15 @@ function peRenderEvent(){
       '<button class="pe-btn sec sm" onclick="if(peState.voided)delete peState.voided[\''+e.id+'\'];renderMain()">Dismiss</button></span></div>';
   }
 
+  // #1 — the one thing to do next on THIS event, so the long editor never loses her
+  var nx = peEditorNext(e);
+  if(nx){
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#F7EEE2;border:1px solid #E8CE92;border-radius:10px;padding:10px 13px;margin-bottom:12px">'+
+      '<div style="min-width:0"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#A88930">Next step</div>'+
+      '<div style="font-size:14px;color:#400207;font-weight:600">'+nx.label+'</div></div>'+
+      '<button class="pe-btn sm" style="flex-shrink:0" onclick="'+nx.act+'">Take me there ›</button></div>';
+  }
+
   // facts
   h += '<div class="pe-card"><div class="pe-grid3">'+
     peIn('Client / booking name','client_name',e)+peIn('Company','company',e)+peSel('Type of event','event_type',e,PE_TYPES)+
@@ -612,7 +648,7 @@ function peRenderEvent(){
   h += '<div class="pe-2col"><div>';
   // food — either a set menu (plated, with a per-choice headcount) or canapés
   var sm = e.set_menu;
-  h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+
+  h += '<div class="pe-card" id="pe-card-food"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+
     '<b style="font-size:14px;color:#400207">Food</b>'+
     (sm ? '' : '<span><select class="pe-in" style="width:auto;display:inline-block" onchange="peApplyPackage(\''+e.id+'\',this.value)">'+
       '<option value="">Start from a canapé package…</option>'+
@@ -722,7 +758,7 @@ function peRenderEvent(){
   var mailClick = function(fn){ return hasMail ? fn+'(\''+e.id+'\')' : 'peScrollToField(\'contact_email\',\'Add the client email above to send\')'; };
   var dim = function(ok){ return ok?'':' style="opacity:.55"'; };
   var grpLbl = 'font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#A88930;margin:2px 2px 5px';
-  h += '<div class="pe-card" style="margin-top:12px"><b style="font-size:14px;color:#400207">Documents</b>'+
+  h += '<div class="pe-card" id="pe-card-docs" style="margin-top:12px"><b style="font-size:14px;color:#400207">Documents</b>'+
     '<div style="'+grpLbl+';margin-top:10px">For the guest</div>'+
     '<div style="display:flex;flex-direction:column;gap:7px">'+
     '<button class="pe-btn"'+dim(hasMail)+' onclick="'+mailClick('peEmailAgreement')+'">Send full proposal (client signs online)</button>'+
@@ -2314,6 +2350,7 @@ function peRenderGuided(){
 }
 async function peGuideFinish(action){
   var g = peGuide; if(!g || g.busy) return;
+  var buildMode = !((g.foodMode==='package' && g.packId) || (g.foodMode==='setmenu' && g.setKey));
   if(action==='send' && !g.email){ peToast('Add the client email in step 1 to send', true); g.step=0; renderMain(); return; }
   g.busy = true; renderMain();
   try{
@@ -2338,8 +2375,11 @@ async function peGuideFinish(action){
     sb.from('event_log').insert({event_id:r.data.id, action:'created', detail:'guided setup', actor:peActor()});
     var id = r.data.id; peGuide = null;
     peGo('event', id);
-    if(action==='send') peEmailAgreement(id);
-    else peToast('Event created ✓ — review it, then send when you’re ready');
+    if(action==='send'){ peEmailAgreement(id); }
+    else {
+      peToast(buildMode ? 'Event created ✓ — now build the menu below' : 'Event created ✓ — review it, then send when you’re ready');
+      if(buildMode) setTimeout(function(){ peScrollToCard('food'); }, 350);
+    }
   }catch(err){
     if(peGuide) peGuide.busy = false; renderMain();
     peToast('NOT created — '+String(err&&err.message||err).slice(0,120), true);
