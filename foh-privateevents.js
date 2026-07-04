@@ -857,6 +857,9 @@ function peSetMenuSplitGap(e){
 function peSendChecks(e){
   var t = peCalcTotals(e);
   var msgs = [];
+  var items = peState.items[e.id]||[];
+  var hasFood = items.length>0 || !!e.set_menu || (e.food_price_pp!=null && e.food_price_pp!=='');
+  if(!hasFood) msgs.push('This proposal has no food or menu on it.');
   if((t.total==null || !t.total) && !e.min_spend) msgs.push('This proposal has no price and no minimum spend set.');
   var gap = peSetMenuSplitGap(e);
   if(gap) msgs.push('The '+gap.course+' choices add up to '+gap.sum+' of '+gap.guests+' guests.');
@@ -2218,7 +2221,7 @@ function peGuideNext(){
 function peRenderGuided(){
   if(!peGuide) peGuide = peGuideFresh();
   var g = peGuide;
-  var names = ['Who','When','Food','Send'];
+  var names = ['Who','When','Food','Review'];
   var h = '<div class="pe-wrap" style="max-width:520px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
     '<span class="pe-tab" onclick="peGuideBack()">‹ '+(g.step===0?'Cancel':'Back')+'</span>'+
@@ -2265,29 +2268,43 @@ function peRenderGuided(){
       bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select>'+
       '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#6B4A33;margin-top:8px;cursor:pointer"><input type="checkbox" '+(g.dry?'checked':'')+' style="accent-color:#400207" onchange="peGuideSetDry(this.checked)"> Dry event — no alcohol served</label></div>';
   } else {
+    // Food is only "ready" if a package or set menu was actually chosen. If she
+    // picked "build myself" (or nothing), there is NO menu yet — she must build it
+    // first, so we never let a food-less proposal go to the guest.
+    var hasFood = (g.foodMode==='package' && g.packId) || (g.foodMode==='setmenu' && g.setKey);
     var foodPP = null, foodLbl = '';
     if(g.foodMode==='setmenu' && g.setKey){ var m2 = peSetMenuByKey(g.setKey); if(m2){ foodPP = m2.price; foodLbl = m2.name; } }
     else if(g.foodMode==='package' && g.packId){ var pk = null; peState.packs.forEach(function(p){ if(p.id===g.packId) pk=p; }); if(pk){ foodPP = Number(pk.price_pp); foodLbl = pk.name; } }
-    else if(g.foodMode==='build'){ foodLbl = 'Menu built dish by dish'; }
     var bev = (!g.dry && g.bevId) ? peBevById(g.bevId) : null;
     var bevPP = bev ? Number(bev.price_pp) : 0;
     var guests = parseInt(g.guests,10)||0;
-    var total = (foodPP!=null) ? (foodPP+bevPP)*guests : null;
-    h += '<div class="pe-title" style="font-size:19px">Ready to send</div>'+
-      '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
-      '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
-      '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+(total!=null?' · AED '+peMoney(total):'')+'</div>'+
-      '<div style="font-size:11px;color:#8B7355">'+peEsc(foodLbl||'Food added later')+(bev?' · '+peEsc(bev.name):(g.dry?' · dry event':''))+(total!=null?' — everything included':'')+'</div></div>';
-    if(total==null) h += '<div style="font-size:11.5px;color:#8A6400;margin-bottom:10px">You’ll set the price on the next screen once the menu is built.</div>';
-    h += '<div style="font-size:11.5px;color:#2E6B34;margin-bottom:12px">Nothing is sent until you choose below.</div>';
-    if(g.email){
-      h += '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:8px" onclick="peGuideFinish(\'send\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Send proposal (they sign online)')+'</button>';
+    if(hasFood && foodPP!=null){
+      var total = (foodPP+bevPP)*guests;
+      h += '<div class="pe-title" style="font-size:19px">Ready to send</div>'+
+        '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
+        '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
+        '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+' · AED '+peMoney(total)+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">'+peEsc(foodLbl)+(bev?' · '+peEsc(bev.name):(g.dry?' · dry event':''))+' — everything included</div></div>'+
+        '<div style="font-size:11.5px;color:#2E6B34;margin-bottom:12px">Nothing is sent until you choose below.</div>';
+      if(g.email){
+        h += '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:8px" onclick="peGuideFinish(\'send\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Send proposal (they sign online)')+'</button>';
+      } else {
+        h += '<button class="pe-btn" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:2px;opacity:.55" onclick="peToast(\'Add the client email in step 1 to send\',true);peGuide.step=0;renderMain()">Send proposal (they sign online)</button>'+
+          '<div style="font-size:11px;color:#8A2A1A;margin:0 0 8px">Add the client email in step 1 to send it to them.</div>';
+      }
+      h += '<button class="pe-btn sec" style="width:100%;box-sizing:border-box;padding:12px" onclick="peGuideFinish(\'save\')"'+(g.busy?' disabled':'')+'>Save and open the event</button>'+
+        '<div style="font-size:10.5px;color:#8B7355;margin-top:10px;text-align:center">You can change anything later.</div>';
     } else {
-      h += '<button class="pe-btn" style="width:100%;box-sizing:border-box;padding:13px;margin-bottom:2px;opacity:.55" onclick="peToast(\'Add the client email in step 1 to send\',true);peGuide.step=0;renderMain()">Send proposal (they sign online)</button>'+
-        '<div style="font-size:11px;color:#8A2A1A;margin:0 0 8px">Add the client email in step 1 to send it to them.</div>';
+      // No menu yet — build it before anything can be sent.
+      h += '<div class="pe-title" style="font-size:19px">One more step — your menu</div>'+
+        '<div style="background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin:12px 0 10px">'+
+        '<div style="font-size:12px;color:#8B7355">'+peEsc(g.name||'Booking')+(g.date?' · '+peDLabel(g.date):'')+'</div>'+
+        '<div style="font-size:18px;color:#400207;font-weight:600;margin:3px 0">'+(guests?guests+' guests':'—')+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">'+(bev?peEsc(bev.name):(g.dry?'Dry event':'No drinks yet'))+' · menu not built yet</div></div>'+
+        '<div style="font-size:12px;color:#8A6400;background:#FAF0DA;border-radius:8px;padding:10px 12px;margin-bottom:12px">Your menu isn’t built yet, so there’s nothing to send. Save this and add the dishes on the next screen — you can send the proposal once the food is on it.</div>'+
+        '<button class="pe-btn pe-primary" style="width:100%;box-sizing:border-box;padding:13px" onclick="peGuideFinish(\'save\')"'+(g.busy?' disabled':'')+'>'+(g.busy?'Working…':'Save and build the menu')+'</button>'+
+        '<div style="font-size:10.5px;color:#8B7355;margin-top:10px;text-align:center">This won’t send anything to the guest.</div>';
     }
-    h += '<button class="pe-btn sec" style="width:100%;box-sizing:border-box;padding:12px" onclick="peGuideFinish(\'save\')"'+(g.busy?' disabled':'')+'>Save and open the event</button>'+
-      '<div style="font-size:10.5px;color:#8B7355;margin-top:10px;text-align:center">You can change anything later.</div>';
   }
   h += '</div>';
   if(g.step<3){
