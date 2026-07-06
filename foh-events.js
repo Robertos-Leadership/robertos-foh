@@ -157,7 +157,256 @@ function renderMain(){
 }
 
 // -- DASHBOARD --
+// Performance strip for an activation card. Reads ONLY from the weeks already
+// loaded at login (revenue_actual / covers_actual / avg_spend_actual entered via
+// the "Enter Results" screen) — no new table, no extra query. Shows the latest
+// completed night's net sales, covers and spend-per-guest, a trend vs the prior
+// weeks, a 5-week mini-bar, and turns red when a night drops hard so Francesco
+// catches it before the leaders do.
+// Chronological list of every week for an activation that has results entered,
+// each normalised to { w, rev, covers, avg }. Shared by the card strip and the
+// overview. Reads only the weeks already in memory — no query.
+function activationResultWeeks(ev){
+  return (state.weeks[ev.id] || []).map(w=>{
+    const covers = Number(w.covers_actual)||0;
+    const savedRev = Number(w.revenue_actual)||0;
+    const savedAvg = Number(w.avg_spend_actual)||0;
+    const rev = savedRev || (covers && savedAvg ? covers*savedAvg : 0);
+    return { w, rev, covers, avg: savedAvg || (covers && rev ? rev/covers : 0) };
+  })
+  .filter(x=>x.rev>0)
+  .sort((a,b)=>String(a.w.week_date||'').localeCompare(String(b.w.week_date||'')));
+}
+
+function activationPerf(ev){
+  const weeks = state.weeks[ev.id] || [];
+  const withNums = activationResultWeeks(ev);
+
+  const past = weeks.filter(w=>w.week_date && String(w.week_date).slice(0,10) < todayISO())
+                    .sort((a,b)=>String(b.week_date).localeCompare(String(a.week_date)));
+  if(!withNums.length) return { empty:true, lastPast: past[0]||null };
+
+  const latest = withNums[withNums.length-1];
+  const prior = withNums.slice(-5,-1);                 // up to 4 weeks before latest
+  const priorAvg = prior.length ? prior.reduce((s,x)=>s+x.rev,0)/prior.length : 0;
+  const deltaPct = priorAvg ? Math.round((latest.rev-priorAvg)/priorAvg*100) : null;
+  const prev = withNums.length>=2 ? withNums[withNums.length-2] : null;
+  const dropVsPrev = (prev && prev.rev) ? Math.round((latest.rev-prev.rev)/prev.rev*100) : null;
+  const attention = (dropVsPrev!==null && dropVsPrev<=-40) || (deltaPct!==null && deltaPct<=-40) || latest.rev<=0;
+  return { empty:false, latest, prev, priorAvg, deltaPct, dropVsPrev, attention, bars: withNums.slice(-5) };
+}
+
+function activationPerfStrip(ev){
+  const p = activationPerf(ev);
+  if(p.empty){
+    return `<div class="perf-strip" style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(107,31,42,.25);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text-light)">No results entered yet</span>
+      ${p.lastPast ? `<button class="btn btn-outline btn-sm" onclick="openWeekActuals('${p.lastPast.id}')">Enter ${fmtDate(p.lastPast.week_date)} numbers</button>` : ''}
+    </div>`;
+  }
+  const L = p.latest;
+  const perGuest = L.avg || (L.covers ? L.rev/L.covers : 0);
+  const money = n => Math.round(n).toLocaleString();
+  const chip = p.deltaPct===null ? '' : (()=>{
+    const up = p.deltaPct>=0;
+    const col = up ? 'var(--green)' : 'var(--red)';
+    const bg = up ? '#e9f3ee' : '#fbeaea';
+    const ico = up ? 'trending-up' : 'trending-down';
+    return `<span style="font-size:11px;color:${col};background:${bg};border-radius:999px;padding:3px 9px;white-space:nowrap"><i class="ti ti-${ico}" style="vertical-align:-2px"></i> ${up?'up':'down'} ${Math.abs(p.deltaPct)}% vs ${p.bars.length>2?p.bars.length-1+'-wk':'prev'} avg</span>`;
+  })();
+  const maxRev = Math.max(...p.bars.map(x=>x.rev), 1);
+  const bars = p.bars.map((x,i)=>{
+    const last = i===p.bars.length-1;
+    const h = Math.max(Math.round(x.rev/maxRev*100), 6);
+    return `<div title="${fmtDate(x.w.week_date)} · AED ${money(x.rev)}" style="flex:1;height:${h}%;background:${last?'var(--vino)':'#e3d3d6'};border-radius:3px 3px 0 0"></div>`;
+  }).join('');
+  const tile = (label,val)=>`<div style="background:var(--surface2);border-radius:8px;padding:9px 10px"><div style="font-size:10px;color:var(--vino);text-transform:uppercase;letter-spacing:.06em">${label}</div><div style="font-size:20px;font-weight:500;color:${p.attention?'var(--red)':'var(--vino-dark)'};line-height:1.2">${val}</div></div>`;
+  const flag = p.attention && p.prev
+    ? `<div style="font-size:12px;color:var(--red);margin-top:9px"><i class="ti ti-alert-triangle" style="vertical-align:-2px"></i> Down ${Math.abs(p.dropVsPrev)}% vs last week (${money(p.prev.rev)} &rarr; ${money(L.rev)}). Worth a look before the leaders see it.</div>`
+    : '';
+  return `<div class="perf-strip" style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(107,31,42,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px;flex-wrap:wrap">
+      <span style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-dim)">Last result · ${fmtDate(L.w.week_date)}</span>
+      ${chip}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+      ${tile('Net sales', money(L.rev))}
+      ${tile('Covers', L.covers||'—')}
+      ${tile('Per guest', perGuest?money(perGuest):'—')}
+    </div>
+    ${p.bars.length>1 ? `<div style="display:flex;align-items:flex-end;gap:5px;height:30px;margin-top:11px">${bars}</div><div style="font-size:10px;color:var(--vino-light);margin-top:4px">Last ${p.bars.length} results · AED net · latest highlighted</div>` : ''}
+    ${flag}
+  </div>`;
+}
+
+// ---- Week stepper (view one week at a time, as far back as data goes) ----
+// A single global offset from each activation's default (upcoming) week: 0 = this
+// week, -1 = last week, -2 = two weeks ago, +1 = next week. Each activation steps
+// through ITS OWN occurrences, so cadence differences don't matter.
+function weekOffsetLabel(off){
+  if(off===0) return 'This week';
+  if(off===-1) return 'Last week';
+  if(off===1) return 'Next week';
+  return off<0 ? Math.abs(off)+' weeks ago' : off+' weeks ahead';
+}
+function eventChron(ev){
+  return (state.weeks[ev.id]||[]).filter(w=>w.week_date)
+    .slice().sort((a,b)=>String(a.week_date).localeCompare(String(b.week_date)));
+}
+function eventDefaultIdx(ev){
+  const chron = eventChron(ev);
+  const def = pickDefaultWeekId(state.weeks[ev.id]||[]);
+  let idx = chron.findIndex(w=>w.id===def);
+  return idx<0 ? chron.length-1 : idx;
+}
+function weekOffsetBounds(){
+  let back=0, fwd=0;
+  for(const ev of state.events){
+    if((ev.status||'active')==='paused') continue;
+    const chron = eventChron(ev);
+    if(!chron.length) continue;
+    const idx = eventDefaultIdx(ev);
+    back = Math.max(back, idx);
+    fwd = Math.max(fwd, chron.length-1-idx);
+  }
+  return { back, fwd };
+}
+function applyWeekOffset(){
+  const off = state.weekOffset||0;
+  for(const ev of state.events){
+    const chron = eventChron(ev);
+    if(!chron.length) continue;
+    const t = Math.min(Math.max(eventDefaultIdx(ev)+off, 0), chron.length-1);
+    state.currentWeek[ev.id] = chron[t].id;
+    ensureWeekLoaded(chron[t].id);   // older weeks' tasks aren't loaded at login
+  }
+}
+function setWeekStep(delta){
+  const b = weekOffsetBounds();
+  state.weekOffset = Math.min(Math.max((state.weekOffset||0)+delta, -b.back), b.fwd);
+  applyWeekOffset();
+  renderMain();
+}
+function resetWeekOffset(){ state.weekOffset = 0; applyWeekOffset(); renderMain(); }
+
+// ---- Activations overview (all activations, several weeks, one lens) ----
+function setActivationsView(v){ state.activationsView = v; renderMain(); }
+function setOverviewPeriod(p){ state.overviewPeriod = p; renderMain(); }
+function toggleOverviewEvent(id){
+  state.overviewExpanded = state.overviewExpanded || {};
+  state.overviewExpanded[id] = !state.overviewExpanded[id];
+  renderMain();
+}
+function renderActivationsOverview(){
+  const period = state.overviewPeriod || 4;           // 4 | 8 | 12 | 'all'
+  const money = n => Math.round(n).toLocaleString();
+  const expanded = state.overviewExpanded || {};
+  const acts = state.events.filter(e=>(e.status||'active')!=='paused');
+
+  let grandTotal = 0, best = null, attentionNames = [];
+  const rows = acts.map(ev=>{
+    const all = activationResultWeeks(ev);
+    const wks = period==='all' ? all : all.slice(-period);
+    if(!wks.length){
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--vino-dark)">${ev.name}</div>
+        <div style="font-size:12px;color:var(--text-light)">No results yet</div></div>`;
+    }
+    const latest = wks[wks.length-1];
+    const total = wks.reduce((s,x)=>s+x.rev,0);
+    grandTotal += total;
+    for(const x of wks){ if(!best || x.rev>best.rev) best = { rev:x.rev, name:ev.name, date:x.w.week_date }; }
+    const prior = wks.slice(0,-1);
+    const priorAvg = prior.length ? prior.reduce((s,x)=>s+x.rev,0)/prior.length : 0;
+    const deltaPct = priorAvg ? Math.round((latest.rev-priorAvg)/priorAvg*100) : null;
+    const prev = wks.length>=2 ? wks[wks.length-2] : null;
+    const dropVsPrev = (prev&&prev.rev) ? Math.round((latest.rev-prev.rev)/prev.rev*100) : null;
+    const attention = (dropVsPrev!==null && dropVsPrev<=-40) || latest.rev<=0;
+    if(attention) attentionNames.push(ev.name);
+
+    const maxRev = Math.max(...wks.map(x=>x.rev), 1);
+    const bars = wks.map((x,i)=>{
+      const last = i===wks.length-1;
+      const h = Math.max(Math.round(x.rev/maxRev*100), 6);
+      return `<div title="${fmtDate(x.w.week_date)} · AED ${money(x.rev)}" style="flex:1;height:${h}%;background:${last?(attention?'var(--red)':'var(--vino)'):'#e3d3d6'};border-radius:2px 2px 0 0"></div>`;
+    }).join('');
+    const barsHtml = wks.length>1
+      ? `<div style="display:flex;align-items:flex-end;gap:4px;height:32px;width:90px;flex:none">${bars}</div>`
+      : `<div style="width:90px;flex:none;text-align:center;font-size:11px;color:var(--text-light)">1 result</div>`;
+    const arrow = deltaPct===null ? '' :
+      `<span style="font-size:12px;color:${deltaPct>=0?'var(--green)':'var(--red)'};white-space:nowrap"><i class="ti ti-trending-${deltaPct>=0?'up':'down'}" style="vertical-align:-2px"></i> ${deltaPct>=0?'+':''}${deltaPct}%</span>`;
+    const isOpen = !!expanded[ev.id];
+    const detail = isOpen ? `
+      <div style="margin-top:12px;border-top:1px dashed rgba(107,31,42,.2);padding-top:10px">
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:6px 14px;font-size:12px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold-dim)">Week</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--gold-dim);text-align:right">Net</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--gold-dim);text-align:right">Covers</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--gold-dim);text-align:right">Per guest</div>
+          ${wks.slice().reverse().map((x,i)=>{
+            const bad = i===0 && attention;
+            const c = bad ? 'var(--red)' : 'var(--text)';
+            return `<div style="color:${bad?'var(--red)':'var(--vino-dark)'}">${fmtDate(x.w.week_date)}</div>
+              <div style="text-align:right;color:${c}">${money(x.rev)}</div>
+              <div style="text-align:right;color:${c}">${x.covers||'—'}</div>
+              <div style="text-align:right;color:${c}">${x.avg?money(x.avg):'—'}</div>`;
+          }).join('')}
+        </div>
+      </div>` : '';
+    return `<div style="background:var(--surface);border:1px solid ${attention?'var(--red)':'var(--border)'};${attention?'border-left:4px solid var(--red);border-radius:0 8px 8px 0':'border-radius:8px'};padding:14px 16px;margin-bottom:8px;cursor:pointer" onclick="toggleOverviewEvent('${ev.id}')">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--vino-dark)">${ev.name}</div>
+          <div style="font-size:12px;color:${attention?'var(--red)':'var(--vino)'}">latest ${money(latest.rev)} · ${period==='all'?'total':wks.length+'-wk total'} ${money(total)}${attention?' · needs attention':''}</div>
+        </div>
+        ${barsHtml}
+        ${arrow}
+        <i class="ti ti-chevron-${isOpen?'down':'right'}" style="color:var(--vino-light);flex:none"></i>
+      </div>
+      ${detail}
+    </div>`;
+  }).join('');
+
+  const periodChip = (val,label)=>`<span onclick="setOverviewPeriod(${typeof val==='string'?`'${val}'`:val})" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:999px;${(state.overviewPeriod||4)===val?'background:var(--vino);color:#fff':'background:var(--surface);border:1px solid var(--border-strong);color:var(--vino)'}">${label}</span>`;
+  const periodWord = period==='all' ? 'all time' : period+' wks';
+  const tiles = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;color:var(--vino);text-transform:uppercase;letter-spacing:.06em">Total net · ${periodWord}</div>
+        <div style="font-size:22px;font-weight:500;color:var(--vino-dark)">AED ${money(grandTotal)}</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;color:var(--vino);text-transform:uppercase;letter-spacing:.06em">Best night</div>
+        <div style="font-size:14px;font-weight:500;color:var(--green);line-height:1.25;margin-top:4px">${best?`${best.name} · ${fmtDate(best.date)}<br><span style="font-size:13px;color:var(--vino-dark)">AED ${money(best.rev)}</span>`:'—'}</div></div>
+      <div style="background:var(--surface);border:1px solid ${attentionNames.length?'var(--red)':'var(--border)'};border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;color:${attentionNames.length?'var(--red)':'var(--vino)'};text-transform:uppercase;letter-spacing:.06em">Needs attention</div>
+        <div style="font-size:14px;font-weight:500;color:${attentionNames.length?'var(--red)':'var(--text-light)'};line-height:1.25;margin-top:4px">${attentionNames.length?attentionNames.join(', '):'None · all steady'}</div></div>
+    </div>`;
+
+  return `
+    <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:14px">
+      ${periodChip(4,'4 weeks')}${periodChip(8,'8 weeks')}${periodChip(12,'12 weeks')}${periodChip('all','All')}
+    </div>
+    ${tiles}
+    <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:8px">All activations · tap one to open its weeks</div>
+    ${rows || '<div class="empty-state">No activations yet.</div>'}`;
+}
+
 function renderDashboard(){
+  const _view = state.activationsView || 'weekly';
+  const _viewToggle = `<div class="view-toggle" style="display:inline-flex;border:1px solid var(--border-strong);border-radius:999px;overflow:hidden">
+    <button onclick="setActivationsView('weekly')" style="border:none;cursor:pointer;font-size:12px;padding:6px 14px;background:${_view==='weekly'?'var(--vino)':'transparent'};color:${_view==='weekly'?'#fff':'var(--vino)'}">Weekly</button>
+    <button onclick="setActivationsView('overview')" style="border:none;cursor:pointer;font-size:12px;padding:6px 14px;background:${_view==='overview'?'var(--vino)':'transparent'};color:${_view==='overview'?'#fff':'var(--vino)'}">Overview</button>
+  </div>`;
+  if(_view==='overview'){
+    return `
+    <div class="dashboard-header">
+      <div><div class="page-title">Activations</div><div class="page-sub">Every activation, several weeks, one view.</div></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${_viewToggle}
+        <button class="btn btn-gold btn-sm" onclick="openAddResult()">+ Add night's numbers</button>
+        <button class="btn btn-outline btn-sm" onclick="openActivity()">Activity</button></div>
+    </div>
+    ${renderActivationsOverview()}`;
+  }
   let allTasks = [];
   const eventCards = [];
   const tonightEvents = [];
@@ -219,7 +468,8 @@ function renderDashboard(){
         <div class="event-card-stage">Stage ${stage.rank+1} of 4: ${stage.label}</div>
         <div style="margin:8px 0 4px"><div class="progress-bar" style="height:8px"><div class="progress-fill ${readiness.status}" style="width:${cardPct}%"></div></div></div>
         <div class="event-card-note"><strong>${tasks.length-doneCt} remaining</strong> | ${doneCt}/${tasks.length} done | ${readiness.label}${nonOpen ? ` | ${nonOpen} non-negotiable open` : ''}${blocked ? ` | ${blocked} blocked` : ''}${nextDue ? ` | Next: ${fmtDate(nextDue.due_date)}` : ''}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${activationPerfStrip(ev)}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
           <button class="btn btn-gold btn-sm" onclick="openJourney('${ev.id}','full')">Open Journey</button>
           <button class="btn btn-outline btn-sm" onclick="openJourney('${ev.id}','pending')">Pending Journey</button>
           <button class="btn btn-outline btn-sm" onclick="cancelWeek('${wid}','${ev.id}')">Cancel this week</button>
@@ -288,21 +538,27 @@ function renderDashboard(){
     return `<button class="filter-chip${cls} ${state.leaderPriorityFilter===priority?'active':''}" onclick="setLeaderPriorityFilter('${priority}')">${label}</button>`;
   }).join('');
 
-  const scope = state.weekScope || 'this';
+  const off = state.weekOffset||0;
+  const bounds = weekOffsetBounds();
+  const stepper = `
+      <div class="week-scope" style="display:flex;align-items:center;gap:8px">
+        <button class="week-scope-btn" ${off<=-bounds.back?'disabled style="opacity:.4;cursor:default"':''} onclick="setWeekStep(-1)" title="Previous week">&#9664; Prev</button>
+        <span style="min-width:92px;text-align:center;font-size:12px;font-weight:500;color:var(--vino)">${weekOffsetLabel(off)}</span>
+        <button class="week-scope-btn" ${off>=bounds.fwd?'disabled style="opacity:.4;cursor:default"':''} onclick="setWeekStep(1)" title="Next week">Next &#9654;</button>
+        ${off!==0?`<button class="week-scope-btn" onclick="resetWeekOffset()">This week</button>`:''}
+      </div>`;
   return `
   <div class="dashboard-header">
-    <div><div class="page-title">Leaders</div><div class="page-sub">One clear action list by person, across every event.</div></div>
+    <div><div class="page-title">Activations</div><div class="page-sub">One clear action list by person, across every event.</div></div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <div class="week-scope">
-        <button class="week-scope-btn ${scope==='last'?'active':''}" onclick="setWeekScope('last')">Last Week</button>
-        <button class="week-scope-btn ${scope==='this'?'active':''}" onclick="setWeekScope('this')">This Week</button>
-        <button class="week-scope-btn ${scope==='next'?'active':''}" onclick="setWeekScope('next')">Next Week</button>
-      </div>
+      ${_viewToggle}
+      ${stepper}
+      <button class="btn btn-gold btn-sm" onclick="openAddResult()">+ Add night's numbers</button>
       <button class="btn btn-outline btn-sm" onclick="openActivity()">Activity</button>
     </div>
   </div>
   ${tonightBanner}
-  <div class="section-header"><div class="section-title">This Week</div></div>
+  <div class="section-header"><div class="section-title">${off===0?'This Week':weekOffsetLabel(off)}</div></div>
   <div class="home-card-grid">${eventCards.join('')}</div>
   <div class="section-header" style="margin-top:26px"><div class="section-title">Team</div></div>
   <div class="leader-summary-grid">${leaderSummary}</div>
@@ -1757,6 +2013,68 @@ async function saveActuals(weekId){
   }
   logActivity('entered results', null, (updates.covers_actual||0) + ' covers, AED ' + (updates.revenue_actual||0));
   closeModal(); toast('Results saved'); renderMain();
+}
+
+// Enter a night's numbers AGAINST THE DATE IT HAPPENED — for backfilling history
+// and for activations whose dates aren't a fixed weekly cadence (e.g. Cigar).
+// Finds the week row for that event+date, or creates a completed one, then saves
+// revenue/covers. No task template is seeded — these are results-only nights.
+function openAddResult(preEventId){
+  const opts = state.events.filter(e=>(e.status||'active')!=='paused')
+    .map(e=>`<option value="${e.id}" ${e.id===preEventId?'selected':''}>${e.name}</option>`).join('');
+  document.getElementById('modal-title').textContent = 'Add a night’s numbers';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Activation</label>
+      <select class="form-select" id="ar-event">${opts}</select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Date it took place</label>
+        <input class="form-input" id="ar-date" type="date" max="${todayISO()}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Net revenue (AED)</label>
+        <input class="form-input" id="ar-rev" type="number" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Covers <span style="color:var(--text-light);font-weight:400">(optional)</span></label>
+      <input class="form-input" id="ar-covers" type="number" inputmode="numeric" placeholder="Guest count">
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:6px;line-height:1.5">Enter each night on the date it actually happened. If that date already has numbers, this updates them. Average spend is worked out for you.</div>`;
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-gold" onclick="saveAddResult()">Save night</button>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function saveAddResult(){
+  const eventId = document.getElementById('ar-event').value;
+  const dateStr = document.getElementById('ar-date').value;               // YYYY-MM-DD
+  const rev = parseFloat(document.getElementById('ar-rev').value)||0;
+  const covers = parseInt(document.getElementById('ar-covers').value)||null;
+  if(!eventId){ toast('Pick an activation', true); return; }
+  if(!dateStr){ toast('Pick the date it took place', true); return; }
+  if(!rev){ toast('Enter the net revenue', true); return; }
+  const ev = state.events.find(e=>e.id===eventId);
+  const avg = covers ? +(rev/covers).toFixed(2) : null;
+  const fields = { revenue_actual: rev, covers_actual: covers, avg_spend_actual: avg, status: 'completed' };
+  let wk = (state.weeks[eventId]||[]).find(w=> String(w.week_date||'').slice(0,10)===dateStr);
+  if(wk){
+    const { error } = await sb.from('weeks').update(fields).eq('id', wk.id);
+    if(error){ toast('Could not save', true); return; }
+    Object.assign(wk, fields);
+  } else {
+    const label = parseLocalDate(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+    const { data, error } = await sb.from('weeks').insert({ event_id: eventId, week_date: dateStr, week_label: label, ...fields }).select().single();
+    if(error){ toast('Could not save the night', true); return; }
+    if(!state.weeks[eventId]) state.weeks[eventId] = [];
+    state.weeks[eventId].push(data);
+    state.tasks[data.id] = []; state.finance[data.id] = [];
+  }
+  logActivity('entered result by date', (ev?ev.name:'') + ' — ' + dateStr, 'AED ' + Math.round(rev).toLocaleString() + (covers?', '+covers+' covers':''));
+  closeModal(); toast('Saved ' + (ev?ev.name:'') + ' — ' + fmtDate(dateStr)); renderMain();
 }
 
 // -- MODAL --
