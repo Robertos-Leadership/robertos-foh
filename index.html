@@ -2147,7 +2147,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-04.20</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-04.21</div>
   </div>
 
   <!-- main scroll area -->
@@ -2756,9 +2756,29 @@ async function fohLoadHubStats(){
     }
   }catch(e){}
 }
+// ── USAGE TRACKER — fire-and-forget adoption log (who signs in, which modules
+// they open) for the Admin "Usage" view. Must NEVER block or break anything:
+// the insert result is ignored and every error is swallowed, so the app works
+// unchanged even if the app_activity table doesn't exist yet (foh-app-activity.sql).
+// NOT logActivity — that name is the Events module's activity feed (foh-events.js).
+var _actSeen={};   // per-session {module: lastLoggedMs} — one 'open' per module per ~5 min
+function logAppUsage(action, module){
+  try{
+    if(action==='open'){
+      var k=module||'?', now=Date.now();
+      if(_actSeen[k] && (now-_actSeen[k])<300000) return;
+      _actSeen[k]=now;
+    }
+    sb.from('app_activity').insert({
+      user_email:(state.userEmail||'unknown'), action:action,
+      module:module||null, venue_id:'robertos-difc'
+    }).then(function(){},function(){});
+  }catch(e){}
+}
 async function loadFohAccess(){
   state.access=null;
   var e=(state.userEmail||'').toLowerCase();
+  if(e && !state._loginLogged){ state._loginLogged=true; logAppUsage('login'); }   // once per visit (fresh sign-in or restored session)
   if(e){
     try{
       var r=await sb.from('app_users').select('modules,is_admin,name').eq('email',e).limit(1);
@@ -3072,13 +3092,87 @@ async function admRemove(src,id){
 function renderAdmin(){
   if(!state.adminLoaded){ loadAdminUsers(); return '<div class="loading">Loading…</div>'; }
   window.__admWide = window.innerWidth>=760;
-  return '<style>'+ADM_CSS+'</style>'+admControlCentre();
+  var v=(state.adminView||'people');
+  var tabs='<div class="adm-wrap" style="padding-bottom:0;"><div class="adm-toggle">'
+    +'<button class="'+(v==='people'?'on':'')+'" onclick="admSetView(\'people\')">People</button>'
+    +'<button class="'+(v==='usage'?'on':'')+'" onclick="admSetView(\'usage\')">Usage</button>'
+    +'</div></div>';
+  return '<style>'+ADM_CSS+'</style>'+tabs+(v==='usage'?admUsageHTML():admControlCentre());
+}
+function admSetView(v){
+  state.adminView=v;
+  if(v==='usage' && !state.usageRows && !state.usageErr) admUsageLoad();
+  renderMain();
+  if(v==='people') admAfterRender(function(){ try{admApplyFilter();}catch(e){} });
 }
 // "Who can sign" — per-action authorized signers, now edited inline in each FOH
 // person's detail panel (admDetailHTML). Saved to app_config via admSaveSigners.
 async function admSaveSigners(){
   var res=await sb.from('app_config').upsert({key:'signers',value:state.adminSigners||{},updated_at:new Date().toISOString()},{onConflict:'key'});
   if(res.error) alert('Could not save: '+res.error.message+'\n\n(If this is the first time, run the app_config table SQL once.)');
+}
+
+/* ===================================================================
+   ADMIN → USAGE — read-only adoption view fed by logAppUsage/app_activity.
+   Shows, per person: last seen, sign-ins in the last 7 days, the modules
+   they open most — plus a short recent-activity list. Admin-only (reached
+   only through the admin tab, which fohBlocked already gates).
+   =================================================================== */
+var USAGE_MODULE_NAMES={events:'Activations',privateevents:'Events',operations:'Closing Report',revenue:'Revenue',stocktake:'Stock Take',admin:'Admin'};
+function admUsageModName(m){ return USAGE_MODULE_NAMES[m]||m||'—'; }
+function admUsageWho(email){ var u=adminFind((email||'').toLowerCase()); return (u&&u.name)?u.name:(email||'unknown'); }
+function admUsageAgo(ts){
+  var d=new Date(ts); if(isNaN(d)) return '—';
+  var mins=Math.floor((Date.now()-d.getTime())/60000);
+  if(mins<1) return 'just now';
+  if(mins<60) return mins+' min ago';
+  var h=Math.floor(mins/60); if(h<24) return h+(h===1?' hour ago':' hours ago');
+  var days=Math.floor(h/24); if(days<7) return days+(days===1?' day ago':' days ago');
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+async function admUsageLoad(){
+  state.usageRows=null; state.usageErr=null;
+  if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
+  try{
+    var r=await sb.from('app_activity').select('user_email,action,module,created_at').order('created_at',{ascending:false}).limit(500);
+    if(r.error) throw r.error;
+    state.usageRows=r.data||[];
+  }catch(err){ state.usageErr=(err&&err.message)||'Could not load usage data.'; }
+  if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
+}
+function admUsageHTML(){
+  var head='<div class="adm-head"><h2>Usage — who&rsquo;s using the app</h2><button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div>'
+    +'<div class="ppl-sum">Every sign-in and module open, recorded automatically from this build on. Read-only — nothing here changes anyone&rsquo;s access.</div>';
+  if(state.usageErr) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Couldn&rsquo;t load the usage data — '+admEsc(state.usageErr)+'<br><br>If this is the first time, run <b>foh-app-activity.sql</b> once in Supabase, then tap Refresh.</div></div>';
+  if(!state.usageRows) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
+  var rows=state.usageRows;
+  if(!rows.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Nothing recorded yet — usage starts counting from this build. Check back after the team has used the app.</div></div>';
+  // ── per-user summary (rows arrive newest-first) ──
+  var weekAgo=Date.now()-7*86400000, byUser={}, order=[];
+  rows.forEach(function(r){
+    var e=(r.user_email||'unknown').toLowerCase();
+    var u=byUser[e]; if(!u){ u=byUser[e]={email:e,last:r.created_at,logins7:0,mods:{}}; order.push(e); }
+    if(r.action==='login' && new Date(r.created_at).getTime()>=weekAgo) u.logins7++;
+    if(r.action==='open' && r.module) u.mods[r.module]=(u.mods[r.module]||0)+1;
+  });
+  var cards=order.map(function(e){
+    var u=byUser[e];
+    var top=Object.keys(u.mods).sort(function(a,b){ return u.mods[b]-u.mods[a]; }).slice(0,3)
+      .map(function(m){ return '<span style="font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;">'+admEsc(admUsageModName(m))+' &middot; '+u.mods[m]+'</span>'; }).join(' ');
+    return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
+      +'<div style="min-width:170px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:14.5px;">'+admEsc(admUsageWho(u.email))+'</div><div style="font-size:11.5px;color:#9c8a72;">'+admEsc(u.email)+'</div></div>'
+      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last seen<br><b style="color:#400207;">'+admEsc(admUsageAgo(u.last))+'</b></div>'
+      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+u.logins7+'</b></div>'
+      +'<div style="flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;">'+(top||'<span style="font-size:12px;color:#9c8a72;">no modules opened yet</span>')+'</div></div>';
+  }).join('');
+  // ── short recent-activity list ──
+  var recent=rows.slice(0,30).map(function(r){
+    var what=r.action==='login' ? 'signed in' : ('opened <b style="color:#400207;">'+admEsc(admUsageModName(r.module))+'</b>');
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
+  }).join('');
+  return '<div class="adm-wrap">'+head
+    +'<div class="ppl-grp">By person <span>&middot; '+order.length+' people, last '+rows.length+' records</span></div>'+cards
+    +'<div class="ppl-grp" style="margin-top:26px;">Recent activity</div>'+recent+'</div>';
 }
 
 /* ===================================================================
@@ -3515,6 +3609,7 @@ function admPasteApply(){
 }
 function enterApp(module){
   if(fohBlocked(module)){ showManagerLanding(); return; }   // access gate
+  logAppUsage('open', moduleOf(module));                    // usage tracker (fire-and-forget)
   if(module==='admin') state.adminLoaded=false;             // always pull the latest list on open
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
