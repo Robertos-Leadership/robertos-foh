@@ -463,6 +463,49 @@ if ('serviceWorker' in navigator) {
   @media (max-width: 900px) { .module-cols { flex-direction: column; } .module-col .module-section { padding: 10px 0 0; } }
   .landing-titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .landing-date { font-size: 11px; color: #8B7355; white-space: nowrap; }
+  /* LIVE TONIGHT strip — today's SevenRooms figures on the Management landing */
+  .livebar {
+    margin: 14px 0 4px; padding: 13px 18px 15px;
+    background: linear-gradient(135deg, #F1E8DB 0%, #E8D9C7 100%);
+    border: 1px solid rgba(107,31,42,0.22);
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(74,21,32,0.08);
+    max-width: 1010px; width: 100%;
+  }
+  .livebar-head { display: flex; align-items: center; gap: 12px; margin-bottom: 11px; }
+  .livebar-live {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--vino);
+  }
+  .livebar-pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: #2E6B34;
+    animation: ltpulse 2s infinite;
+  }
+  @keyframes ltpulse {
+    0% { box-shadow: 0 0 0 0 rgba(46,107,52,0.45); }
+    70% { box-shadow: 0 0 0 6px rgba(46,107,52,0); }
+    100% { box-shadow: 0 0 0 0 rgba(46,107,52,0); }
+  }
+  .livebar-src { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-dim); }
+  .livebar-note { margin-left: auto; font-size: 10px; color: #8B7355; font-style: italic; }
+  .livebar-figs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .livefig { padding: 2px 4px; }
+  .livefig + .livefig { border-left: 1px solid rgba(107,31,42,0.14); padding-left: 14px; }
+  .livefig-num {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(20px, 2.6vw, 27px);
+    color: var(--vino-dark); line-height: 1; letter-spacing: 0;
+  }
+  .livefig-num small { font-size: 12px; color: var(--gold-dim); }
+  .livefig-lbl {
+    font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--gold-dim); margin-top: 7px; font-weight: 600;
+  }
+  @media (max-width: 640px) {
+    .livebar-figs { grid-template-columns: 1fr 1fr !important; gap: 15px 10px; }
+    .livefig:nth-child(odd) { border-left: none; padding-left: 4px; }
+  }
   .module-section {
     display: flex;
     align-items: center;
@@ -2147,7 +2190,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-06.26</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-06.27</div>
   </div>
 
   <!-- main scroll area -->
@@ -2228,7 +2271,23 @@ if ('serviceWorker' in navigator) {
     <img class="landing-brand" src="robertos-logo-burgundy.svg" alt="Roberto's">
     <div class="landing-kicker">Management Module</div>
     <div class="landing-titlerow"><div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;min-width:0"><div class="landing-title"><span>Management</span></div><div class="landing-sub">Daily reports, activations, revenue &amp; events.</div></div><div class="landing-date" id="hub-date"></div></div>
-    <div class="landing-divider" style="margin-top:8px"></div>
+    <!-- LIVE TONIGHT strip — real-time from SevenRooms for today only. Fed by
+         fohLoadLiveTonight(); fails silently to a muted note, never blocks. -->
+    <div class="livebar" id="live-tonight">
+      <div class="livebar-head">
+        <span class="livebar-live"><span class="livebar-pulse"></span>Live now</span>
+        <span class="livebar-src">SevenRooms &middot; today</span>
+        <span class="livebar-note" id="lt-note"></span>
+      </div>
+      <div class="livebar-figs" id="lt-figs">
+        <div class="livefig"><div class="livefig-num" id="lt-booked">&mdash;</div><div class="livefig-lbl">Guests booked</div></div>
+        <div class="livefig"><div class="livefig-num" id="lt-seated">&mdash;</div><div class="livefig-lbl">In now</div></div>
+        <div class="livefig"><div class="livefig-num" id="lt-tocome">&mdash;</div><div class="livefig-lbl">Still to come</div></div>
+        <div class="livefig" id="lt-fig-spend"><div class="livefig-num" id="lt-spend">&mdash;</div><div class="livefig-lbl">Net spend so far</div></div>
+        <div class="livefig" id="lt-fig-avg"><div class="livefig-num" id="lt-avg">&mdash;</div><div class="livefig-lbl">Avg / guest</div></div>
+      </div>
+    </div>
+    <div class="landing-divider" style="margin-top:12px"></div>
     <div class="module-grid">
       <div class="module-cols">
       <div class="module-col">
@@ -2689,6 +2748,7 @@ function applyFohAccess(){
   var hd=document.getElementById('hub-date');
   if(hd) hd.textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   try{ fohLoadHubStats(); }catch(e){}
+  try{ fohLoadLiveTonight(); }catch(e){}
 }
 // ── Landing live stats: one small fact per module card. Cards render instantly;
 // these fill in afterwards. Every stat is independent and fails silently — a
@@ -2755,6 +2815,64 @@ async function fohLoadHubStats(){
       setStat('stocktake', left<=3?'#B00020':'#A88930', prog+'month-end in '+left+(left===1?' day':' days'));
     }
   }catch(e){}
+}
+// ── LIVE TONIGHT strip — today's SevenRooms figures on the Management landing.
+// Two live reads off the Kitchen sevenrooms-sync edge fn (same one the Closing
+// Report uses): ?upcoming=DATE for guest counts, ?spend=DATE for money. Both are
+// computed fresh from the SevenRooms API each call, so this is real-time for TODAY.
+//   Guests booked  = booked covers (excl. cancel/no-show)
+//   In now         = covers physically in the venue right now (arrived/seated, not yet
+//                    completed/paid). Falls back to arrived-ever if the edge fn predates
+//                    the `seated` field, so it degrades gracefully before a Kitchen deploy.
+//   Still to come  = booked guests not yet arrived whose slot time is still ahead
+//   Net spend      = SevenRooms gross check total ÷ 1.225 (the VERIFIED gross→net
+//                    divisor: 10% service + 7% municipality on net, 5% VAT on net+SC)
+//   Avg / guest    = net spend ÷ guests arrived tonight. Under-reads until the bar team
+//                    open tabs on table numbers — a known coverage gap.
+// Money figures are hidden for users without Revenue access (grid collapses to 3).
+// Fails silently to a muted note; never blocks the landing.
+var _liveTonightAt = 0;
+var LT_GROSS_TO_NET = 1.225;
+async function fohLoadLiveTonight(){
+  var bar = document.getElementById('live-tonight');
+  if(!bar) return;
+  if(Date.now() - _liveTonightAt < 60000) return;
+  _liveTonightAt = Date.now();
+  var note = document.getElementById('lt-note');
+  var money = !fohBlocked('revenue');   // hide spend/avg from users without Revenue
+  var fs = document.getElementById('lt-fig-spend'), fa = document.getElementById('lt-fig-avg');
+  if(fs) fs.style.display = money ? '' : 'none';
+  if(fa) fa.style.display = money ? '' : 'none';
+  var figs = document.getElementById('lt-figs');   // 5 figures with money, 3 without
+  if(figs) figs.style.gridTemplateColumns = 'repeat('+(money?5:3)+',1fr)';
+  var d = localISO(new Date());   // today, venue-local
+  var opts = { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':'Kitchen' } };
+  var url = KITCHEN_URL + '/functions/v1/sevenrooms-sync?';
+  function jget(q){ return fetch(url+q+'='+d, opts).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+  function setNum(id, html){ var el = document.getElementById(id); if(el) el.innerHTML = html; }
+  function money0(n){ return '<small>AED </small>'+Math.round(n).toLocaleString('en-US'); }
+  if(note) note.textContent = '';
+  try{
+    var res = await Promise.all([ jget('upcoming'), money ? jget('spend') : Promise.resolve(null) ]);
+    var up = res[0], sp = res[1];
+    if(!up || !up.ok) throw new Error('no upcoming data');
+    setNum('lt-booked', String(up.booked||0));
+    setNum('lt-seated', String((up.seated!=null ? up.seated : up.here)||0));
+    setNum('lt-tocome', String(up.upcoming||0));
+    if(money){
+      var t = (sp && sp.ok && sp.totals) ? sp.totals : {};
+      var gross = Number(t.pos_total) || Number(t.total_payment) || Number(t.total_gross_payment) || 0;
+      var net = gross / LT_GROSS_TO_NET;
+      var here = Number(up.here) || 0;
+      setNum('lt-spend', gross>0 ? money0(net) : '<small>AED </small>0');
+      setNum('lt-avg', (gross>0 && here>0) ? money0(net/here) : '&mdash;');
+    }
+  }catch(e){
+    console.warn('[live tonight] fetch failed', e);
+    setNum('lt-booked','&mdash;'); setNum('lt-seated','&mdash;'); setNum('lt-tocome','&mdash;');
+    if(money){ setNum('lt-spend','&mdash;'); setNum('lt-avg','&mdash;'); }
+    if(note) note.textContent = 'Live figures unavailable right now';
+  }
 }
 // ── USAGE TRACKER — fire-and-forget adoption log (who signs in, which modules
 // they open) for the Admin "Usage" view. Must NEVER block or break anything:
