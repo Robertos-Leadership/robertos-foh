@@ -316,16 +316,34 @@ function peWizBudget(el){
 }
 
 // ── data ─────────────────────────────────────────────────────────────────────
+// Load every row across pages. A bare .limit() silently drops rows once a table
+// grows past the cap — event_items is the real risk (line items accumulate across
+// ALL events, and with no ordering it was undefined WHICH rows came back). Mirrors
+// stock-take's stFetchAllPaged: each page rebuilds the query (a range can't be
+// reused across awaits); a stable .order('id') tiebreaker stops pages overlapping
+// or skipping rows; we stop on the first short page.
+async function peFetchAllPaged(makeQuery){
+  var out=[], from=0, PAGE=1000;
+  for(;;){
+    var res = await makeQuery().range(from, from+PAGE-1);
+    if(res && res.error) return { data:out, error:res.error };
+    var batch = (res && res.data) || [];
+    out = out.concat(batch);
+    if(batch.length < PAGE) break;
+    from += PAGE;
+  }
+  return { data:out, error:null };
+}
 async function peLoadAll(force){
   if(peState.loading || (peState.loaded && !force)) return;
   peState.loading = true;
   try{
     var res = await Promise.all([
-      sb.from('events_desk').select('*').order('event_date',{ascending:true}).limit(500),
-      sb.from('event_items').select('*').limit(3000),
-      sb.from('event_dishes').select('*').order('category').order('serve').order('name').limit(500),
-      sb.from('event_bev_packages').select('*').order('name').limit(100),
-      sb.from('event_packages').select('*').order('name').limit(100)
+      peFetchAllPaged(function(){ return sb.from('events_desk').select('*').order('event_date',{ascending:true}).order('id'); }),
+      peFetchAllPaged(function(){ return sb.from('event_items').select('*').order('event_id').order('id'); }),
+      peFetchAllPaged(function(){ return sb.from('event_dishes').select('*').order('category').order('serve').order('name').order('id'); }),
+      peFetchAllPaged(function(){ return sb.from('event_bev_packages').select('*').order('name').order('id'); }),
+      peFetchAllPaged(function(){ return sb.from('event_packages').select('*').order('name').order('id'); })
     ]);
     var bad = res.find(function(r){ return r.error; });
     if(bad) throw bad.error;
