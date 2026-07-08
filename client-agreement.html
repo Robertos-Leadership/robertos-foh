@@ -108,9 +108,12 @@ function render(data){
 
   // the one figure
   if(data.quoted!=null){
+    // Name only what's actually on the event — a beverage-only booking has no food.
+    var hasFoodDoc = (data.menu && data.menu.length) || ev.package_label;
+    var incl = hasFoodDoc ? (data.bev ? 'food and beverage package' : 'food') : (data.bev ? 'beverage package' : 'everything');
     h += '<div class="sect"><div class="total"><b>'+
       (data.pricing_type==='min_spend' ? 'Minimum spend — AED '+money(data.quoted) : (ev.guests?ev.guests+' guests · ':'')+'AED '+money(data.quoted))+
-      '</b><div class="d">Everything included — food'+(data.bev?' and beverage package':'')+', inclusive of all taxes and service'+
+      '</b><div class="d">Everything included — '+incl+', inclusive of all taxes and service'+
       (data.deposit_pct>0?'<br>Deposit to confirm: '+data.deposit_pct+'% — AED '+money(data.deposit):'')+'</div></div></div>';
   }
 

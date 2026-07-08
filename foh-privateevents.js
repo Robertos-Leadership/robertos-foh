@@ -2288,7 +2288,7 @@ async function peEmailAgreement(id){
   var sender = state.userEmail || 'vdetoni@robertos.ae';
   var url = peAgreementUrl(e);
   var inner = '<div style="text-align:center;margin:24px 0 10px"><a href="'+url+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px">Read your proposal &amp; sign</a></div>'+
-    '<p style="font-size:12px;color:#8B7355;text-align:center">The page shows your menu, the beverage selection and the agreement — signing takes under a minute.</p>';
+    '<p style="font-size:12px;color:#8B7355;text-align:center">The page shows your full proposal and the agreement on one page — signing takes under a minute.</p>';
   var intro = 'Thank you for choosing Roberto’s'+(e.event_date?' for '+peDLabel(e.event_date):'')+'. Your proposal and event agreement are ready — the button below opens everything on one page, where you can review and sign electronically.';
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
