@@ -25,7 +25,7 @@ var peState = {
   editDishId:null, editBevId:null, editPackId:null
 };
 
-var PE_TEAM_CC = ['vdetoni@robertos.ae','dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','asacchi@skelmore.com'];
+var PE_TEAM_CC = ['fguarracino@robertos.ae','vdetoni@robertos.ae','dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','asacchi@skelmore.com'];
 var PE_TARGETS = {
   cells: {'Vegetarian|Cold':7,'Fish|Cold':7,'Beef|Cold':6,'Vegetarian|Hot':7,'Fish|Hot':6,'Beef|Hot':7,'Dessert|Dessert':5},
   serve: {Cold:20, Hot:20, Dessert:5},
