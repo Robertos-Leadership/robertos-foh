@@ -1279,6 +1279,15 @@ function peRenderEvent(){
   h += '<div class="pe-card" id="pe-card-docs" style="margin-top:12px"><b style="font-size:14px;color:#400207">Documents</b>'+
     '<div style="'+grpLbl+';margin-top:10px">For the guest</div>'+
     '<div style="font-size:11.5px;color:#6B4A33;background:#F7EEE2;border-radius:8px;padding:8px 10px;margin-bottom:8px">Most bookings: send the full proposal so the guest can sign online.</div>'+
+    // How the price reads on the guest's proposal — whole event or per person.
+    // Both live figures are on the buttons so the choice shows its own result.
+    ((t.total && e.guests) ?
+      '<div style="'+grpLbl+'">Price the guest sees on the proposal</div>'+
+      '<div style="display:flex;border:1px solid rgba(107,31,42,0.3);border-radius:8px;overflow:hidden;margin-bottom:9px">'+
+        '<button onclick="peSetPriceDisplay(\''+e.id+'\',\'total\')" style="flex:1;border:none;padding:9px 6px;cursor:pointer;font-size:12px;line-height:1.25;'+((e.price_display==='pp')?'background:#fff;color:#6B4A33':'background:#400207;color:#fff;font-weight:600')+'">Whole event<br><span style="font-size:11px;font-weight:400;opacity:.85">AED '+peMoney(t.total)+'</span></button>'+
+        '<button onclick="peSetPriceDisplay(\''+e.id+'\',\'pp\')" style="flex:1;border:none;border-left:1px solid rgba(107,31,42,0.2);padding:9px 6px;cursor:pointer;font-size:12px;line-height:1.25;'+((e.price_display==='pp')?'background:#400207;color:#fff;font-weight:600':'background:#fff;color:#6B4A33')+'">Per person<br><span style="font-size:11px;font-weight:400;opacity:.85">AED '+peMoney(Math.round(t.total/e.guests))+' pp</span></button>'+
+      '</div>'
+    : '')+
     '<div style="display:flex;flex-direction:column;gap:7px">'+
     '<button class="pe-btn"'+dim(hasMail)+' onclick="'+mailClick('peEmailAgreement')+'">Send full proposal (client signs online)</button>'+
     (hasMail?'':'<div style="font-size:11px;color:#8A2A1A;margin:-3px 2px 2px">Add the client email above to send.</div>')+
@@ -1481,7 +1490,7 @@ async function peSaveField(id, field, value, opts){
     // Graceful degradation for a not-yet-added Batch-7 column (e.g. payment_link).
     if(peColMissing(r.error, field)){
       e[field] = value;
-      peToast('Kept for now — this needs the Batch 7 database update to save permanently.', true);
+      peToast('Kept for now — this needs the latest database update to save permanently.', true);
       renderMain(); return;
     }
     peToast('NOT saved — check connection', true); return;
@@ -1489,6 +1498,12 @@ async function peSaveField(id, field, value, opts){
   e[field] = value;
   if(!opts.silent) peToast('Saved ✓');
   renderMain();
+}
+// How the price reads on the guest's proposal: 'total' (whole event, the default)
+// or 'pp' (per person). Only the presentation changes — the underlying total is
+// identical. peSaveField degrades gracefully if the column isn't in the DB yet.
+function peSetPriceDisplay(id, mode){
+  peSaveField(id, 'price_display', mode==='pp' ? 'pp' : 'total');
 }
 // One beverage choice sets BOTH bev_package_id and bev_mode — no separate toggle,
 // no way to contradict: '' = no package · 'dry' = no alcohol (soft drinks & water,
@@ -1951,8 +1966,15 @@ function peProposalHTML(e){
   }
   // One complete, rounded figure — food and beverage together, for the party.
   if(t.total && e.guests){
+    // Valentina chooses how the price reads for this guest — the whole-event total,
+    // or a per-person figure (which some groups prefer). Per person reconciles with
+    // the guest count: round(total ÷ guests) × guests ≈ total.
+    var ppMode = (e.price_display==='pp');
+    var priceLine = ppMode
+      ? e.guests+' guests · AED '+peMoney(Math.round(t.total/e.guests))+' per person'
+      : e.guests+' guests · AED '+peMoney(t.total);
     body += '<div class="rule" style="margin-top:26px"></div><div class="sec">Your event</div>'+
-      '<div class="dish" style="font-size:15px">'+e.guests+' guests · AED '+peMoney(t.total)+
+      '<div class="dish" style="font-size:15px">'+priceLine+
       (t.discount>0?'<br><span class="d" style="color:#7A8B4A">including a courtesy of AED '+peMoney(t.discount)+'</span>':'')+
       '<br><span class="d">'+(t.items.length?'Canapé selection':'Menu')+(bev?' and '+(bev.duration_hours?bev.duration_hours+'-hour ':'')+'beverage package':'')+' — everything included</span></div>';
   } else if(e.min_spend){
