@@ -2080,6 +2080,7 @@ if ('serviceWorker' in navigator) {
   .sch-cell:hover .sch-shift{box-shadow:0 0 0 2px var(--vino)}
   .sch-shift{border-radius:3px;padding:3px 5px;font-size:11px;line-height:1.3;transition:box-shadow .1s;min-height:42px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
   .sch-shift.working{background:#f0ebe3;color:var(--ink);border:1px solid var(--sabbia-dark)}
+  .sch-cover-tag{margin-top:2px;font-size:9px;line-height:1.2;font-weight:700;letter-spacing:.3px;color:#7a5a12;background:#f6e7bf;border:1px solid #e2c877;border-radius:3px;padding:1px 4px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-sans)}
   .sch-emp-id{display:block;font-size:9px;color:#b9ab9c;cursor:pointer;margin-top:2px;letter-spacing:1.2px;font-weight:500}
   .sch-emp-id:hover{color:var(--vino)}
   .sch-shift.actual{background:#e8f0e9;color:#2f5233;border:1px solid #a9c9b0;font-weight:600}
@@ -2137,6 +2138,34 @@ if ('serviceWorker' in navigator) {
   .sch-ord-btn:hover{color:#fff;background:var(--vino)}
   .sch-ord-off{visibility:hidden;cursor:default}
   .sch-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center}
+  /* Move-to-section column (Roster tool grid) — panel hidden until the Move button is tapped */
+  .sch-td-move{width:80px;padding:4px 6px;white-space:nowrap;vertical-align:middle}
+  .sch-move-btn{background:none;border:1px solid var(--sabbia-dark);color:var(--vino-light);border-radius:3px;font-size:10px;letter-spacing:.8px;padding:4px 8px;cursor:pointer;text-transform:uppercase;white-space:nowrap;font-family:var(--font-sans);transition:all .15s}
+  .sch-move-btn:hover{border-color:var(--vino);color:var(--vino)}
+  .sch-move-panel{display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .sch-move-panel.show{display:flex}
+  .sch-move-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--vino-light);white-space:nowrap;font-family:var(--font-sans)}
+  /* Quick-fill shift presets (shared editor — live schedule + Roster tool) */
+  .sch-preset-row{background:var(--sabbia-light);border:1px solid var(--sabbia-dark);border-radius:8px;padding:9px 10px;margin-bottom:14px}
+  .sch-preset-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+  .sch-preset-hd span{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--vino-light);font-weight:700;font-family:var(--font-sans)}
+  .sch-preset-edit{background:transparent;border:0;color:var(--vino);font-size:11px;cursor:pointer;font-family:var(--font-sans);font-weight:600}
+  .sch-preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .sch-preset-btn{background:var(--surface,#fff);border:1px solid var(--sabbia-dark);border-radius:7px;padding:8px 9px;text-align:left;cursor:pointer;font-family:var(--font-sans);display:flex;flex-direction:column;gap:2px}
+  .sch-preset-btn:hover{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+  .sch-preset-btn .nm{font-size:13px;font-weight:600;color:var(--ink)}
+  .sch-preset-btn .sub{font-size:11px;color:var(--vino-light)}
+  #foh-sch-preset-editor .sch-pe-ov{position:fixed;inset:0;background:rgba(30,10,10,.5);z-index:9600;display:flex;align-items:center;justify-content:center;padding:16px}
+  #foh-sch-preset-editor .sch-pe-box{background:var(--cream);border-radius:10px;max-width:460px;width:100%;max-height:88vh;overflow:auto;padding:20px}
+  #foh-sch-preset-editor .sch-pe-title{font-family:var(--font-serif);color:var(--vino);font-size:19px;margin-bottom:4px}
+  #foh-sch-preset-editor .sch-pe-row{border:1px solid var(--sabbia-dark);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--sabbia-light)}
+  #foh-sch-preset-editor .sch-pe-label{width:100%;box-sizing:border-box;font-size:14px;padding:7px 9px;border:1px solid var(--sabbia-dark);border-radius:6px;background:var(--surface,#fff);color:var(--ink);font-family:var(--font-sans);margin-bottom:6px}
+  #foh-sch-preset-editor .sch-pe-status{font-size:13px;padding:6px 8px;border:1px solid var(--sabbia-dark);border-radius:6px;background:var(--surface,#fff);color:var(--ink);font-family:var(--font-sans)}
+  #foh-sch-preset-editor .sch-pe-times{margin-top:8px}
+  #foh-sch-preset-editor .sch-pe-time{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--vino-light);margin-top:6px;flex-wrap:wrap}
+  #foh-sch-preset-editor .sch-pe-time select{font-size:13px;padding:4px 5px;border:1px solid var(--sabbia-dark);border-radius:5px;background:var(--surface,#fff);color:var(--ink)}
+  #foh-sch-preset-editor .sch-pe-splitlbl{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--vino);margin-top:8px;cursor:pointer}
+  #foh-sch-preset-editor .sch-pe-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
   .sch-modal-box{background:var(--cream);border-radius:6px;padding:24px;min-width:300px;max-width:380px;width:90%;max-height:90vh;overflow-y:auto}
   .sch-modal-title{font-family:var(--font-serif);font-size:16px;color:var(--vino);margin-bottom:16px;letter-spacing:.5px}
   .sch-modal-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -2190,7 +2219,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-09.3</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-10.1</div>
   </div>
 
   <!-- main scroll area -->
@@ -4377,9 +4406,69 @@ function fohRenderSchedView(){
   }
 }
 
-function fohRenderSchedWeek(){
+// ── Roster tool (planning sandbox) globals — inert while the tool is closed ──
+var fohSchedPlanMode = false;   // true only inside the Roster tool overlay
+var fohKplDraft = null;         // draft roster entries {sid|date: entry}
+var fohKplStaff = null;         // live staff snapshot while planning (NEW-badge check)
+
+// One day cell of the schedule grid — shared by the live schedule and the Roster
+// tool so there is only ever ONE way a cell looks and edits. Returns {html,hours,days}.
+function fohSchedDayCellHtml(staff, sid, ds2, today){
+  var rrow = fohSchedRoster[fohSchedRosterKey(sid, ds2)];
+  var isTod = ds2 === today;
+  var planChg = (fohSchedPlanMode && fohKplDraft && fohKplDraft[fohSchedRosterKey(sid, ds2)]) ? ' sch-plan-changed' : '';
+  var wHours = 0, wDays = 0, inner = '';
+  if(!rrow || rrow.status === 'working'){
+    var ts  = rrow ? formatTime(rrow.shift_start)  : '';
+    var te  = rrow ? formatTime(rrow.shift_end)    : '';
+    var ts2 = rrow ? formatTime(rrow.shift_start2) : '';
+    var te2 = rrow ? formatTime(rrow.shift_end2)   : '';
+    // In the Roster tool show the PLANNED shift only — attendance belongs on the
+    // live schedule (otherwise a cleared plan still looks full of clock-ins).
+    var att = fohSchedPlanMode ? { kind:'plan' } : fohSchedAttState(staff, ds2);
+    if(att.kind==='done'){
+      wHours+=att.hours; wDays++;
+      if(att.split){
+        inner+='<div class="sch-shift actual sch-split" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to edit / override clock-out">'+
+          att.segs.map(function(s){ return '<span class="sch-seg">'+s.in+'–'+(s.out||'·')+'</span>'; }).join('')+
+          (att.manual?'<span class="sch-actual-tag">edited</span>':'')+'</div>';
+      } else {
+        inner+='<div class="sch-shift actual" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to edit / override clock-out"><span>'+att.in+'</span><span>'+att.out+'</span>'+(att.manual?'<span class="sch-actual-tag">edited</span>':'')+'</div>';
+      }
+    } else if(att.kind==='in'){
+      wDays++;
+      inner+='<div class="sch-shift actual-live" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to set / close clock-out"><span>'+att.in+'</span><span class="sch-actual-open">working</span></div>';
+    } else if(att.kind==='open'){
+      wDays++;
+      inner+='<div class="sch-shift actual-open-flag" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')"><span>'+att.in+'</span><span class="sch-actual-close">tap to close</span></div>';
+    } else if(att.kind==='absent'){
+      wDays++;
+      inner+='<div class="sch-shift actual-absent">'+(ts&&te?'<span>'+ts+'</span><span>'+te+'</span>':'')+'<span class="sch-actual-tag">no clock-in</span></div>';
+    } else {
+      if(ts&&te){ wHours+=calcHours(ts,te,ts2,te2); wDays++; }
+      inner+='<div class="sch-shift working">'+(ts&&te?'<span>'+ts+'–'+te+'</span>'+((ts2&&te2)?'<span style="opacity:.8">'+ts2+'–'+te2+'</span>':''):'<span style="color:#bbb;font-size:10px">+ add</span>')+'</div>';
+    }
+  } else {
+    var meta = FOH_STATUS_META[rrow.status] || { label:rrow.status.toUpperCase(), bg:'off' };
+    if(rrow.status !== 'off') wDays++;
+    inner+='<div class="sch-shift '+meta.bg+'">'+meta.label+'</div>';
+  }
+  var coverKey = rrow && rrow.station_override;
+  if(coverKey && coverKey !== staff.section){ inner += '<div class="sch-cover-tag">&rarr; '+fohSchedSecLabel(coverKey)+'</div>'; }
+  var html = '<td class="sch-cell'+(isTod?' sch-cell-today':'')+planChg+'" onclick="fohSchedOpenEdit(\''+sid+'\',\''+ds2+'\')">'+inner+'</td>';
+  return { html: html, hours: wHours, days: wDays };
+}
+
+// The exact weekly grid the team already uses — reusable so the Roster tool renders
+// the SAME grid. opts.moveCol adds a Move-to-section column (tool only);
+// opts.showEmpty shows sections with no staff (tool only — new sections need it).
+function fohSchedWeekTableHtml(weekStart, opts){
+  opts = opts || {};
+  var moveCol = !!opts.moveCol;
+  var showEmpty = !!opts.showEmpty;
+  var span = moveCol ? 11 : 10;
   var today = formatDate(new Date());
-  var days = []; for(var i=0;i<7;i++) days.push(addDays(fohSchedWeekStart,i));
+  var days = []; for(var i=0;i<7;i++) days.push(addDays(weekStart,i));
   var dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   var html = '<table class="sch-grid"><thead><tr>';
@@ -4389,7 +4478,7 @@ function fohRenderSchedWeek(){
     html += '<th class="'+(ds===today?'sch-th-today':'')+'">' + dayNames[di] +
       '<br><span style="font-size:10px;opacity:.8">' + days[di].toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></th>';
   }
-  html += '<th>Hrs</th><th>Days</th></tr></thead><tbody>';
+  html += '<th>Hrs</th><th>Days</th>' + (moveCol?'<th></th>':'') + '</tr></thead><tbody>';
 
   // Events strip — one cell per day, up to 2 events each
   html += '<tr class="sch-events-row"><td class="sch-events-label" colspan="2">Activations</td>';
@@ -4404,12 +4493,12 @@ function fohRenderSchedWeek(){
     }
     html += '</td>';
   }
-  html += '<td colspan="2"></td></tr>';
+  html += '<td colspan="'+(moveCol?3:2)+'"></td></tr>';
 
   FOH_SECTIONS.forEach(function(sec){
     var allStaff = fohSchedStaff.filter(function(s){ return s.section === sec.key; });
-    if(!allStaff.length) return;
-    html += '<tr class="sch-station-hdr"><td colspan="10">' + sec.label + '</td></tr>';
+    if(!allStaff.length && !showEmpty) return;
+    html += '<tr class="sch-station-hdr"><td colspan="'+span+'">' + sec.label + '</td></tr>';
     allStaff.forEach(function(staff, sidx){
       var sid = staff.id;
       var wHours=0, wDays=0;
@@ -4420,56 +4509,35 @@ function fohRenderSchedWeek(){
         '<span class="sch-ord">'+upBtn+dnBtn+'</span>' +
         '<span class="sch-del-btn" onclick="fohSchedConfirmDelete(event,\''+sid+'\')">×</span>' +
         staff.name +
+        ((fohSchedPlanMode && fohKplStaff && !fohKplStaff.some(function(x){ return x.id === sid; })) ? '<span class="sch-plan-newbadge">NEW</span>' : '') +
         (staff.emp_id ? '<span class="sch-emp-id">'+staff.emp_id+'</span>' : '') + '</td>';
       html += '<td class="sch-td-role" onclick="fohSchedEditRole(event,\''+sid+'\')" style="cursor:pointer">' +
         staff.role + ' <span style="opacity:.3;font-size:10px">✎</span></td>';
 
       for(var dj=0;dj<days.length;dj++){
-        var ds2 = formatDate(days[dj]);
-        var rrow = fohSchedRoster[fohSchedRosterKey(sid, ds2)];
-        var isTod = ds2 === today;
-        html += '<td class="sch-cell'+(isTod?' sch-cell-today':'')+'" onclick="fohSchedOpenEdit(\''+sid+'\',\''+ds2+'\')">';
-        if(!rrow || rrow.status === 'working'){
-          var ts  = rrow ? formatTime(rrow.shift_start)  : '';
-          var te  = rrow ? formatTime(rrow.shift_end)    : '';
-          var ts2 = rrow ? formatTime(rrow.shift_start2) : '';
-          var te2 = rrow ? formatTime(rrow.shift_end2)   : '';
-          var att = fohSchedAttState(staff, ds2);
-          if(att.kind==='done'){
-            wHours+=att.hours; wDays++;
-            if(att.split){
-              html+='<div class="sch-shift actual sch-split" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to edit / override clock-out">'+
-                att.segs.map(function(s){ return '<span class="sch-seg">'+s.in+'–'+(s.out||'·')+'</span>'; }).join('')+
-                (att.manual?'<span class="sch-actual-tag">edited</span>':'')+'</div>';
-            } else {
-              html+='<div class="sch-shift actual" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to edit / override clock-out"><span>'+att.in+'</span><span>'+att.out+'</span>'+(att.manual?'<span class="sch-actual-tag">edited</span>':'')+'</div>';
-            }
-          } else if(att.kind==='in'){
-            wDays++;
-            html+='<div class="sch-shift actual-live" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')" title="Tap to set / close clock-out"><span>'+att.in+'</span><span class="sch-actual-open">working</span></div>';
-          } else if(att.kind==='open'){
-            wDays++;
-            html+='<div class="sch-shift actual-open-flag" onclick="fohSchedCloseShift(event,\''+sid+'\',\''+ds2+'\')"><span>'+att.in+'</span><span class="sch-actual-close">tap to close</span></div>';
-          } else if(att.kind==='absent'){
-            wDays++;
-            html+='<div class="sch-shift actual-absent">'+(ts&&te?'<span>'+ts+'</span><span>'+te+'</span>':'')+'<span class="sch-actual-tag">no clock-in</span></div>';
-          } else {
-            if(ts&&te){ wHours+=calcHours(ts,te,ts2,te2); wDays++; }
-            html+='<div class="sch-shift working">'+(ts&&te?'<span>'+ts+'–'+te+'</span>'+((ts2&&te2)?'<span style="opacity:.8">'+ts2+'–'+te2+'</span>':''):'<span style="color:#bbb;font-size:10px">+ add</span>')+'</div>';
-          }
-        } else {
-          var meta = FOH_STATUS_META[rrow.status] || { label:rrow.status.toUpperCase(), bg:'off' };
-          if(rrow.status !== 'off') wDays++;
-          html+='<div class="sch-shift '+meta.bg+'">'+meta.label+'</div>';
-        }
-        html += '</td>';
+        var cell = fohSchedDayCellHtml(staff, sid, formatDate(days[dj]), today);
+        html += cell.html; wHours += cell.hours; wDays += cell.days;
       }
       html += '<td class="sch-td-hours">'+(wHours>0?(Math.round(wHours*10)/10)+'h':'—')+'</td>';
       html += '<td class="sch-td-days">'+(wDays>0?wDays:'—')+'</td>';
+
+      if(moveCol){
+        var mpid = 'fsmp' + sid.replace(/-/g,'');
+        var stOpts = '';
+        FOH_SECTIONS.forEach(function(o){ stOpts += '<option value="'+fohEvEsc(o.key)+'"'+(o.key===staff.section?' selected':'')+'>'+o.label+'</option>'; });
+        html += '<td class="sch-td-move">' +
+          '<button class="sch-move-btn" onclick="fohSchedShowMove(\''+mpid+'\')">&#8596; Move</button>' +
+          '<div class="sch-move-panel" id="'+mpid+'">' +
+            '<span class="sch-move-label">Move to</span>' +
+            '<select class="dish-move-select" id="'+mpid+'sel">'+stOpts+'</select>' +
+            '<button class="dish-move-yes" onclick="fohSchedMoveStation(\''+sid+'\',\''+mpid+'\')">Move</button>' +
+            '<button class="dish-move-no" onclick="fohSchedHideMove(\''+mpid+'\')">Cancel</button>' +
+          '</div></td>';
+      }
       html += '</tr>';
     });
 
-    html += '<tr class="sch-add-row"><td colspan="10">' +
+    html += '<tr class="sch-add-row"><td colspan="'+span+'">' +
       '<button class="sch-add-staff-btn" onclick="fohSchedShowAddStaff(\''+sec.key+'\')">+ Add staff to '+sec.label+'</button>' +
       '<div class="sch-add-staff-panel" id="foh-sadd-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'">' +
         '<input type="text" class="sch-add-name-inp" id="foh-sadd-name-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'" placeholder="Full name" />' +
@@ -4494,11 +4562,21 @@ function fohRenderSchedWeek(){
     html += '<td>'+(dayTotal>0?dayTotal+'h':'—')+'</td>';
   }
   grandTotal = Math.round(grandTotal*10)/10;
-  html += '<td>'+(grandTotal>0?grandTotal+'h':'—')+'</td><td>—</td></tr></tfoot>';
+  html += '<td>'+(grandTotal>0?grandTotal+'h':'—')+'</td><td>—</td>' + (moveCol?'<td></td>':'') + '</tr></tfoot>';
   html += '</table>';
+  return html;
+}
 
+function fohRenderSchedWeek(){
+  // In planning mode, record the change into the draft (never the live DB) first.
+  if(fohSchedPlanMode) fohSchedPlanCapture();
+  var tool = document.getElementById('foh-kpl-full');
+  var toolOpen = tool && tool.style.display !== 'none';
+  // While the Roster tool is open the real grid is hidden — don't render it (saves
+  // work and avoids duplicate element ids for the Move/Add panels). Just sync the tool.
+  if(toolOpen){ fohKrtRender(); return; }
   var wrap = document.getElementById('foh-sch-grid-wrap');
-  if(wrap) wrap.innerHTML = html;
+  if(wrap) wrap.innerHTML = fohSchedWeekTableHtml(fohSchedWeekStart);
 }
 
 function fohRenderSchedDay(){
@@ -4562,6 +4640,14 @@ function fohRenderSchedDay(){
 }
 
 // ── Edit modal ──
+// "Working in section" picker — cover a different section for ONE day only.
+function fohSchedSectionOptions(selKey){
+  return FOH_SECTIONS.map(function(x){
+    return '<option value="' + x.key + '"' + (x.key === selKey ? ' selected' : '') + '>' + x.label + '</option>';
+  }).join('');
+}
+function fohSchedSecLabel(key){ var x = FOH_SECTIONS.find(function(s){ return s.key === key; }); return x ? x.label : key; }
+
 function fohSchedOpenEdit(staffId, date){
   if(!fohSchedGuard(function(){ fohSchedOpenEdit(staffId,date); })) return;
   if(fohSchedPasteMode){ fohSchedPasteToCell(staffId, date); return; }   // paste mode: tap = paste
@@ -4592,6 +4678,11 @@ function fohSchedOpenEdit(staffId, date){
   var st2 = document.getElementById('foh-sch-split-toggle');
   if(hasSplit){ sf.style.display='block'; st2.textContent='− Remove split shift'; st2.classList.add('active'); }
   else { sf.style.display='none'; st2.textContent='+ Add split shift'; st2.classList.remove('active'); }
+  // "Working in section" — defaults to their home section; pick another to cover it for this day only.
+  var homeSec = staff ? (staff.section || '') : '';
+  var secSel = document.getElementById('foh-sch-section-sel');
+  if(secSel){ secSel.innerHTML = fohSchedSectionOptions((row && row.station_override) ? row.station_override : homeSec); secSel.setAttribute('data-home', homeSec); }
+  fohSchedRenderPresets();
   fohSchedStatusChange();
   document.getElementById('foh-sch-modal').style.display='flex';
 }
@@ -4621,6 +4712,10 @@ async function fohSchedSaveShift(){
   var start2=hasSplit2?document.getElementById('foh-sch-start2-h').value+':'+document.getElementById('foh-sch-start2-m').value:null;
   var end2  =hasSplit2?document.getElementById('foh-sch-end2-h').value  +':'+document.getElementById('foh-sch-end2-m').value  :null;
   var notes =document.getElementById('foh-sch-notes-inp').value.trim();
+  var secSel=document.getElementById('foh-sch-section-sel');
+  var homeSec=secSel?(secSel.getAttribute('data-home')||''):'';
+  var chosenSec=secSel?secSel.value:'';
+  var stationOverride=(status==='working' && chosenSec && chosenSec!==homeSec)?chosenSec:null;
   document.getElementById('foh-sch-modal').style.display='none';
   var key=fohSchedRosterKey(staffId,date);
   var payload=Object.assign({},fohSchedRoster[key]||{},{
@@ -4629,11 +4724,13 @@ async function fohSchedSaveShift(){
     shift_end:   status==='working'?(end||null):null,
     shift_start2:status==='working'?(start2||null):null,
     shift_end2:  status==='working'?(end2||null):null,
+    station_override:stationOverride,
     notes:notes||null, updated_at:new Date().toISOString()
   });
   var prevRow=fohSchedRoster[key];   // snapshot for revert on failure
   fohSchedRoster[key]=payload;
   fohRenderSchedWeek();
+  if(fohSchedPlanMode){ fohSchedEditTarget=null; return; }   // planning: the render above captured it into the draft — no DB write
   var res=await sb.from('foh_roster').upsert(payload,{onConflict:'staff_id,work_date'});
   if(res.error){
     // Put the grid back to the saved value so it never shows an unsaved shift as real.
@@ -4646,6 +4743,7 @@ async function fohSchedSaveShift(){
 
 // ── Day events (up to 2 per day, shown at the top of the schedule) ──
 function fohSchedOpenEvents(date){
+  if(fohSchedPlanMode){ alert('Activations are set on the live schedule, not while planning shifts.'); return; }
   if(!fohSchedGuard(function(){ fohSchedOpenEvents(date); })) return;
   fohSchedEventDate = date;
   var evs = fohSchedEvents[date] || [];
@@ -4769,6 +4867,7 @@ async function fohSchedWriteClipboard(targets){
     fohSchedRoster[key]=payload; payloads.push(payload);
   });
   fohRenderSchedWeek();
+  if(fohSchedPlanMode) return payloads.length;   // planning: captured into the draft by the render — no DB write
   var res=await sb.from('foh_roster').upsert(payloads,{onConflict:'staff_id,work_date'});
   if(res.error){
     // Put every pasted cell back so the grid never shows unsaved shifts as real.
@@ -4817,6 +4916,7 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && fohSche
 // ── Inline edit emp_id ──
 function fohSchedEditEmpId(event, staffId){
   event.stopPropagation();
+  if(fohSchedPlanMode) return;   // employee IDs are managed on the live schedule, not in the plan
   if(!fohSchedGuard(function(){ fohSchedEditEmpId(event,staffId); })) return;
   var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
   if(!staff) return;
@@ -4846,6 +4946,7 @@ async function fohSchedSaveRole(staffId, input){
   var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
   if(!staff||!newRole||newRole===staff.role){ fohRenderSchedWeek(); return; }
   staff.role=newRole; fohRenderSchedWeek();
+  if(fohSchedPlanMode) return;   // planning: role change captured into the draft — no DB write
   var res=await sb.from('foh_staff').update({role:newRole}).eq('id',staffId);
   if(res.error){ console.error('Role error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); }
 }
@@ -4853,6 +4954,7 @@ async function fohSchedSaveRole(staffId, input){
 // ── Close open shift ──
 function fohSchedCloseShift(event, staffId, dateStr){
   event.stopPropagation();
+  if(fohSchedPlanMode) return;   // closing a real clock-out is a live action, not planning
   if(!fohSchedGuard(function(){ fohSchedCloseShift(event,staffId,dateStr); })) return;
   var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
   if(!staff||!staff.emp_id) return;
@@ -4892,6 +4994,7 @@ async function fohSchedPersistSectionOrder(orderedMates){
   var updates=[];
   orderedMates.forEach(function(s,i){ var want=i+1; if(s.sort_order!==want){ s.sort_order=want; updates.push(s); } });
   for(var i=0;i<updates.length;i++){
+    if(fohSchedPlanMode) continue;   // planning: reorder captured into the draft — no DB write
     var res=await sb.from('foh_staff').update({sort_order:updates[i].sort_order}).eq('id',updates[i].id);
     if(res.error){ console.error('Reorder error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); return; }
   }
@@ -4917,6 +5020,18 @@ function fohSchedConfirmDelete(event, staffId){
   if(!fohSchedGuard(null)) return;
   var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
   if(!staff) return;
+  if(fohSchedPlanMode){
+    // In planning you can only remove a person you ADDED in this plan; a real
+    // teammate is removed on the live schedule (and you can move them instead).
+    var isNew = (fohKplNewStaff||[]).some(function(n){ return n.id === staffId; });
+    if(!isNew){ alert('Removing a teammate from the roster is done on the live schedule, not while planning.\n\nIn the plan you can move ' + staff.name + ' to another section instead.'); return; }
+    if(!confirm('Remove ' + staff.name + ' from your plan? (They were only added here — nothing on the live schedule changes.)')) return;
+    fohSchedStaff = fohSchedStaff.filter(function(s){ return s.id !== staffId; });
+    fohKplNewStaff = fohKplNewStaff.filter(function(n){ return n.id !== staffId; });
+    Object.keys(fohKplDraft).forEach(function(k){ if(k.indexOf(staffId + '|') === 0) delete fohKplDraft[k]; });
+    fohRenderSchedWeek(); fohSchedPlanSaveDraft();
+    return;
+  }
   if(!confirm('Remove '+staff.name+' from roster? This cannot be undone.')) return;
   fohSchedStaff=fohSchedStaff.filter(function(s){ return s.id!==staffId; });
   fohRenderSchedWeek();
@@ -4949,6 +5064,7 @@ async function fohSchedSaveNewStaff(sectionKey){
   var tempId='temp-'+Date.now();
   var newStaff={id:tempId,name:name,role:role,section:sectionKey,sort_order:sortOrder,active:true};
   fohSchedStaff.push(newStaff); fohRenderSchedWeek();
+  if(fohSchedPlanMode) return;   // planning: the new person lives in the draft until Bring live inserts them
   var res=await sb.from('foh_staff').insert({name:name,role:role,section:sectionKey,sort_order:sortOrder,active:true}).select().single();
   if(res.error){
     console.error('Add staff error:',res.error);
@@ -4958,6 +5074,1063 @@ async function fohSchedSaveNewStaff(sectionKey){
     if(idx!==-1) fohSchedStaff[idx].id=res.data.id;
     fohRenderSchedWeek();
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  FOH ROSTER TOOL — planning sandbox (ported from the live Kitchen tool).
+//  The tool reuses the EXACT schedule grid + editors. While fohSchedPlanMode is
+//  true every DB write is skipped (one guard at each write site), so edits live
+//  only in memory; fohRenderSchedWeek() captures the difference vs the live copy
+//  (fohKplLive/fohKplStaff) into a draft saved on this device. "Bring live"
+//  publishes only the ticked weeks (snapshot first, so it can be undone).
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Move a person to another section (permanent move — used by the tool grid) ──
+function fohSchedShowMove(mpid){
+  if(!fohSchedGuard(function(){ fohSchedShowMove(mpid); })) return;
+  document.querySelectorAll('.sch-move-panel.show').forEach(function(p){ p.classList.remove('show'); });
+  var el=document.getElementById(mpid);
+  if(el) el.classList.add('show');
+}
+function fohSchedHideMove(mpid){
+  var el=document.getElementById(mpid);
+  if(el) el.classList.remove('show');
+}
+async function fohSchedMoveStation(staffId, mpid){
+  var sel=document.getElementById(mpid+'sel');
+  if(!sel) return;
+  var target=sel.value;
+  fohSchedHideMove(mpid);
+  var staff=fohSchedStaff.find(function(s){ return s.id===staffId; });
+  if(!staff || target===staff.section) return;
+  staff.section=target;   // optimistic local update
+  fohRenderSchedWeek();
+  if(!FOH_DEV_READ_ONLY && !fohSchedPlanMode){
+    var res=await sb.from('foh_staff').update({section:target}).eq('id',staffId);
+    if(res.error){ console.error('Move error:',res.error); fohLoadSchedData().then(fohRenderSchedWeek); }
+  }
+}
+
+// ── Sections from the database (foh_sections) — falls back to the hardcoded 10 ──
+async function loadFohSections(){
+  try{
+    var res = await sb.from('foh_sections').select('*').eq('active', true).order('sort_order');
+    if(res.error || !res.data || !res.data.length) return;   // table missing/empty → keep defaults
+    var loaded = res.data.map(function(r){ return { key:r.section_key, label:r.label }; });
+    FOH_SECTIONS.length = 0; loaded.forEach(function(s){ FOH_SECTIONS.push(s); });
+  }catch(e){ /* keep the hardcoded defaults */ }
+}
+
+// ── Quick-fill shift presets (shared with the team via foh_shift_presets) ──
+var FOH_PRESET_DEFAULTS = [
+  { slot:1, label:'Lunch',   status:'working', shift_start:'11:00', shift_end:'17:00', shift_start2:null,    shift_end2:null },
+  { slot:2, label:'Dinner',  status:'working', shift_start:'17:00', shift_end:'01:00', shift_start2:null,    shift_end2:null },
+  { slot:3, label:'Double',  status:'working', shift_start:'11:00', shift_end:'16:00', shift_start2:'18:00', shift_end2:'01:00' },
+  { slot:4, label:'Day off', status:'off',     shift_start:null,    shift_end:null,    shift_start2:null,    shift_end2:null }
+];
+var fohShiftPresets = FOH_PRESET_DEFAULTS.map(function(p){ return Object.assign({}, p); });
+async function loadFohShiftPresets(){
+  try{
+    var res = await sb.from('foh_shift_presets').select('*').order('slot');
+    if(res.error || !res.data || !res.data.length) return;   // table not there yet → keep defaults
+    var byslot={}; res.data.forEach(function(r){ byslot[r.slot]=r; });
+    fohShiftPresets = [1,2,3,4].map(function(n){ var r=byslot[n]||FOH_PRESET_DEFAULTS[n-1]; return { slot:n, label:r.label, status:r.status||'working', shift_start:r.shift_start||null, shift_end:r.shift_end||null, shift_start2:r.shift_start2||null, shift_end2:r.shift_end2||null }; });
+  }catch(e){}
+}
+function fohSchedPresetSub(p){
+  if(p.status==='working'){ return (p.shift_start||'—')+'–'+(p.shift_end||'—') + (p.shift_start2&&p.shift_end2 ? ' · '+p.shift_start2+'–'+p.shift_end2 : ''); }
+  return (FOH_STATUS_META[p.status] && FOH_STATUS_META[p.status].label) || String(p.status).toUpperCase();
+}
+function fohSchedRenderPresets(){
+  var host=document.getElementById('foh-sch-preset-row'); if(!host) return;
+  var html='<div class="sch-preset-hd"><span>Quick fill</span><button type="button" class="sch-preset-edit" onclick="fohSchedOpenPresetEditor()">&#9998; Edit</button></div><div class="sch-preset-grid">';
+  fohShiftPresets.forEach(function(p, i){
+    html += '<button type="button" class="sch-preset-btn" onclick="fohSchedApplyPreset('+i+')"><span class="nm">'+fohEvEsc(p.label)+'</span><span class="sub">'+fohEvEsc(fohSchedPresetSub(p))+'</span></button>';
+  });
+  html += '</div>';
+  host.innerHTML=html;
+}
+function fohSchedSetHM(hid, mid, t){ if(!t) return; var parts=String(t).split(':'); var h=document.getElementById(hid), m=document.getElementById(mid); if(h) h.value=parts[0]; if(m) m.value=(parts[1]||'00'); }
+// One tap: fill the editor from a preset AND save it (draft in the tool, live on the schedule).
+function fohSchedApplyPreset(i){
+  var p=fohShiftPresets[i]; if(!p || !fohSchedEditTarget) return;
+  document.getElementById('foh-sch-status-sel').value = p.status;
+  fohSchedStatusChange();
+  if(p.status==='working'){
+    fohSchedSetHM('foh-sch-start-h','foh-sch-start-m', p.shift_start||'14:00');
+    fohSchedSetHM('foh-sch-end-h','foh-sch-end-m', p.shift_end||'00:00');
+    var hasSplit=!!(p.shift_start2 && p.shift_end2);
+    var sf=document.getElementById('foh-sch-split-fields'), tg=document.getElementById('foh-sch-split-toggle');
+    if(sf) sf.style.display = hasSplit?'block':'none';
+    if(tg){ tg.textContent = hasSplit?'− Remove split shift':'+ Add split shift'; tg.classList.toggle('active', hasSplit); }
+    if(hasSplit){ fohSchedSetHM('foh-sch-start2-h','foh-sch-start2-m', p.shift_start2); fohSchedSetHM('foh-sch-end2-h','foh-sch-end2-m', p.shift_end2); }
+  }
+  fohSchedSaveShift();
+}
+// ── Edit the 4 presets (shared with the team) ──
+function fohSchedOpenPresetEditor(){
+  var host=document.getElementById('foh-sch-preset-editor');
+  if(!host){ host=document.createElement('div'); host.id='foh-sch-preset-editor'; document.body.appendChild(host); }
+  var STATS=[['working','Working'],['off','Day off'],['wo','Weekly off'],['sl','Sick leave'],['ul','Unpaid leave'],['al','Annual leave'],['ph','Public holiday'],['em','Emergency'],['tr','Training'],['cat','Catering'],['fs','Finishing']];
+  function hOpts(sel){ var o=''; for(var h=0;h<24;h++){ var hh=(h<10?'0':'')+h; o+='<option value="'+hh+'"'+(hh===sel?' selected':'')+'>'+hh+'</option>'; } return o; }
+  function mOpts(sel){ return ['00','15','30','45'].map(function(m){ return '<option value="'+m+'"'+(m===sel?' selected':'')+'>'+m+'</option>'; }).join(''); }
+  function pt(t,part){ if(!t) return part==='h'?'14':'00'; var p=String(t).split(':'); return part==='h'?(p[0]||'14'):(p[1]||'00'); }
+  function sOpts(sel){ return STATS.map(function(s){ return '<option value="'+s[0]+'"'+(s[0]===sel?' selected':'')+'>'+s[1]+'</option>'; }).join(''); }
+  var rows=fohShiftPresets.map(function(p,i){
+    var w=p.status==='working', hasSplit=!!(p.shift_start2&&p.shift_end2);
+    return '<div class="sch-pe-row" data-i="'+i+'">'
+      +'<input type="text" class="sch-pe-label" value="'+String(p.label||'').replace(/"/g,'&quot;')+'" placeholder="Name" />'
+      +'<select class="sch-pe-status" onchange="fohSchedPresetEditorToggle('+i+')">'+sOpts(p.status)+'</select>'
+      +'<div class="sch-pe-times" id="foh-sch-pe-times-'+i+'" style="display:'+(w?'block':'none')+'">'
+        +'<div class="sch-pe-time"><span>Start</span><select class="sch-pe-sh">'+hOpts(pt(p.shift_start,'h'))+'</select>:<select class="sch-pe-sm">'+mOpts(pt(p.shift_start,'m'))+'</select>'
+        +'<span style="margin-left:8px">End</span><select class="sch-pe-eh">'+hOpts(pt(p.shift_end,'h'))+'</select>:<select class="sch-pe-em">'+mOpts(pt(p.shift_end,'m'))+'</select></div>'
+        +'<label class="sch-pe-splitlbl"><input type="checkbox" class="sch-pe-split-chk" '+(hasSplit?'checked':'')+' onchange="fohSchedPresetEditorToggle('+i+')"> split shift</label>'
+        +'<div class="sch-pe-time sch-pe-split2" id="foh-sch-pe-split2-'+i+'" style="display:'+(hasSplit?'block':'none')+'"><span>Again</span><select class="sch-pe-s2h">'+hOpts(pt(p.shift_start2,'h'))+'</select>:<select class="sch-pe-s2m">'+mOpts(pt(p.shift_start2,'m'))+'</select>'
+        +'<span style="margin-left:8px">to</span><select class="sch-pe-e2h">'+hOpts(pt(p.shift_end2,'h'))+'</select>:<select class="sch-pe-e2m">'+mOpts(pt(p.shift_end2,'m'))+'</select></div>'
+      +'</div></div>';
+  }).join('');
+  host.innerHTML='<div class="sch-pe-ov" onclick="fohSchedClosePresetEditor(event)"><div class="sch-pe-box" onclick="event.stopPropagation()">'
+    +'<div class="sch-pe-title">Edit quick-fill presets</div>'
+    +'<div style="font-size:12px;color:var(--vino-light);margin-bottom:12px">These 4 buttons are shared with the whole team. Change the name, what it does, and the times.</div>'
+    +rows
+    +'<div class="sch-pe-actions"><button class="sch-modal-cancel" onclick="fohSchedClosePresetEditor()">Cancel</button><button class="sch-modal-save" onclick="fohSchedSavePresets()">Save presets</button></div>'
+  +'</div></div>';
+}
+function fohSchedPresetEditorToggle(i){
+  var row=document.querySelector('#foh-sch-preset-editor .sch-pe-row[data-i="'+i+'"]'); if(!row) return;
+  var working=row.querySelector('.sch-pe-status').value==='working';
+  document.getElementById('foh-sch-pe-times-'+i).style.display = working?'block':'none';
+  var chk=row.querySelector('.sch-pe-split-chk');
+  document.getElementById('foh-sch-pe-split2-'+i).style.display = (working && chk && chk.checked)?'block':'none';
+}
+function fohSchedClosePresetEditor(ev){ if(ev && ev.target && !ev.target.classList.contains('sch-pe-ov')) return; var h=document.getElementById('foh-sch-preset-editor'); if(h) h.innerHTML=''; }
+async function fohSchedSavePresets(){
+  var rows=document.querySelectorAll('#foh-sch-preset-editor .sch-pe-row'); var out=[];
+  Array.prototype.forEach.call(rows, function(r,i){
+    var label=(r.querySelector('.sch-pe-label').value||'').trim() || ('Preset '+(i+1));
+    var status=r.querySelector('.sch-pe-status').value;
+    var p={ slot:i+1, label:label, status:status, shift_start:null, shift_end:null, shift_start2:null, shift_end2:null };
+    if(status==='working'){
+      p.shift_start=r.querySelector('.sch-pe-sh').value+':'+r.querySelector('.sch-pe-sm').value;
+      p.shift_end  =r.querySelector('.sch-pe-eh').value+':'+r.querySelector('.sch-pe-em').value;
+      var chk=r.querySelector('.sch-pe-split-chk');
+      if(chk && chk.checked){ p.shift_start2=r.querySelector('.sch-pe-s2h').value+':'+r.querySelector('.sch-pe-s2m').value; p.shift_end2=r.querySelector('.sch-pe-e2h').value+':'+r.querySelector('.sch-pe-e2m').value; }
+    }
+    out.push(p);
+  });
+  fohShiftPresets=out; fohSchedRenderPresets(); fohSchedClosePresetEditor();
+  if(!FOH_DEV_READ_ONLY){
+    var res=await sb.from('foh_shift_presets').upsert(out.map(function(p){ return { slot:p.slot, label:p.label, status:p.status, shift_start:p.shift_start, shift_end:p.shift_end, shift_start2:p.shift_start2, shift_end2:p.shift_end2, updated_at:new Date().toISOString() }; }), { onConflict:'slot' });
+    if(res.error){ alert('Presets are set on this screen, but couldn’t be saved for the team: '+res.error.message+(res.error.code==='42P01'?'\n\nRun foh-shift-presets-schema.sql once first.':'')); }
+  }
+}
+
+// ── Several weeks SIDE BY SIDE — one grid, one Name column, weeks flow left→right ──
+function fohSchedMultiWeekTableHtml(weekStart, numWeeks){
+  var today = formatDate(new Date());
+  var dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var COLS = 1 + 7*numWeeks + 3;   // name(+role), all days, hrs, days, move
+  var weeks = []; for(var w=0; w<numWeeks; w++) weeks.push(addDays(weekStart, w*7));
+
+  var html = '<table class="sch-grid sch-multi"><thead>';
+  html += '<tr><th class="sch-th-name" rowspan="2">Name</th>';
+  weeks.forEach(function(ws){ var we=addDays(ws,6); var wmon=formatDate(ws);
+    var lbl = 'Week of '+ws.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' &ndash; '+we.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    html += '<th class="sch-weekgroup" colspan="7"><div class="krt-wk-hd"><span>'+lbl+'</span><span class="krt-wk-actions">'+fohKrtWeekTabsHtml(wmon)+'</span></div></th>';
+  });
+  html += '<th rowspan="2">Hrs</th><th rowspan="2">Days</th><th rowspan="2"></th></tr><tr>';
+  weeks.forEach(function(ws){ for(var d=0; d<7; d++){ var day=addDays(ws,d), ds=formatDate(day);
+    html += '<th class="'+(ds===today?'sch-th-today':'')+(d===0?' sch-weekstart':'')+'">'+dayNames[d]+
+      '<br><span style="font-size:10px;opacity:.8">'+day.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</span></th>';
+  }});
+  html += '</tr></thead><tbody>';
+
+  // Events strip across every week
+  html += '<tr class="sch-events-row"><td class="sch-events-label" colspan="1">Activations</td>';
+  weeks.forEach(function(ws){ for(var d=0; d<7; d++){ var eds=formatDate(addDays(ws,d)); var evs=fohSchedEvents[eds]||[];
+    html += '<td class="sch-events-cell'+(eds===today?' sch-cell-today':'')+(d===0?' sch-weekstart':'')+'" onclick="fohSchedOpenEvents(\''+eds+'\')">';
+    if(evs.length){ for(var evi=0; evi<evs.length; evi++) html += '<div class="sch-event-chip">'+fohEvEsc(evs[evi].name)+'</div>'; }
+    else html += '<div class="sch-event-add">+</div>';
+    html += '</td>';
+  }});
+  html += '<td colspan="3"></td></tr>';
+
+  FOH_SECTIONS.forEach(function(sec){
+    var allStaff = fohSchedStaff.filter(function(s){ return s.section===sec.key; });
+    html += '<tr class="sch-station-hdr"><td colspan="'+COLS+'">'+sec.label+'</td></tr>';
+    allStaff.forEach(function(staff, xi){
+      var sid=staff.id, mpid='fsmpM'+String(sid).replace(/-/g,'');
+      var wHours=0, wDays=0;
+      var upBtn = xi>0 ? '<span class="sch-ord-btn" onclick="fohSchedMoveStaff(event,\''+sid+'\',-1)" title="Move up">&#9650;</span>' : '<span class="sch-ord-btn sch-ord-off">&#9650;</span>';
+      var dnBtn = xi<allStaff.length-1 ? '<span class="sch-ord-btn" onclick="fohSchedMoveStaff(event,\''+sid+'\',1)" title="Move down">&#9660;</span>' : '<span class="sch-ord-btn sch-ord-off">&#9660;</span>';
+      html += '<tr>';
+      html += '<td class="sch-td-name sch-td-namemulti" onclick="fohSchedEditEmpId(event,\''+sid+'\')" title="Tap to set employee ID" style="cursor:pointer">' +
+        '<span class="sch-ord">'+upBtn+dnBtn+'</span>' +
+        '<span class="sch-del-btn" onclick="fohSchedConfirmDelete(event,\''+sid+'\')" title="Remove">×</span>' +
+        '<span class="sch-multi-info"><span class="sch-multi-nm">'+staff.name+
+          ((fohSchedPlanMode && fohKplStaff && !fohKplStaff.some(function(x){ return x.id===sid; })) ? '<span class="sch-plan-newbadge">NEW</span>' : '') +
+          (staff.emp_id ? '<span class="sch-emp-id">'+staff.emp_id+'</span>' : '') + '</span>' +
+          '<span class="sch-multi-role" onclick="fohSchedEditRole(event,\''+sid+'\')" title="Click to edit role">'+staff.role+' <span style="opacity:.3;font-size:9px">✎</span></span>' +
+        '</span></td>';
+      weeks.forEach(function(ws){ for(var d=0; d<7; d++){
+        var cell = fohSchedDayCellHtml(staff, sid, formatDate(addDays(ws,d)), today);
+        html += (d===0) ? cell.html.replace('class="sch-cell', 'class="sch-cell sch-weekstart') : cell.html;
+        wHours += cell.hours; wDays += cell.days;
+      }});
+      html += '<td class="sch-td-hours">'+(wHours>0?(Math.round(wHours*10)/10)+'h':'—')+'</td>';
+      html += '<td class="sch-td-days">'+(wDays>0?wDays:'—')+'</td>';
+      var stOpts=''; FOH_SECTIONS.forEach(function(o){ stOpts += '<option value="'+fohEvEsc(o.key)+'"'+(o.key===staff.section?' selected':'')+'>'+o.label+'</option>'; });
+      html += '<td class="sch-td-move"><button class="sch-move-btn" onclick="fohSchedShowMove(\''+mpid+'\')">&#8596; Move</button>' +
+        '<div class="sch-move-panel" id="'+mpid+'"><span class="sch-move-label">Move to</span>' +
+        '<select class="dish-move-select" id="'+mpid+'sel">'+stOpts+'</select>' +
+        '<button class="dish-move-yes" onclick="fohSchedMoveStation(\''+sid+'\',\''+mpid+'\')">Move</button>' +
+        '<button class="dish-move-no" onclick="fohSchedHideMove(\''+mpid+'\')">Cancel</button></div></td>';
+      html += '</tr>';
+    });
+    html += '<tr class="sch-add-row"><td colspan="'+COLS+'">' +
+      '<button class="sch-add-staff-btn" onclick="fohSchedShowAddStaff(\''+sec.key+'\')">+ Add staff to '+sec.label+'</button>' +
+      '<div class="sch-add-staff-panel" id="foh-sadd-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'">' +
+        '<input type="text" class="sch-add-name-inp" id="foh-sadd-name-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'" placeholder="Full name" />' +
+        '<input type="text" class="sch-add-role-inp" id="foh-sadd-role-'+sec.key.replace(/[^a-z0-9]/gi,'_')+'" placeholder="Role" />' +
+        '<button class="dish-move-yes" onclick="fohSchedSaveNewStaff(\''+sec.key+'\')">Add</button>' +
+        '<button class="dish-move-no" onclick="fohSchedHideAddStaff(\''+sec.key+'\')">Cancel</button>' +
+      '</div></td></tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+// ── Sandbox state ──
+var FOH_SCHED_PLAN_LS = 'fohRosterDraftV2';
+var FOH_KPL_SNAP_LS   = 'fohRosterSnapshotV1';
+var fohKplLive = {};        // 'staffId|date' -> live roster row (the "before")
+var fohKplMode = 'preview';
+var fohKplDirty = false;
+var fohKplMins = {};        // sectionKey -> {wd,we} coverage minimums (defaults to 1)
+var fohKplFrom = null;      // Monday of the publish span
+var fohKplNumWeeks = 0;
+var fohKplDraftSec = {};    // staffId -> overridden section (a move not yet live)
+var fohKplDraftOrd = {};    // staffId -> order within its section (not yet live)
+var fohKplNewStaff = [];    // brand-new people added in the plan
+var fohKplNewSeq = 0;
+var fohKrtWeeks = 1;        // weeks shown at once (1 = single)
+var fohKrtSpanN = 4;        // remembered "several weeks" count
+fohKplDraft = {};           // declared with the grid builders; the draft entries live here
+
+function fohKplKey(sid, ds){ return sid + '|' + ds; }
+function fohKplDateISO(wk, d){ return formatDate(addDays(fohKplFrom, wk*7 + d)); }
+function fohKplEntry(sid, ds){ return fohKplMode==='draft' ? fohKplDraft[fohKplKey(sid,ds)] : fohKplLive[fohKplKey(sid,ds)]; }
+function fohKplAllPeople(){ return (fohKplStaff||[]).concat(fohKplNewStaff); }
+function fohKplEffSec(s){ return (fohKplMode==='draft' && fohKplDraftSec[s.id]) ? fohKplDraftSec[s.id] : s.section; }
+function fohKplSections(){
+  var list = FOH_SECTIONS.slice();
+  var known = {}; list.forEach(function(s){ known[s.key]=1; });
+  var extra = false;
+  fohKplAllPeople().forEach(function(s){ var k=fohKplEffSec(s); if(k && !known[k]) extra = true; });
+  if(extra) list = list.concat([{ key:'__other', label:'Other / Unassigned' }]);
+  return list;
+}
+function fohKplStaffInSecAll(secKey){ return fohKplAllPeople().filter(function(s){ var sk=fohKplEffSec(s); return secKey==='__other' ? (!sk||!FOH_SECTIONS.some(function(x){return x.key===sk;})) : sk===secKey; }); }
+function fohKplSecDay(people, ds){ var work=0, any=0; people.forEach(function(s){ var e=fohKplEntry(s.id,ds); if(e&&e.status){ any++; if(e.status==='working'&&e.shift_start&&e.shift_end) work++; } }); return {work:work, any:any}; }
+function fohKplMinFor(secKey, weekend){ var m=fohKplMins[secKey]||{}; return weekend ? (m.we!=null?m.we:1) : (m.wd!=null?m.wd:1); }
+function fohKplV(id){ var el=document.getElementById(id); return el?el.value:''; }
+
+// ── Section add / rename / reorder / delete — held in the plan until Bring live ──
+var fohKplSecLive   = null;
+var fohKplSecRename = {};
+var fohKplSecNew    = [];
+var fohKplSecOrder  = [];
+function fohSchedPlanSectionDiff(){
+  var live = (fohKplSecLive||[]);
+  var liveKeys = live.map(function(s){ return s.key; });
+  var defaultOrder = liveKeys.concat((fohKplSecNew||[]).map(function(s){ return s.key; }));
+  var order = (fohKplSecOrder && fohKplSecOrder.length) ? fohKplSecOrder.slice() : defaultOrder;
+  var deletes = liveKeys.filter(function(k){ return order.indexOf(k) < 0; });
+  var orderChanged = order.join(',') !== defaultOrder.filter(function(k){ return order.indexOf(k) >= 0; }).join(',');
+  var renames = Object.keys(fohKplSecRename||{});
+  return { order:order, deletes:deletes, orderChanged:orderChanged, renames:renames, adds:(fohKplSecNew||[]),
+           total: renames.length + (fohKplSecNew||[]).length + deletes.length + (orderChanged ? 1 : 0) };
+}
+function fohKrtSectionKey(label){
+  var base = (label||'sec').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,24) || 'sec';
+  var exists = function(kk){ return FOH_SECTIONS.some(function(s){return s.key===kk;}) || (fohKplSecLive||[]).some(function(s){return s.key===kk;}); };
+  var k = base, n = 2; while(exists(k)){ k = base+'_'+n; n++; }
+  return k;
+}
+function fohSchedPlanApplySections(){
+  if(!fohKplSecLive) return;
+  var liveByKey = {}; fohKplSecLive.forEach(function(s){ liveByKey[s.key]=s; });
+  var newByKey  = {}; (fohKplSecNew||[]).forEach(function(s){ newByKey[s.key]=s; });
+  var d = fohSchedPlanSectionDiff();
+  FOH_SECTIONS.length = 0;
+  d.order.forEach(function(key){
+    if(!liveByKey[key] && !newByKey[key]) return;                 // gone (deleted) — skip
+    var label = (fohKplSecRename[key]!=null) ? fohKplSecRename[key]
+              : (newByKey[key] ? newByKey[key].label : liveByKey[key].label);
+    FOH_SECTIONS.push({ key:key, label:label });
+    if(!FOH_SECTION_PRINT_COLOR[key]) FOH_SECTION_PRINT_COLOR[key] = '#e5ded2';
+  });
+}
+function fohSchedPlanRestoreLiveSections(){
+  if(!fohKplSecLive) return;
+  FOH_SECTIONS.length = 0; fohKplSecLive.forEach(function(s){ FOH_SECTIONS.push({ key:s.key, label:s.label }); });
+}
+
+function fohSchedPlanWeeksCount(){ return (fohKrtWeeks > 0) ? fohKrtWeeks : 1; }
+
+// A single canonical signature per cell — an empty "working" cell and a blank cell
+// count as the SAME, so only real differences show as changes.
+function fohSchedPlanSig(row){
+  if(!row) return 'EMPTY';
+  var st = row.status || 'working';
+  if(st === 'working'){
+    var s=(row.shift_start||''), e=(row.shift_end||''), s2=(row.shift_start2||''), e2=(row.shift_end2||''), n=(row.notes||''), o=(row.station_override||'');
+    if(!s && !e && !s2 && !e2 && !n && !o) return 'EMPTY';
+    return 'W|'+s+'|'+e+'|'+s2+'|'+e2+'|'+n+'|'+o;
+  }
+  return st + '|' + (row.notes||'');
+}
+function fohSchedPlanEntry(row){
+  return { status: row.status || 'working',
+    shift_start: row.shift_start||null, shift_end: row.shift_end||null,
+    shift_start2: row.shift_start2||null, shift_end2: row.shift_end2||null,
+    station_override: row.station_override||null, notes: row.notes||null };
+}
+function fohSchedPlanRowFromEntry(sid, ds, e){
+  return Object.assign({ staff_id: sid, work_date: ds }, e);
+}
+
+function fohSchedPlanSaveDraft(){
+  fohKplDirty = true;
+  try{
+    localStorage.setItem(FOH_SCHED_PLAN_LS, JSON.stringify({
+      entries: fohKplDraft, secMoves: fohKplDraftSec, order: fohKplDraftOrd,
+      newStaff: fohKplNewStaff, newSeq: fohKplNewSeq,
+      secRename: fohKplSecRename, secNew: fohKplSecNew, secOrder: fohKplSecOrder, updatedAt: new Date().toISOString()
+    }));
+  }catch(e){ console.warn('plan draft save failed', e); }
+  fohSchedPlanUpdateBadge();
+}
+function fohSchedPlanLoadDraft(){ try{ return JSON.parse(localStorage.getItem(FOH_SCHED_PLAN_LS)||'null'); }catch(e){ return null; } }
+
+function fohSchedPlanSnapshotLive(){
+  fohKplLive = {}; Object.keys(fohSchedRoster).forEach(function(k){ fohKplLive[k] = Object.assign({}, fohSchedRoster[k]); });
+  fohKplStaff = fohSchedStaff.map(function(s){ return Object.assign({}, s); });
+}
+function fohSchedPlanOverlay(){
+  fohSchedStaff = fohKplStaff.map(function(s){ return Object.assign({}, s); });
+  var byId = {}; fohSchedStaff.forEach(function(s){ byId[s.id] = s; });
+  (fohKplNewStaff||[]).forEach(function(np){ if(!byId[np.id]){ var c = Object.assign({}, np); fohSchedStaff.push(c); byId[np.id] = c; } });
+  Object.keys(fohKplDraftSec||{}).forEach(function(id){ if(byId[id]) byId[id].section = fohKplDraftSec[id]; });
+  Object.keys(fohKplDraftOrd||{}).forEach(function(id){ if(byId[id]) byId[id].sort_order = fohKplDraftOrd[id]; });
+  fohSchedStaff.sort(function(a,b){ return ((a.sort_order==null?9999:a.sort_order) - (b.sort_order==null?9999:b.sort_order)); });
+  fohSchedRoster = {}; Object.keys(fohKplLive).forEach(function(k){ fohSchedRoster[k] = Object.assign({}, fohKplLive[k]); });
+  Object.keys(fohKplDraft||{}).forEach(function(k){ var p = k.split('|'); fohSchedRoster[k] = fohSchedPlanRowFromEntry(p[0], p[1], fohKplDraft[k]); });
+}
+function fohSchedPlanReseedFromLive(){ fohSchedPlanSnapshotLive(); fohSchedPlanApplySections(); fohSchedPlanOverlay(); }
+
+// Rebuild the draft from what's on screen vs the live copy (only the loaded dates).
+function fohSchedPlanCapture(){
+  var liveById = {}; fohKplStaff.forEach(function(s){ liveById[s.id] = s; });
+  var newStaff = [], secMoves = {}, order = {};
+  fohSchedStaff.forEach(function(s){
+    var live = liveById[s.id];
+    if(!live){ newStaff.push({ id:s.id, name:s.name, role:s.role, section:s.section, sort_order:s.sort_order, _new:true }); return; }
+    if(s.section !== live.section) secMoves[s.id] = s.section;
+    var so = (s.sort_order==null?null:s.sort_order), lso = (live.sort_order==null?null:live.sort_order);
+    if(so !== lso && so != null) order[s.id] = s.sort_order;
+  });
+  fohKplNewStaff = newStaff; fohKplDraftSec = secMoves; fohKplDraftOrd = order;
+  var winStart = addDays(fohSchedWeekStart, -7);
+  var winDays  = fohSchedPlanWeeksCount()*7 + 14;
+  for(var i=0;i<fohSchedStaff.length;i++){
+    var sid = fohSchedStaff[i].id;
+    for(var d=0; d<winDays; d++){
+      var ds = formatDate(addDays(winStart, d)), k = fohSchedRosterKey(sid, ds);
+      if(fohSchedPlanSig(fohSchedRoster[k]) !== fohSchedPlanSig(fohKplLive[k])) fohKplDraft[k] = fohSchedPlanEntry(fohSchedRoster[k] || {});
+      else if(fohKplDraft[k]) delete fohKplDraft[k];
+    }
+  }
+  fohSchedPlanSaveDraft();
+}
+function fohSchedPlanCountChanges(){
+  return Object.keys(fohKplDraft||{}).length + (fohKplNewStaff||[]).length +
+         Object.keys(fohKplDraftSec||{}).length + Object.keys(fohKplDraftOrd||{}).length +
+         fohSchedPlanSectionDiff().total;
+}
+function fohSchedPlanUpdateBadge(){
+  var n = fohSchedPlanCountChanges();
+  var chip = document.getElementById('foh-krt-changecount');
+  if(chip){ chip.textContent = n ? (n + ' change' + (n>1?'s':'') + ' not live') : 'No changes yet'; }
+  var btn = document.getElementById('foh-krt-bringlive'); if(btn){ btn.style.opacity = n ? '1' : '.5'; }
+}
+
+function fohSchedPlanEnter(){
+  fohSchedPlanMode = true;
+  fohKplMode = 'draft';
+  var saved = fohSchedPlanLoadDraft();
+  fohKplDraft    = (saved && saved.entries)  || {};
+  fohKplDraftSec = (saved && saved.secMoves) || {};
+  fohKplDraftOrd = (saved && saved.order)    || {};
+  fohKplNewStaff = (saved && saved.newStaff) || [];
+  fohKplNewSeq   = (saved && saved.newSeq)   || 0;
+  fohKplSecRename = (saved && saved.secRename) || {};
+  fohKplSecNew    = (saved && saved.secNew)    || [];
+  fohKplSecOrder  = (saved && saved.secOrder)  || [];
+  fohKplSecLive   = FOH_SECTIONS.map(function(s){ return { key:s.key, label:s.label }; });  // live baseline
+  fohSchedPlanReseedFromLive();
+  fohSchedPlanUpdateBadge();
+}
+
+// ── Sections manager (in the tool) ──
+function fohKrtSectionRowHtml(key, label, isNew){
+  return '<div class="krt-sec-row" data-key="'+String(key||'')+'">' +
+    '<span class="krt-sec-move"><button type="button" onclick="fohKrtSecMove(this,-1)" title="Move up">&#9650;</button>' +
+    '<button type="button" onclick="fohKrtSecMove(this,1)" title="Move down">&#9660;</button></span>' +
+    '<input type="text" class="krt-sec-inp" value="'+String(label||'').replace(/"/g,'&quot;')+'"'+(label?'':' placeholder="New section name (e.g. Terrace)"')+' />' +
+    (isNew ? '<span class="krt-sec-tag">new</span>' : '') +
+    '<button type="button" class="krt-sec-del" onclick="fohKrtSecDelete(this)" title="Delete this section">&times;</button>' +
+    '</div>';
+}
+function fohKrtOpenSections(){
+  fohKrtCloseActions();
+  var rows = FOH_SECTIONS.map(function(s){
+    return fohKrtSectionRowHtml(s.key, s.label, fohKplSecNew.some(function(n){ return n.key===s.key; }));
+  }).join('');
+  document.getElementById('foh-kpl-modalhost').innerHTML =
+    '<div class="kpl-ov" onclick="fohKrtCloseModal(event)"><div class="kpl-modal" onclick="event.stopPropagation()">'
+    + '<h3>Sections</h3>'
+    + '<div style="font-size:12px;color:var(--vino-light);margin-bottom:12px">Type over a name to rename it, use <b>&#9650;&#9660;</b> to reorder, <b>&times;</b> to delete, or add a new one below. Nothing changes on the real schedule until you press <b>Bring live</b>.</div>'
+    + '<div id="foh-krt-sec-list">'+rows+'</div>'
+    + '<button class="kpl-btn" onclick="fohKrtAddSectionRow()" style="margin-top:10px">+ Add a section</button>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="kpl-btn" onclick="fohKrtCloseModal()">Cancel</button><button class="kpl-btn primary" onclick="fohKrtSaveSections()">Save to plan</button></div>'
+    + '</div></div>';
+}
+function fohKrtAddSectionRow(){
+  var list = document.getElementById('foh-krt-sec-list'); if(!list) return;
+  list.insertAdjacentHTML('beforeend', fohKrtSectionRowHtml('', '', true));
+  var inp = list.lastElementChild.querySelector('input'); if(inp) inp.focus();
+}
+function fohKrtSecMove(btn, dir){
+  var row = btn.closest('.krt-sec-row'); if(!row) return; var list = row.parentElement;
+  if(dir < 0 && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+  else if(dir > 0 && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+}
+function fohKrtSecDelete(btn){
+  var row = btn.closest('.krt-sec-row'); if(!row) return;
+  var key = row.getAttribute('data-key');
+  var name = (row.querySelector('input').value || '').trim() || 'this section';
+  var count = key ? fohSchedStaff.filter(function(s){ return s.section === key; }).length : 0;
+  if(count > 0){ alert('“'+name+'” has '+count+' '+(count===1?'person':'people')+' in it.\n\nMove them to another section first (the ↔ Move button on each person), then you can delete it.'); return; }
+  if(key && !confirm('Delete the section “'+name+'”? It goes when you press Bring live — and you can still undo it.')) return;
+  row.parentElement.removeChild(row);
+}
+function fohKrtSaveSections(){
+  var liveByKey = {}; (fohKplSecLive||[]).forEach(function(s){ liveByKey[s.key]=s; });
+  var rename = {}, adds = [], order = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#foh-krt-sec-list .krt-sec-row'), function(r){
+    var key = r.getAttribute('data-key');
+    var label = (r.querySelector('input').value || '').trim();
+    if(!label) return;                                   // blank row = skip
+    if(key && liveByKey[key]){                            // existing live section
+      if(label !== liveByKey[key].label) rename[key] = label;
+      order.push(key);
+    } else {                                              // a new section (added this plan)
+      var k = key || fohKrtSectionKey(label);
+      adds.push({ key:k, label:label });
+      order.push(k);
+    }
+  });
+  fohKplSecRename = rename; fohKplSecNew = adds; fohKplSecOrder = order;
+  fohSchedPlanApplySections();
+  fohSchedPlanSaveDraft();
+  fohRenderSchedWeek();
+  fohKrtCloseModal();
+}
+
+// ── Copy / clear a whole week, on the week header ──
+var fohKrtWeekClip = null;
+function fohKrtWeekCopy(mon){ fohKrtWeekClip = mon; fohKrtRender(); }
+function fohKrtWeekCancelCopy(){ fohKrtWeekClip = null; fohKrtRender(); }
+function fohKrtWeekTabsHtml(wmon){
+  var tab;
+  if(!fohKrtWeekClip){ tab = '<button class="krt-wk-btn" onclick="fohKrtWeekCopy(\''+wmon+'\')" title="Copy this whole week">Copy</button>'; }
+  else if(fohKrtWeekClip === wmon){ tab = '<span class="krt-wk-copied">Copied</span><button class="krt-wk-btn" onclick="fohKrtWeekCancelCopy()">Cancel</button>'; }
+  else { tab = '<button class="krt-wk-btn paste" onclick="fohKrtWeekPaste(\''+wmon+'\')" title="Replace this week with the copied one">Paste here</button>'; }
+  tab += '<button class="krt-wk-btn clear" onclick="fohKrtClearWeek(\''+wmon+'\')" title="Clear this week — remove all shifts, keep the names">Clear</button>';
+  return tab;
+}
+function fohKrtWeekPaste(tgtMon){
+  if(!fohKrtWeekClip || fohKrtWeekClip === tgtMon) return;
+  var srcMon = getMonday(new Date(fohKrtWeekClip + 'T12:00:00'));
+  var tMon   = getMonday(new Date(tgtMon        + 'T12:00:00'));
+  var srcLabel = srcMon.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  var tLabel   = tMon.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  if(!confirm('Paste the week of '+srcLabel+' into the week of '+tLabel+'?\n\nIt replaces that week in your plan. (Nothing goes live until you Bring live.)')) return;
+  for(var d=0; d<7; d++){
+    var sds = formatDate(addDays(srcMon, d)), tds = formatDate(addDays(tMon, d));
+    fohSchedStaff.forEach(function(s){
+      var sk = fohSchedRosterKey(s.id, sds), tk = fohSchedRosterKey(s.id, tds);
+      var src = fohSchedRoster[sk] || null;   // effective plan for the source week (live + your draft)
+      var e = src ? { status:src.status||'working', shift_start:src.shift_start||null, shift_end:src.shift_end||null,
+                      shift_start2:src.shift_start2||null, shift_end2:src.shift_end2||null, notes:src.notes||null }
+                  : { status:'working', shift_start:null, shift_end:null, shift_start2:null, shift_end2:null, notes:null };
+      if(fohSchedPlanSig(e) !== fohSchedPlanSig(fohKplLive[tk] || null)){ fohKplDraft[tk] = e; }
+      else if(fohKplDraft[tk]){ delete fohKplDraft[tk]; }
+    });
+  }
+  fohKrtWeekClip = null;
+  fohSchedPlanSaveDraft(); fohSchedPlanApplySections(); fohSchedPlanOverlay(); fohKrtRender(); fohSchedPlanUpdateBadge();
+}
+function fohKrtClearWeek(mon){
+  fohKrtCloseActions();
+  var m = getMonday(new Date(mon + 'T12:00:00'));
+  var mLabel = m.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  if(!confirm('Clear the whole week of '+mLabel+'?\n\nEvery shift that week is removed — the names stay, but the week is empty. This is in your plan; nothing goes live until Bring live, and you can undo.')) return;
+  for(var d=0; d<7; d++){
+    var ds = formatDate(addDays(m, d));
+    fohSchedStaff.forEach(function(s){
+      var k = fohSchedRosterKey(s.id, ds);
+      if(fohSchedPlanSig(fohKplLive[k] || null) !== 'EMPTY'){ fohKplDraft[k] = { status:'working', shift_start:null, shift_end:null, shift_start2:null, shift_end2:null, notes:null }; }
+      else if(fohKplDraft[k]){ delete fohKplDraft[k]; }
+    });
+  }
+  fohKrtWeekClip = null;
+  fohSchedPlanSaveDraft(); fohSchedPlanApplySections(); fohSchedPlanOverlay(); fohKrtRender(); fohSchedPlanUpdateBadge();
+}
+
+// ── "Bring live" — publish dialog with week checkboxes + undo ──
+function fohSchedPlanOpenPublish(){
+  fohKrtCloseActions();
+  if(!fohSchedPlanCountChanges()){ alert('There are no changes to bring live yet.\n\nPlan some shifts first — set times, days off, teams — then press Bring live.'); return; }
+  fohKplMode = 'draft';
+  fohKplFrom = fohSchedWeekStart;
+  fohKplNumWeeks = fohSchedPlanWeeksCount();
+  fohKplOpenPublish();
+}
+async function fohSchedPlanAfterWrite(){
+  await loadFohSections();                 // pick up any section add/rename that just went live
+  if(fohSchedPlanWeeksCount() > 1){ await fohKrtLoadRange(fohSchedPlanWeeksCount()); } else { await fohLoadSchedData(); }
+  fohKplSecLive = FOH_SECTIONS.map(function(s){ return { key:s.key, label:s.label }; });   // new live baseline
+  fohKplSecRename = {}; fohKplSecNew = []; fohKplSecOrder = [];   // section draft is now live
+  fohSchedPlanSnapshotLive();
+  fohSchedPlanApplySections();
+  fohSchedPlanOverlay();
+  fohSchedPlanCapture();
+  fohKrtRender();
+  fohSchedPlanUpdateBadge();
+}
+function fohKplOpenPublish(){
+  var host=document.getElementById('foh-kpl-modalhost');
+  var wkChecks=''; for(var w=0; w<fohKplNumWeeks; w++){ var ws=addDays(fohKplFrom,w*7),we=addDays(fohKplFrom,w*7+6); wkChecks+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0"><input type="checkbox" class="foh-kpl-pubwk" value="'+w+'" checked onchange="fohKplPubRecalc()"> W'+(w+1)+' &middot; '+ws.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+we.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</label>'; }
+  var snap=fohKplReadSnap();
+  var revertBtn = snap ? '<button class="kpl-btn" onclick="fohKplRevert()" style="border-color:#a8342a;color:#a8342a">&#8630; Undo the last send ('+snap.label+')</button>' : '';
+  host.innerHTML = '<div class="kpl-ov" onclick="fohKplClosePublish(event)"><div class="kpl-modal" onclick="event.stopPropagation()">'
+    + '<h3>&#10003; Put your plan on the real schedule</h3>'
+    + '<div style="background:#fff7e6;border:1px solid #f0d98a;border-radius:8px;padding:8px 10px;font-size:12px;color:#7a5a12;margin-bottom:10px">This puts the weeks you tick onto the <b>real schedule</b> — the FOH team and HR will see them. It saves a copy of what was there first, so you can <b>undo</b> right after. Clock-ins are never overwritten.</div>'
+    + '<div class="kpl-lbl" style="margin-bottom:2px">Weeks to publish</div>'+wkChecks
+    + '<div id="foh-kpl-pub-short" style="margin-top:8px"></div>'
+    + '<div id="foh-kpl-pub-status" style="font-size:12px;color:var(--vino-light);margin-top:8px"></div>'
+    + '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px">'+revertBtn+'<div style="display:flex;gap:8px;margin-left:auto"><button class="kpl-btn" onclick="fohKplClosePublish()">Cancel</button><button class="kpl-btn go" id="foh-kpl-pub-go" onclick="fohKplDoPublish()">Put these weeks on the schedule</button></div></div>'
+    + '</div></div>';
+  fohKplPubRecalc();
+}
+function fohKplPubSelectedWeeks(){ var weeks=[]; Array.prototype.forEach.call(document.querySelectorAll('.foh-kpl-pubwk'), function(c){ if(c.checked) weeks.push(parseInt(c.value,10)); }); return weeks; }
+function fohKplShortNights(weeks){
+  var out=[];
+  fohKplSections().forEach(function(sec){
+    var people=fohKplStaffInSecAll(sec.key); if(!people.length) return;
+    weeks.forEach(function(w){ for(var d=0; d<7; d++){ var ds=fohKplDateISO(w,d); var c=fohKplSecDay(people, ds); var min=fohKplMinFor(sec.key,d>=5); if(c.any>0 && c.work<min) out.push({ds:ds, sec:sec.label, n:c.work, min:min}); } });
+  });
+  return out;
+}
+function fohKplPubRecalc(){
+  var box=document.getElementById('foh-kpl-pub-short'); if(!box) return;
+  var weeks=fohKplPubSelectedWeeks();
+  if(!weeks.length){ box.innerHTML=''; return; }
+  var shorts=fohKplShortNights(weeks);
+  if(!shorts.length){ box.innerHTML='<div style="background:#e9f6ef;border:1px solid #a9d8bf;border-radius:8px;padding:6px 10px;font-size:12px;color:#0f5132">&#10003; Every section meets its minimum on the selected dates.</div>'; return; }
+  var show=shorts.slice(0,6).map(function(s){ return '<li>'+s.sec+' — '+new Date(s.ds+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+': '+s.n+' working (min '+s.min+')</li>'; }).join('');
+  var more=shorts.length>6?'<li>…and '+(shorts.length-6)+' more short slots</li>':'';
+  box.innerHTML='<div style="background:#fbe4e1;border:1px solid #e6a79f;border-radius:8px;padding:6px 10px;font-size:12px;color:#a8342a"><b>&#9888; '+shorts.length+' short slot'+(shorts.length>1?'s':'')+' in the selected weeks</b> — you can still publish, just so you know:<ul style="margin:4px 0 0;padding-left:18px">'+show+more+'</ul></div>';
+}
+function fohKplClosePublish(ev){ if(ev && ev.target && !ev.target.classList.contains('kpl-ov')) return; document.getElementById('foh-kpl-modalhost').innerHTML=''; }
+function fohKplReadSnap(){ try{ return JSON.parse(localStorage.getItem(FOH_KPL_SNAP_LS)||'null'); }catch(e){ return null; } }
+function fohKplRosterRow(id, ds, e){
+  return { staff_id:id, work_date:ds, status:e.status,
+    shift_start:e.status==='working'?(e.shift_start||null):null, shift_end:e.status==='working'?(e.shift_end||null):null,
+    shift_start2:e.status==='working'?(e.shift_start2||null):null, shift_end2:e.status==='working'?(e.shift_end2||null):null,
+    station_override:e.status==='working'?(e.station_override||null):null,
+    notes:e.notes||null, updated_at:new Date().toISOString() };
+}
+async function fohKplDoPublish(){
+  var weeks=[]; Array.prototype.forEach.call(document.querySelectorAll('.foh-kpl-pubwk'), function(c){ if(c.checked) weeks.push(parseInt(c.value,10)); });
+  var secDiff = fohSchedPlanSectionDiff();
+  var secRenames = secDiff.renames;
+  var newSecs = secDiff.adds.slice();
+  var hasSecChanges = secDiff.total > 0;
+  if(!weeks.length && !hasSecChanges){ alert('Nothing to bring live yet. Tick a week to publish, or make a change first.'); return; }
+  var dates=[]; weeks.forEach(function(w){ for(var d=0; d<7; d++) dates.push(fohKplDateISO(w,d)); });
+  var minD = dates.length ? dates.slice().sort()[0] : null;
+  var maxD = dates.length ? dates.slice().sort()[dates.length-1] : null;
+  var existingIds = fohKplStaff.map(function(s){return s.id;});
+  var moves = Object.keys(fohKplDraftSec).filter(function(id){ var s=fohKplStaff.find(function(x){return x.id===id;}); return s && fohKplDraftSec[id]!==s.section; });
+  var reorders = Object.keys(fohKplDraftOrd).filter(function(id){ var s=fohKplStaff.find(function(x){return x.id===id;}); return s && fohKplDraftOrd[id]!==s.sort_order; });
+  var newPeople = fohKplNewStaff.slice();
+  // The publish replaces the whole week range, so write the FULL plan: the draft where
+  // a cell was changed, otherwise the untouched live row — unchanged shifts are preserved.
+  var payloads=[];
+  if(dates.length){ fohKplStaff.forEach(function(s){ dates.forEach(function(ds){
+    var k=fohKplKey(s.id,ds), e=fohKplDraft[k];
+    if(e && e.status){ payloads.push(fohKplRosterRow(s.id,ds,e)); }
+    else { var lv=fohKplLive[k]; if(lv && lv.status){ payloads.push(fohKplRosterRow(s.id,ds,lv)); } }
+  }); }); }
+  var lbl = weeks.length ? ('W'+(weeks[0]+1)+(weeks.length>1?'–W'+(weeks[weeks.length-1]+1):'')) : 'section changes';
+  var extra=[]; if(moves.length) extra.push(moves.length+' moved to a different section'); if(reorders.length) extra.push(reorders.length+' reordered'); if(newPeople.length) extra.push(newPeople.length+' new '+(newPeople.length===1?'person':'people')+' added');
+  if(newSecs.length) extra.push(newSecs.length+' new section'+(newSecs.length>1?'s':'')+' ('+newSecs.map(function(s){return s.label;}).join(', ')+')');
+  if(secRenames.length) extra.push(secRenames.length+' section'+(secRenames.length>1?'s':'')+' renamed');
+  if(secDiff.deletes.length) extra.push(secDiff.deletes.length+' section'+(secDiff.deletes.length>1?'s':'')+' deleted');
+  if(secDiff.orderChanged) extra.push('sections reordered');
+  var extraTxt = extra.length ? '\n\nAlso going live: '+extra.join(' · ')+'.' : '';
+  var rangeTxt = weeks.length ? (' ('+minD+' → '+maxD+')') : '';
+  var mainTxt = weeks.length ? (payloads.length+' shift-days for the team will go onto the live schedule — the team and HR will see them.') : 'Your section changes will go onto the live schedule for everyone.';
+  if(!confirm('Bring '+lbl+rangeTxt+' live?\n\n'+mainTxt+extraTxt+'\n\nYou can undo this straight after.')) return;
+  var goBtn=document.getElementById('foh-kpl-pub-go'); if(goBtn){ goBtn.disabled=true; goBtn.textContent='Publishing…'; }
+  var statusEl=document.getElementById('foh-kpl-pub-status');
+  try{
+    // 1) snapshot current live rows in range (for revert)
+    var snapRows=[];
+    if(dates.length){ var snapRes = await sb.from('foh_roster').select('*').gte('work_date',minD).lte('work_date',maxD).in('staff_id', existingIds).limit(8000); if(snapRes.error) throw snapRes.error; snapRows = snapRes.data||[]; }
+    var priorSections={}; moves.forEach(function(id){ var s=fohKplStaff.find(function(x){return x.id===id;}); priorSections[id]=s?s.section:null; });
+    var priorOrders={}; reorders.forEach(function(id){ var s=fohKplStaff.find(function(x){return x.id===id;}); priorOrders[id]=s?s.sort_order:null; });
+    // 2) sections FIRST (so people can sit in new ones)
+    var secSnapRows=[]; var insertedSecKeys=[];
+    if(hasSecChanges){
+      var ssnap = await sb.from('foh_sections').select('*'); if(ssnap.error) throw ssnap.error; secSnapRows = ssnap.data||[];
+      for(var ns=0; ns<newSecs.length; ns++){ var sc=newSecs[ns];
+        var sres=await sb.from('foh_sections').insert({ section_key:sc.key, label:sc.label, sort_order:(secDiff.order.indexOf(sc.key)+1)||999, active:true }); if(sres.error) throw sres.error;
+        insertedSecKeys.push(sc.key);
+      }
+      for(var rn=0; rn<secRenames.length; rn++){ var rk=secRenames[rn]; var rres=await sb.from('foh_sections').update({ label:fohKplSecRename[rk] }).eq('section_key',rk); if(rres.error) throw rres.error; }
+      if(secDiff.deletes.length){ var sdd=await sb.from('foh_sections').update({ active:false }).in('section_key', secDiff.deletes); if(sdd.error) throw sdd.error; }
+      for(var so=0; so<secDiff.order.length; so++){ var ok=secDiff.order[so]; var sor=await sb.from('foh_sections').update({ sort_order:so+1 }).eq('section_key',ok); if(sor.error) throw sor.error; }
+    }
+    // 3) insert the brand-new people, so their shifts get a real id
+    var insertedIds=[];
+    for(var i=0;i<newPeople.length;i++){ var np=newPeople[i];
+      var res=await sb.from('foh_staff').insert({ name:np.name, role:np.role||null, section:np.section, active:true, in_schedule:true, sort_order:(fohKplDraftOrd[np.id]!=null?fohKplDraftOrd[np.id]:999) }).select().single();
+      if(res.error) throw res.error;
+      insertedIds.push(res.data.id);
+      dates.forEach(function(ds){ var e=fohKplDraft[fohKplKey(np.id,ds)]; if(e && e.status){ payloads.push(fohKplRosterRow(res.data.id,ds,e)); } });
+    }
+    // 4) persist the undo snapshot
+    localStorage.setItem(FOH_KPL_SNAP_LS, JSON.stringify({ label:lbl, minD:minD, maxD:maxD, staffIds:existingIds, rows:snapRows, priorSections:priorSections, priorOrders:priorOrders, insertedIds:insertedIds, secRows:secSnapRows, insertedSecKeys:insertedSecKeys, at:new Date().toISOString() }));
+    // 5) apply section moves + reorders (team-list change)
+    for(var m=0;m<moves.length;m++){ var mid=moves[m]; var mr=await sb.from('foh_staff').update({ section:fohKplDraftSec[mid] }).eq('id',mid); if(mr.error) throw mr.error; }
+    for(var q=0;q<reorders.length;q++){ var rid=reorders[q]; var rr=await sb.from('foh_staff').update({ sort_order:fohKplDraftOrd[rid] }).eq('id',rid); if(rr.error) throw rr.error; }
+    // 6) replace the roster rows in range, then insert the plan
+    if(dates.length){
+      var del = await sb.from('foh_roster').delete().gte('work_date',minD).lte('work_date',maxD).in('staff_id', existingIds);
+      if(del.error) throw del.error;
+      if(payloads.length){ var ins = await sb.from('foh_roster').upsert(payloads,{onConflict:'staff_id,work_date'}); if(ins.error) throw ins.error; }
+    }
+    // applied — clear the draft team + section changes so they don't re-apply
+    fohKplDraftSec={}; fohKplDraftOrd={}; fohKplNewStaff=[]; fohKplSecRename={}; fohKplSecNew=[]; fohSchedPlanSaveDraft();
+    if(statusEl){ statusEl.style.color='#0f766e'; statusEl.textContent='✓ Brought live'+(weeks.length?(' '+payloads.length+' shift-days'):'')+(extra.length?' + '+extra.join(' + '):'')+'. The live schedule is updated'+(weeks.length?(' for '+minD+' → '+maxD):'')+'.'; }
+    if(goBtn){ goBtn.textContent='✓ Live'; }
+    await fohSchedPlanAfterWrite();
+  }catch(err){
+    console.error('Publish error', err);
+    if(statusEl){ statusEl.style.color='#a8342a'; statusEl.textContent='Could not publish: '+(err.message||err); }
+    if(goBtn){ goBtn.disabled=false; goBtn.textContent='Put these weeks on the schedule'; }
+  }
+}
+async function fohKplRevert(){
+  var snap=fohKplReadSnap(); if(!snap){ alert('Nothing to undo.'); return; }
+  var extra=[]; if(snap.priorSections && Object.keys(snap.priorSections).length) extra.push('section moves'); if(snap.priorOrders && Object.keys(snap.priorOrders).length) extra.push('reordering'); if(snap.insertedIds && snap.insertedIds.length) extra.push(snap.insertedIds.length+' added '+(snap.insertedIds.length===1?'person':'people')); if(snap.secRows && snap.secRows.length) extra.push('section changes');
+  var rangeTxt = snap.minD ? (' for '+snap.minD+' → '+snap.maxD) : '';
+  if(!confirm('Undo the last Bring live ('+snap.label+')?\n\nThe live schedule'+rangeTxt+' goes back to exactly what it was before'+(extra.length?', and '+extra.join(' + ')+' are reversed':'')+'.')) return;
+  try{
+    if(snap.minD){
+      var allIds = (snap.staffIds||[]).concat(snap.insertedIds||[]);
+      var del = await sb.from('foh_roster').delete().gte('work_date',snap.minD).lte('work_date',snap.maxD).in('staff_id', allIds);
+      if(del.error) throw del.error;
+      if(snap.rows && snap.rows.length){ var rows=snap.rows.map(function(r){ return Object.assign({},r); }); var ins=await sb.from('foh_roster').upsert(rows,{onConflict:'staff_id,work_date'}); if(ins.error) throw ins.error; }
+    }
+    var ps = snap.priorSections||{};
+    for(var id in ps){ if(ps.hasOwnProperty(id)){ var r=await sb.from('foh_staff').update({ section:ps[id] }).eq('id',id); if(r.error) throw r.error; } }
+    var po = snap.priorOrders||{};
+    for(var oid in po){ if(po.hasOwnProperty(oid)){ var r2=await sb.from('foh_staff').update({ sort_order:po[oid] }).eq('id',oid); if(r2.error) throw r2.error; } }
+    if(snap.secRows && snap.secRows.length){
+      var srows = snap.secRows.map(function(r){ return Object.assign({}, r); });
+      var sup = await sb.from('foh_sections').upsert(srows,{onConflict:'section_key'}); if(sup.error) throw sup.error;
+    }
+    if(snap.insertedSecKeys && snap.insertedSecKeys.length){ var sdel=await sb.from('foh_sections').update({ active:false }).in('section_key', snap.insertedSecKeys); if(sdel.error) throw sdel.error; }
+    if(snap.insertedIds && snap.insertedIds.length){
+      var rd=await sb.from('foh_roster').delete().in('staff_id', snap.insertedIds); if(rd.error) throw rd.error;
+      var sd=await sb.from('foh_staff').update({ active:false, in_schedule:false }).in('id', snap.insertedIds); if(sd.error) throw sd.error;
+    }
+    localStorage.removeItem(FOH_KPL_SNAP_LS);
+    alert('Done — the live schedule'+(snap.minD?(' for '+snap.minD+' → '+snap.maxD):'')+' is back to how it was before you brought it live.');
+    await fohSchedPlanAfterWrite(); fohKplClosePublish();
+  }catch(err){ console.error('Revert error', err); alert('Could not undo: '+(err.message||err)); }
+}
+
+// ── Open / close / render / nav ──
+function fohKplOpen(){
+  var sview = document.getElementById('foh-sched-fullscreen'); if(sview) sview.style.display = 'none';
+  if(!fohSchedWeekStart) fohSchedWeekStart = getMonday(new Date());
+  var el = document.getElementById('foh-kpl-full');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'foh-kpl-full';
+    el.style.cssText = 'position:fixed;inset:0;z-index:4000;display:flex;flex-direction:column;background:var(--cream);overflow:hidden';
+    el.innerHTML = FOH_KRT_SHELL();
+    document.body.appendChild(el);
+    document.addEventListener('click', function(e){ var m=document.getElementById('foh-krt-actmenu'); if(m&&m.classList.contains('open')&&!(e.target.closest&&e.target.closest('.krt-act-wrap'))) m.classList.remove('open'); });
+  } else { el.style.display='flex'; }
+  document.getElementById('foh-krt-grid').innerHTML = '<div style="padding:40px;text-align:center;color:var(--vino-light);font-style:italic">Loading the schedule…</div>';
+  fohKrtRender();
+  loadFohShiftPresets();
+  loadFohSections().then(fohLoadSchedData).then(function(){ fohSchedPlanEnter(); fohKrtRender(); });
+}
+function fohKrtWeekLabel(){
+  var e = addDays(fohSchedWeekStart,6);
+  return fohSchedWeekStart.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) + ' – ' + e.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+}
+function fohKrtRender(){
+  var lbl = document.getElementById('foh-krt-weeklabel'); if(lbl) lbl.textContent = fohKrtWeekLabel();
+  var s1=document.getElementById('foh-krt-seg-1'), sn=document.getElementById('foh-krt-seg-n');
+  if(s1&&sn){ s1.classList.toggle('on', fohKrtWeeks===1); sn.classList.toggle('on', fohKrtWeeks>1); }
+  var step=document.getElementById('foh-krt-stepper'); if(step) step.style.display = fohKrtWeeks>1 ? 'inline-flex' : 'none';
+  var wrap = document.getElementById('foh-krt-grid'); if(!wrap) return;
+  if(fohKrtWeeks===1){
+    var ws1=fohSchedWeekStart, we1=addDays(ws1,6);
+    var lbl1='Week of '+ws1.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' &ndash; '+we1.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    var bar='<div class="krt-oneweek-bar"><span>'+lbl1+'</span><span class="krt-wk-actions">'+fohKrtWeekTabsHtml(formatDate(ws1))+'</span></div>';
+    wrap.innerHTML = bar + fohSchedWeekTableHtml(fohSchedWeekStart, {moveCol:true, showEmpty:true});   // the exact same grid, with the week bar on top
+    return;
+  }
+  wrap.innerHTML = fohSchedMultiWeekTableHtml(fohSchedWeekStart, fohKrtWeeks);
+}
+function fohKrtBusy(){ document.getElementById('foh-krt-grid').innerHTML='<div style="padding:36px;text-align:center;color:var(--vino-light);font-style:italic">Loading…</div>'; }
+function fohKrtLoad(){ return fohKrtWeeks>1 ? fohKrtLoadRange(fohKrtWeeks) : fohLoadSchedData(); }
+async function fohKrtLoadRange(numWeeks){
+  var from = formatDate(addDays(fohSchedWeekStart,-7));
+  var to   = formatDate(addDays(fohSchedWeekStart, numWeeks*7+6));
+  var res = await Promise.all([
+    sb.from('foh_staff').select('*').eq('active',true).order('sort_order'),
+    sb.from('foh_roster').select('*').gte('work_date',from).lte('work_date',to).limit(8000),
+    sb.from('foh_events').select('*').gte('event_date',from).lte('event_date',to).limit(3000)
+  ]);
+  fohSchedStaff = (res[0].data||[]).filter(function(s){ return s.in_schedule!==false; });
+  fohSchedRoster = {}; (res[1].data||[]).forEach(function(r){ fohSchedRoster[fohSchedRosterKey(r.staff_id, String(r.work_date).slice(0,10))]=r; });
+  fohSchedEvents = {}; if(res[2] && !res[2].error){ (res[2].data||[]).forEach(function(e){ var d=String(e.event_date).slice(0,10); (fohSchedEvents[d]=fohSchedEvents[d]||[]).push({slot:e.slot||1,name:e.name}); }); }
+}
+function fohKrtAfterLoad(){ if(fohSchedPlanMode) fohSchedPlanReseedFromLive(); fohKrtRender(); fohSchedPlanUpdateBadge(); }
+function fohKrtSetWeeks(n){ n=parseInt(n,10)||1; fohKrtWeeks=n; if(n>1) fohKrtSpanN=n; fohKrtBusy(); fohKrtLoad().then(fohKrtAfterLoad); }
+function fohKrtShift(n){ fohSchedWeekStart = addDays(fohSchedWeekStart, n*7); fohKrtBusy(); fohKrtLoad().then(fohKrtAfterLoad); }
+function fohKrtToday(){ fohSchedWeekStart = getMonday(new Date()); fohKrtBusy(); fohKrtLoad().then(fohKrtAfterLoad); }
+
+// Read-only coverage check — flags any section with people that has NOBODY on duty
+// on a day the restaurant is otherwise open. A fully-closed day is skipped.
+function fohKrtCoverage(){
+  var weeks = fohKrtWeeks<1?1:fohKrtWeeks;
+  var holes=[];
+  var isWorking=function(sid, ds){ var r=fohSchedRoster[fohSchedRosterKey(sid,ds)]; return r && r.status==='working' && r.shift_start && r.shift_end; };
+  for(var w=0; w<weeks; w++){
+    for(var d=0; d<7; d++){
+      var day=addDays(fohSchedWeekStart, w*7+d), ds=formatDate(day);
+      var venueOpen=fohSchedStaff.some(function(s){ return isWorking(s.id, ds); });
+      if(!venueOpen) continue;   // closed day — no point flagging every section
+      FOH_SECTIONS.forEach(function(sec){
+        var people=fohSchedStaff.filter(function(s){ return s.section===sec.key; });
+        var working=people.filter(function(s){ return isWorking(s.id, ds); });
+        if(people.length && working.length===0) holes.push({sec:sec.label, day:day});
+      });
+    }
+  }
+  function dfmt(dt){ return dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+  var body = !holes.length
+    ? '<div style="background:#eef3ec;border:1px solid #a9d8bf;border-radius:8px;padding:10px 12px;color:#0f5132">Every section has someone on duty every day.</div>'
+    : '<div class="kpl-lbl" style="margin-bottom:5px">Sections with nobody on duty</div><ul style="margin:0;padding-left:18px;font-size:13px;color:#a8342a">'
+        + holes.slice(0,14).map(function(h){ return '<li>'+h.sec+' — '+dfmt(h.day)+'</li>'; }).join('')
+        + (holes.length>14?'<li>…and '+(holes.length-14)+' more</li>':'') + '</ul>';
+  document.getElementById('foh-kpl-modalhost').innerHTML =
+    '<div class="kpl-ov" onclick="fohKrtCloseModal(event)"><div class="kpl-modal" onclick="event.stopPropagation()">'
+    + '<h3>Coverage — '+(weeks===1?'this week':weeks+' weeks')+'</h3>'
+    + '<div style="font-size:12px;color:var(--vino-light);margin-bottom:12px">A quick read of the weeks on screen. Nothing changes — this just points out gaps.</div>'
+    + body
+    + '<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="kpl-btn primary" onclick="fohKrtCloseModal()">Close</button></div>'
+    + '</div></div>';
+}
+function fohKrtCloseModal(ev){ if(ev && ev.target && !ev.target.classList.contains('kpl-ov')) return; document.getElementById('foh-kpl-modalhost').innerHTML=''; }
+
+// ── One-tap planning helpers (into the draft while planning; confirm-gated) ──
+function fohKrtWeekDates(weekStart){ var a=[]; for(var d=0;d<7;d++) a.push(formatDate(addDays(weekStart,d))); return a; }
+function fohKrtSectionPeople(secKey){ return fohSchedStaff.filter(function(s){ return s.section===secKey; })
+  .sort(function(a,b){ return ((a.sort_order==null?9999:a.sort_order)-(b.sort_order==null?9999:b.sort_order)) || (a.name||'').localeCompare(b.name||''); }); }
+function fohKrtRosterPayload(sid, ds, status, s1, e1, s2, e2){
+  var working = status==='working';
+  return { staff_id:sid, work_date:ds, status:status,
+    shift_start:working?(s1||null):null, shift_end:working?(e1||null):null,
+    shift_start2:working?(s2||null):null, shift_end2:working?(e2||null):null,
+    updated_at:new Date().toISOString() };
+}
+// Pure builders (no writes) — easy to reason about and to check.
+function fohKrtBuildFillTeams(weekStart){
+  var dates=fohKrtWeekDates(weekStart), payloads=[];
+  FOH_SECTIONS.forEach(function(sec){
+    fohKrtSectionPeople(sec.key).forEach(function(s, idx){
+      dates.forEach(function(ds){
+        if(idx===0) payloads.push(fohKrtRosterPayload(s.id, ds, 'working','11:00','16:00','18:00','01:00'));  // double: lunch + dinner
+        else        payloads.push(fohKrtRosterPayload(s.id, ds, 'working','17:00','01:00', null, null));       // dinner
+      });
+    });
+  });
+  return payloads;
+}
+// TOP UP each person to 2 days off — only genuine days off count toward the 2
+// (annual leave / PH are separate). New days off land on quiet days, never Thu–Sat.
+var FOH_KRT_DAYSOFF_TARGET = 2;
+function fohKrtBuildDaysOff(weekStart){
+  var dates=fohKrtWeekDates(weekStart), payloads=[];
+  var DAYOFF=['off','wo'];
+  var quiet=[0,1,2,6];                       // Mon, Tue, Wed, Sun — never Thu(3)/Fri(4)/Sat(5)
+  var gi=0;
+  FOH_SECTIONS.forEach(function(sec){
+    fohKrtSectionPeople(sec.key).forEach(function(s){
+      var statusOn=function(di){ var r=fohSchedRoster[fohSchedRosterKey(s.id,dates[di])]; return (r&&r.status)||'working'; };
+      var have=0; for(var d=0; d<7; d++){ if(DAYOFF.indexOf(statusOn(d))>=0) have++; }
+      var need=FOH_KRT_DAYSOFF_TARGET - have;
+      if(need<=0){ gi++; return; }
+      var eligible=quiet.filter(function(di){ return statusOn(di)==='working'; });
+      var start=gi % (eligible.length||1);
+      for(var k=0; k<eligible.length && need>0; k++){ payloads.push(fohKrtRosterPayload(s.id, dates[eligible[(start+k)%eligible.length]], 'off')); need--; }
+      gi++;
+    });
+  });
+  return payloads;
+}
+// One full week off (Holiday) per person, spread section by section across the weeks
+// on screen — no single week overloaded, no section gutted.
+function fohKrtBuildWeekOff(){
+  var payloads=[];
+  var groups=[], known={};
+  FOH_SECTIONS.forEach(function(sec){ known[sec.key]=1; groups.push(fohKrtSectionPeople(sec.key)); });
+  var others=fohSchedStaff.filter(function(s){ return !known[s.section]; })
+    .sort(function(a,b){ return ((a.sort_order==null?9999:a.sort_order)-(b.sort_order==null?9999:b.sort_order)); });
+  if(others.length) groups.push(others);
+  groups.forEach(function(people, si){
+    people.forEach(function(s, j){
+      var wk=(j + si) % fohKrtWeeks;
+      var ws=addDays(fohSchedWeekStart, wk*7);
+      fohKrtWeekDates(ws).forEach(function(ds){ payloads.push(fohKrtRosterPayload(s.id, ds, 'al')); });
+    });
+  });
+  return payloads;
+}
+async function fohKrtWriteRoster(payloads){
+  if(!payloads.length) return 0;
+  payloads.forEach(function(p){ var k=fohSchedRosterKey(p.staff_id,p.work_date); fohSchedRoster[k]=Object.assign({}, fohSchedRoster[k]||{}, p); });
+  if(fohSchedPlanMode){ fohSchedPlanCapture(); fohKrtRender(); return payloads.length; }   // planning: into the draft, not the live DB
+  fohKrtRender();
+  if(!FOH_DEV_READ_ONLY){
+    var res = await sb.from('foh_roster').upsert(payloads,{onConflict:'staff_id,work_date'});
+    if(res.error){ alert('Could not save: '+res.error.message); return -1; }
+  }
+  return payloads.length;
+}
+async function fohKrtFillTeams(){
+  fohKrtCloseActions();
+  if(!fohSchedStaff.length) return;
+  if(!confirm('Set lunch & dinner teams for '+fohKrtWeekLabel()+'?\n\nThis REPLACES everyone’s shifts that week — 1 person per section on the double (11:00–16:00 / 18:00–01:00), the rest on dinner (17:00–01:00), for '+fohSchedStaff.length+' people. Set days off afterwards with “Give everyone their days off”.')) return;
+  await fohKrtWriteRoster(fohKrtBuildFillTeams(fohSchedWeekStart));
+}
+async function fohKrtGiveDaysOff(){
+  fohKrtCloseActions();
+  if(!fohSchedStaff.length) return;
+  var payloads = fohKrtBuildDaysOff(fohSchedWeekStart);
+  if(!payloads.length){ alert('Everyone already has their 2 days off in '+fohKrtWeekLabel()+' — nothing to add.'); return; }
+  if(!confirm('Top everyone up to 2 days off in '+fohKrtWeekLabel()+'?\n\nOnly real days off count toward the 2 — annual leave and public holidays are left as they are. Anyone already on 2 gets nothing more. New days off land on the quiet days, never Thu–Sat. This adds '+payloads.length+' day(s) off across the team.')) return;
+  await fohKrtWriteRoster(payloads);
+}
+async function fohKrtGiveWeekOff(){
+  fohKrtCloseActions();
+  if(fohKrtWeeks<2){ alert('Switch to “Several weeks” first — then everyone gets a staggered week off spread across those weeks.'); return; }
+  if(!fohSchedStaff.length) return;
+  if(!confirm('Give everyone a staggered week off across the '+fohKrtWeeks+' weeks on screen?\n\nEach person gets one full week marked as Annual leave, spread section by section so no section is left short in the same week. This replaces those days for '+fohSchedStaff.length+' people.')) return;
+  await fohKrtWriteRoster(fohKrtBuildWeekOff());
+}
+function fohKrtToggleActions(ev){
+  if(ev) ev.stopPropagation();
+  var m=document.getElementById('foh-krt-actmenu'); if(!m) return;
+  m.classList.toggle('open');
+  if(m.classList.contains('open')){
+    m.style.left=''; m.style.right='0';
+    var r=m.getBoundingClientRect();
+    if(r.left < 8){
+      var wrap=m.parentElement.getBoundingClientRect();
+      m.style.right='auto';
+      m.style.left=(8 - wrap.left)+'px';
+    }
+  }
+}
+function fohKrtCloseActions(){ var m=document.getElementById('foh-krt-actmenu'); if(m) m.classList.remove('open'); }
+function fohKrtClose(){
+  fohSchedPlanMode = false;                 // back to live editing on the real schedule
+  fohSchedPlanRestoreLiveSections();        // drop any draft section add/rename from the live list
+  var el=document.getElementById('foh-kpl-full'); if(el) el.style.display='none';
+  var sview=document.getElementById('foh-sched-fullscreen'); if(sview) sview.style.display='flex';
+  // Reload the untouched live data so the real schedule never shows the draft.
+  if(fohSchedWeekStart) fohLoadSchedData().then(fohRenderSchedView);
+  else fohRenderSchedView();
+}
+function FOH_KRT_SHELL(){
+  return `
+  <style>
+  #foh-kpl-full *{box-sizing:border-box}
+  #foh-kpl-full{font-family:var(--font-sans)}
+  #foh-kpl-full .krt-top{background:var(--vino);color:#f6ece0;display:flex;align-items:center;gap:16px;padding:11px 18px;flex-shrink:0;border-bottom:3px solid var(--sabbia);flex-wrap:wrap}
+  #foh-kpl-full .krt-back{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#f6ece0;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:11px;letter-spacing:1px;text-transform:uppercase}
+  #foh-kpl-full .krt-brand{display:flex;flex-direction:column;line-height:1.05}
+  #foh-kpl-full .krt-brand .n{font-family:var(--font-serif);font-size:20px;letter-spacing:2px}
+  #foh-kpl-full .krt-brand .s{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#d9c3ad;margin-top:2px}
+  #foh-kpl-full .krt-nav{display:flex;align-items:center;gap:8px}
+  #foh-kpl-full .krt-nav button{background:transparent;border:1px solid rgba(255,255,255,.28);color:#f6ece0;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:15px;line-height:1}
+  #foh-kpl-full .krt-nav button:hover{background:rgba(255,255,255,.12)}
+  #foh-kpl-full .krt-nav .today{width:auto;padding:0 10px;font-size:11px}
+  #foh-kpl-full .krt-lbl{font-family:var(--font-serif);font-size:15px;min-width:220px;text-align:center}
+  #foh-kpl-full .krt-seg{display:inline-flex;background:rgba(0,0,0,.16);border-radius:9px;padding:3px}
+  #foh-kpl-full .krt-seg button{background:transparent;border:0;color:#e7d3bf;padding:6px 13px;border-radius:7px;cursor:pointer;font-size:12.5px}
+  #foh-kpl-full .krt-seg button.on{background:var(--sabbia);color:var(--vino);font-weight:600}
+  #foh-kpl-full .krt-stepper{display:none;align-items:center;gap:6px;color:#e7d3bf;font-size:12px}
+  #foh-kpl-full .krt-stepper select{font-size:12.5px;padding:5px 7px;border:1px solid rgba(255,255,255,.3);border-radius:7px;color:var(--vino);background:var(--sabbia)}
+  #foh-kpl-full .krt-act-wrap{position:relative}
+  #foh-kpl-full .krt-act-btn{background:var(--sabbia);color:var(--vino);border:0;border-radius:8px;padding:8px 15px;font-size:13.5px;font-weight:600;cursor:pointer}
+  #foh-kpl-full .krt-changed-chip{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:rgba(0,0,0,.16);color:#f6ece0;font-size:11.5px;padding:6px 11px;border-radius:20px;white-space:nowrap}
+  #foh-kpl-full .krt-changed-chip::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--gold)}
+  #foh-kpl-full .krt-bring{background:var(--gold);color:#2a1a10;border:0;border-radius:8px;padding:9px 17px;font-size:13.5px;font-weight:700;cursor:pointer;letter-spacing:.3px}
+  #foh-kpl-full .krt-bring:hover{filter:brightness(1.06)}
+  #foh-kpl-full .sch-plan-changed{position:relative}
+  #foh-kpl-full .sch-plan-changed .sch-shift{box-shadow:0 0 0 2px var(--gold)}
+  #foh-kpl-full .sch-plan-changed::after{content:'';position:absolute;top:3px;right:3px;width:9px;height:9px;background:var(--gold);border-radius:50%;border:2px solid var(--cream);z-index:2}
+  #foh-kpl-full .sch-plan-newbadge{font-size:9px;background:var(--vino);color:#f6ece0;padding:1px 6px;border-radius:10px;margin-left:6px;vertical-align:middle;letter-spacing:.5px}
+  #foh-kpl-full .sch-multi thead th{position:static}
+  #foh-kpl-full .sch-multi thead th.sch-th-name{position:sticky;left:0;z-index:6;min-width:190px}
+  #foh-kpl-full .sch-multi td.sch-td-name{position:sticky;left:0;z-index:3;min-width:190px;max-width:190px;background:var(--surface,#fff)}
+  #foh-kpl-full .sch-multi .sch-events-label{z-index:3}
+  #foh-kpl-full .sch-multi .sch-td-namemulti{display:flex;align-items:center;gap:3px}
+  #foh-kpl-full .sch-multi .sch-multi-info{display:flex;flex-direction:column;line-height:1.15;min-width:0;overflow:hidden}
+  #foh-kpl-full .sch-multi .sch-multi-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #foh-kpl-full .sch-multi .sch-multi-role{font-size:10px;color:var(--vino-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
+  #foh-kpl-full .sch-multi .sch-weekgroup{background:var(--vino);color:var(--cream);font-family:var(--font-serif);font-size:13px;letter-spacing:.4px;border-left:3px solid var(--sabbia)}
+  #foh-kpl-full .sch-multi .sch-weekstart{border-left:3px solid var(--vino-light)}
+  #foh-kpl-full .krt-sec-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  #foh-kpl-full .krt-sec-row .krt-sec-inp{flex:1;font-size:14px;padding:8px 10px;border:1px solid rgba(74,21,32,.25);border-radius:8px;background:var(--cream);color:var(--ink);font-family:var(--font-sans)}
+  #foh-kpl-full .krt-sec-tag{font-size:10px;background:var(--gold);color:#2a1a10;padding:2px 7px;border-radius:10px;font-weight:700;letter-spacing:.5px}
+  #foh-kpl-full .krt-sec-move{display:inline-flex;flex-direction:column;line-height:.7}
+  #foh-kpl-full .krt-sec-move button{background:transparent;border:0;color:var(--vino-light);cursor:pointer;font-size:11px;padding:1px 3px;border-radius:3px}
+  #foh-kpl-full .krt-sec-move button:hover{color:#fff;background:var(--vino)}
+  #foh-kpl-full .krt-sec-del{background:transparent;border:1px solid rgba(74,21,32,.2);color:var(--vino);cursor:pointer;font-size:16px;line-height:1;width:30px;height:32px;border-radius:8px;flex-shrink:0}
+  #foh-kpl-full .krt-sec-del:hover{background:#7f1d1d;color:#fff;border-color:#7f1d1d}
+  #foh-kpl-full .krt-oneweek-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--vino);color:#f6ece0;font-family:var(--font-serif);font-size:15px;padding:8px 14px;border-radius:10px 10px 0 0;margin-bottom:0}
+  #foh-kpl-full .krt-wk-hd{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+  #foh-kpl-full .krt-wk-actions{display:inline-flex;align-items:center;gap:6px}
+  #foh-kpl-full .krt-wk-btn{background:var(--sabbia);color:var(--vino);border:0;border-radius:6px;padding:3px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-sans);text-transform:none;letter-spacing:0}
+  #foh-kpl-full .krt-wk-btn:hover{filter:brightness(1.05)}
+  #foh-kpl-full .krt-wk-btn.paste{background:var(--gold);color:#2a1a10}
+  #foh-kpl-full .krt-wk-btn.clear{background:transparent;color:var(--sabbia);border:1px solid rgba(255,255,255,.4)}
+  #foh-kpl-full .krt-wk-btn.clear:hover{background:#7f1d1d;color:#fff;border-color:#7f1d1d;filter:none}
+  #foh-kpl-full .krt-wk-copied{font-size:11px;color:var(--sabbia);font-style:italic;text-transform:none;letter-spacing:0}
+  #foh-kpl-full .krt-act-menu{position:absolute;right:0;top:calc(100% + 8px);width:250px;max-width:calc(100vw - 24px);background:var(--cream);border:1px solid var(--sabbia-dark);border-radius:12px;box-shadow:0 14px 40px rgba(74,21,32,.22);padding:8px;z-index:4300;display:none}
+  #foh-kpl-full .krt-act-menu.open{display:block}
+  #foh-kpl-full .krt-act-menu .grp{font-family:var(--font-serif);font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--vino);padding:9px 12px 5px}
+  #foh-kpl-full .krt-act-menu .item{padding:9px 12px;border-radius:8px;font-size:13.5px;color:var(--ink);cursor:pointer}
+  #foh-kpl-full .krt-act-menu .item:hover{background:var(--sabbia-light)}
+  #foh-kpl-full .krt-hint{font-size:12px;color:var(--vino-light);padding:9px 18px 0}
+  #foh-kpl-full .krt-grid-wrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px 16px 30px}
+  #foh-kpl-full .kpl-ov{position:fixed;inset:0;z-index:4400;background:rgba(30,10,10,.42);display:flex;align-items:center;justify-content:center;padding:16px}
+  #foh-kpl-full .kpl-modal{background:var(--cream);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  #foh-kpl-full .kpl-modal h3{margin:0 0 10px;font-family:var(--font-serif);color:var(--vino);font-size:19px}
+  #foh-kpl-full .kpl-btn{border:1px solid rgba(74,21,32,.28);background:var(--cream);color:var(--vino);border-radius:7px;padding:7px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
+  #foh-kpl-full .kpl-btn.primary{background:var(--vino);color:#fff;border-color:var(--vino)}
+  #foh-kpl-full .kpl-btn.go{background:var(--gold);color:#2a1a10;border-color:var(--gold);font-weight:700}
+  #foh-kpl-full .kpl-lbl{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--vino-light)}
+  #foh-kpl-full input[type=time],#foh-kpl-full input[type=text],#foh-kpl-full input[type=number]{font-family:var(--font-sans);font-size:14px;padding:8px 9px;border:1px solid rgba(74,21,32,.25);border-radius:8px;background:var(--cream);color:var(--ink)}
+  </style>
+  <div class="krt-top">
+    <button class="krt-back" onclick="fohKrtClose()">&#8592; Schedule</button>
+    <div class="krt-brand"><span class="n">ROBERTO'S</span><span class="s">FOH Roster &mdash; Planning</span></div>
+    <div class="krt-nav">
+      <button onclick="fohKrtShift(-1)" title="Previous week">&#8249;</button>
+      <span class="krt-lbl" id="foh-krt-weeklabel"></span>
+      <button onclick="fohKrtShift(1)" title="Next week">&#8250;</button>
+      <button class="today" onclick="fohKrtToday()">This week</button>
+    </div>
+    <div class="krt-seg">
+      <button id="foh-krt-seg-1" class="on" onclick="fohKrtSetWeeks(1)">One week</button>
+      <button id="foh-krt-seg-n" onclick="fohKrtSetWeeks(fohKrtSpanN)">Several weeks</button>
+    </div>
+    <span class="krt-stepper" id="foh-krt-stepper">weeks&nbsp;<select onchange="fohKrtSetWeeks(this.value)"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select></span>
+    <span class="krt-changed-chip" id="foh-krt-changecount">No changes yet</span>
+    <button class="krt-bring" id="foh-krt-bringlive" onclick="fohSchedPlanOpenPublish()" title="Put the week(s) you pick onto the real schedule the team sees">Bring live</button>
+    <div class="krt-act-wrap">
+      <button class="krt-act-btn" onclick="fohKrtToggleActions(event)">Actions &#9660;</button>
+      <div class="krt-act-menu" id="foh-krt-actmenu">
+        <div class="grp">Build</div>
+        <div class="item" onclick="fohKrtFillTeams()">Fill lunch &amp; dinner teams</div>
+        <div class="item" onclick="fohKrtGiveDaysOff()">Give everyone their days off</div>
+        <div class="item" onclick="fohKrtGiveWeekOff()">Give everyone a week off</div>
+        <div class="grp">Check</div>
+        <div class="item" onclick="fohKrtCoverage();fohKrtCloseActions()">Coverage check</div>
+        <div class="item" onclick="fohKplOpenCalc();fohKrtCloseActions()">How many people do I need?</div>
+        <div class="grp">Sections</div>
+        <div class="item" onclick="fohKrtOpenSections()">Add, rename or delete a section</div>
+      </div>
+    </div>
+  </div>
+  <div class="krt-hint">You're planning &mdash; the live schedule is untouched. Change anything you like (tap a day, <b>+ Add staff</b>, <b>&#8596; Move</b>, the arrows to plan weeks ahead). Nothing reaches the team until you press <b>Bring live</b>. Gold marks a change that isn't live yet.</div>
+  <div class="krt-grid-wrap"><div id="foh-krt-grid"></div><div id="foh-kpl-modalhost"></div></div>`;
+}
+
+// ── "How many people do I need?" — pure math, no DB ──
+function fohKplOpenCalc(){
+  var secN=FOH_SECTIONS.length;
+  var host=document.getElementById('foh-kpl-modalhost');
+  function num(lbl,id,val,hint){ return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span class="kpl-lbl" style="width:210px">'+lbl+'</span><input type="number" min="0" id="'+id+'" value="'+val+'" style="width:70px">'+(hint?'<span style="font-size:11px;color:var(--vino-light)">'+hint+'</span>':'')+'</div>'; }
+  host.innerHTML='<div class="kpl-ov" onclick="fohKplCloseCalc(event)"><div class="kpl-modal" onclick="event.stopPropagation()">'
+    + '<h3>How many people do we need?</h3>'
+    + '<div style="font-size:12px;color:var(--vino-light);margin-bottom:10px">A quick estimate for an operating plan (e.g. open 7 days, lunch &amp; dinner, everyone gets days off). Change the numbers to match what you want.</div>'
+    + num('Open days per week','foh-kc-days','7','')
+    + num('Services per day','foh-kc-serv','2','lunch + dinner = 2')
+    + num('People needed per section, each service','foh-kc-min','1','')
+    + num('Days off per person, per week','foh-kc-off','2','')
+    + num('How many sections','foh-kc-sec',String(secN),'')
+    + '<div style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="foh-kc-double" style="width:16px;height:16px"><span style="font-size:12px">One person can cover <b>both</b> lunch &amp; dinner the same day (double shift)</span></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin:6px 0"><button class="kpl-btn primary" onclick="fohKplRunCalc()">Calculate</button></div>'
+    + '<div id="foh-kc-result" style="margin-top:8px"></div>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="kpl-btn" onclick="fohKplCloseCalc()">Close</button></div>'
+    + '</div></div>';
+  fohKplRunCalc();
+}
+function fohKplCloseCalc(ev){ if(ev&&ev.target&&!ev.target.classList.contains('kpl-ov'))return; document.getElementById('foh-kpl-modalhost').innerHTML=''; }
+function fohKplRunCalc(){
+  var days=Math.max(1,parseInt(fohKplV('foh-kc-days'),10)||7), serv=Math.max(1,parseInt(fohKplV('foh-kc-serv'),10)||2), min=Math.max(1,parseInt(fohKplV('foh-kc-min'),10)||1), off=Math.min(6,Math.max(0,parseInt(fohKplV('foh-kc-off'),10)||2)), sec=Math.max(1,parseInt(fohKplV('foh-kc-sec'),10)||1);
+  var dbl=document.getElementById('foh-kc-double') && document.getElementById('foh-kc-double').checked;
+  var workDays=Math.max(1, 7-off);
+  var shiftsPerSection = days*serv*min;
+  var perPerson = workDays*(dbl?serv:1);
+  var perSection = Math.ceil(shiftsPerSection/perPerson);
+  var total = perSection*sec;
+  var have = fohSchedStaff.length;
+  var gap = total-have;
+  var box=document.getElementById('foh-kc-result'); if(!box) return;
+  box.innerHTML='<div style="background:#eef3ec;border:1px solid #a9d8bf;border-radius:8px;padding:10px 12px">'
+    + '<div style="font-size:15px;color:#0f5132;font-weight:700">≈ '+perSection+' people per section &times; '+sec+' sections = '+total+' people</div>'
+    + '<div style="font-size:12px;color:#356;margin-top:6px">Each person works '+workDays+' days/week and covers '+(dbl?'both services':'one service')+' a day. To open '+days+' days with '+min+' per section per service, that’s '+shiftsPerSection+' service-slots each week per section.</div>'
+    + '<div style="font-size:12px;margin-top:6px;color:'+(gap>0?'#a8342a':'#0f5132')+'">You have '+have+' people now — '+(gap>0?('you’d need about '+gap+' more.'):(gap===0?'that’s exactly enough.':('that’s '+(-gap)+' to spare.')))+'</div>'
+    + '</div>';
 }
 
 // ── Duplicate week ──
@@ -5204,6 +6377,7 @@ async function openFohSchedule(){
         </div>
         <div class="sch-toolbar-actions">
           <button class="sch-copy-btn" id="foh-sch-sync-btn" onclick="fohSchedForceSync()">Live</button>
+          <button class="sch-copy-btn" onclick="fohKplOpen()" title="Plan the roster freely — nothing reaches the team until you press Bring live" style="font-weight:600">&#128197; Roster tool</button>
           <button class="sch-copy-btn" onclick="fohSchedDuplicateWeek()">&#10697; Duplicate this week</button>
           <button class="sch-delweek-btn" onclick="fohSchedDeleteWeek()">&#128465; Delete week</button>
           <button class="sch-copy-btn" id="foh-svt-dl" onclick="fohSchedDownloadXlsx()" title="Download this week as an Excel file to print or share">&#11015; Excel</button>
@@ -5231,6 +6405,8 @@ async function openFohSchedule(){
   }
 
   if(!fohSchedWeekStart) fohSchedWeekStart = getMonday(new Date());
+  await loadFohSections();      // section list (add/rename via the Roster tool) — before rendering
+  loadFohShiftPresets();        // quick-fill presets for the shift editor (non-blocking)
   await fohLoadSchedData();
   await fohLoadAttendance();
   fohSubscribeSchedRealtime();
@@ -5243,6 +6419,7 @@ async function openFohSchedule(){
     }, 5*60*1000);
   }
 }
+
 
 
 // ── Download the roster as an Excel file (so the team can print from Excel, ──
@@ -5717,7 +6894,7 @@ async function chkShowHistory(){
 })();
 </script>
 <script src="foh-events.js?v=2026-07-06.26"></script>
-<script src="foh-privateevents.js?v=2026-07-09.3"></script>
+<script src="foh-privateevents.js?v=2026-07-08.2"></script>
 <script src="foh-revenue.js?v=2026-07-02.1"></script>
 <script src="foh-closing.js?v=2026-06-25.4"></script>
 <script src="foh-ops.js?v=2026-06-26.3"></script>
@@ -5740,6 +6917,7 @@ async function chkShowHistory(){
 <div id="foh-sch-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center" onclick="fohSchedCloseModal(event)">
   <div style="background:var(--cream);border-radius:8px;padding:24px;width:340px;max-width:94vw;box-shadow:0 8px 32px rgba(0,0,0,.25)">
     <div id="foh-sch-modal-title" style="font-family:var(--font-serif);font-size:16px;color:var(--vino);margin-bottom:16px;font-weight:700"></div>
+    <div id="foh-sch-preset-row" class="sch-preset-row"></div>
     <div style="margin-bottom:12px">
       <label style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--vino-light);font-family:var(--font-sans)">Status</label>
       <select id="foh-sch-status-sel" onchange="fohSchedStatusChange()" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--sabbia-dark);border-radius:4px;font-family:var(--font-sans);background:var(--sabbia-light);color:var(--ink);font-size:14px">
@@ -5757,6 +6935,10 @@ async function chkShowHistory(){
       </select>
     </div>
     <div id="foh-sch-time-fields">
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--vino-light);font-family:var(--font-sans)">Working in section</label>
+        <select id="foh-sch-section-sel" title="Cover a different section for this day only — their real section stays the same" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--sabbia-dark);border-radius:4px;font-family:var(--font-sans);background:var(--sabbia-light);color:var(--ink);font-size:14px"></select>
+      </div>
       <div style="display:flex;gap:10px;margin-bottom:10px">
         <div style="flex:1">
           <label style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--vino-light);font-family:var(--font-sans)">Start</label>
