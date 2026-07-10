@@ -2219,7 +2219,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-10.1</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-10.2</div>
   </div>
 
   <!-- main scroll area -->
@@ -2432,7 +2432,7 @@ if ('serviceWorker' in navigator) {
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="common.js?v=20260710a"></script>
+<script src="common.js?v=20260710b"></script>
 <script>
 const SUPABASE_URL = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
@@ -2795,14 +2795,14 @@ async function fohLoadHubStats(){
     if(!r.error && r.data && r.data[0]){
       var row = r.data[0];
       var net = Number(row.rest_lunch_net||0)+Number(row.rest_dinner_net||0)+Number(row.lounge_lunch_net||0)+Number(row.lounge_dinner_net||0);
-      var y = new Date(); y.setDate(y.getDate()-1);
+      var y = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00'); y.setDate(y.getDate()-1);
       var fresh = String(row.service_date).slice(0,10) >= localISO(y);
       var dLbl = new Date(String(row.service_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
       setStat('operations', fresh?'#2E6B34':'#B00020', (fresh?'Last night':'Last report '+dLbl)+' \u00b7 AED '+Math.round(net).toLocaleString('en-US'));
     }
   }catch(e){}
   try{
-    var wd = new Date().toLocaleDateString('en-GB',{weekday:'long'});
+    var wd = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long'});
     var r2 = await sb.from('events').select('name,day_of_week,status').limit(50);
     if(!r2.error && r2.data){
       var tonight = r2.data.filter(function(e){ return e.day_of_week===wd && (e.status||'active')!=='paused'; });
@@ -2811,7 +2811,7 @@ async function fohLoadHubStats(){
     }
   }catch(e){}
   try{
-    var t = new Date();
+    var t = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00');   // operational night — MTD upper bound + month follow the night, not the wall clock
     var mStart = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-01';
     var r3 = await sb.from('rev_daily').select('service_date,net_actual').gte('service_date',mStart).lte('service_date',localISO(t)).limit(400);
     if(!r3.error && r3.data && r3.data.length){
@@ -3991,10 +3991,12 @@ const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 function fohTodayShort(){
-  return DAYS_SHORT[new Date().getDay()];
+  // Operational night, not wall clock: 00:00–06:00 Dubai still belongs to the
+  // night being finished, so "tonight's event" doesn't flip at midnight.
+  return DAYS_SHORT[new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00').getDay()];
 }
 function fohTomorrowShort(){
-  const d = new Date(); d.setDate(d.getDate()+1);
+  const d = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00'); d.setDate(d.getDate()+1);
   return DAYS_SHORT[d.getDay()];
 }
 function fohDateLabel(short){
@@ -4020,7 +4022,7 @@ async function renderFohHome(){
 
   // Fetch covers
   try{
-    const t=localISO(new Date()), td=new Date(); td.setDate(td.getDate()+1); const tm=localISO(td);
+    const t=RC.dubaiBusinessDate(new Date()), td=new Date(t+'T12:00:00'); td.setDate(td.getDate()+1); const tm=localISO(td);
     const {data,error}=await sbKitchen.from('covers').select('service_date,night_covers').in('service_date',[t,tm]);
     if(error) throw error;
     const tr=(data||[]).find(r=>String(r.service_date).slice(0,10)===t);
@@ -6735,10 +6737,11 @@ function chkEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 // (iso) uses the 6 h rollback; the hour (for the Opening/Closing default tab) stays the
 // real Dubai hour so the tab still flips to Closing in the evening as before.
 function chkToday(){
+  // Single source of truth: the shared operational-night helper (common.js / RC).
+  // iso = the business night (6 h Dubai rollback); hour = real Dubai hour so the
+  // Opening/Closing default tab still flips in the evening exactly as before.
   var n=new Date();
-  var dubai=new Date(n.getTime()+n.getTimezoneOffset()*60000+4*3600000);
-  var biz=new Date(dubai.getTime()-6*3600000);
-  return {iso:biz.getFullYear()+'-'+String(biz.getMonth()+1).padStart(2,'0')+'-'+String(biz.getDate()).padStart(2,'0'), hour:dubai.getHours()};
+  return {iso:RC.dubaiBusinessDate(n), hour:RC.dubaiWallClock(n).getHours()};
 }
 async function openChecklists(){
   var C=chkInit(); var t=chkToday(); C.date=t.iso; C.type=(t.hour>=16?'closing':'opening');
@@ -6893,12 +6896,12 @@ async function chkShowHistory(){
   }
 })();
 </script>
-<script src="foh-events.js?v=2026-07-06.26"></script>
-<script src="foh-privateevents.js?v=2026-07-08.2"></script>
-<script src="foh-revenue.js?v=2026-07-02.1"></script>
-<script src="foh-closing.js?v=2026-06-25.4"></script>
-<script src="foh-ops.js?v=2026-06-26.3"></script>
-<script src="stock-take.js?v=2026-07-01.1"></script>
+<script src="foh-events.js?v=20260710b"></script>
+<script src="foh-privateevents.js?v=20260710b"></script>
+<script src="foh-revenue.js?v=20260710b"></script>
+<script src="foh-closing.js?v=20260710b"></script>
+<script src="foh-ops.js?v=20260710b"></script>
+<script src="stock-take.js?v=20260710b"></script>
 
 <!-- FOH Schedule: PIN modal -->
 <div id="foh-sch-pin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center" onclick="fohSchedClosePin(event)">
