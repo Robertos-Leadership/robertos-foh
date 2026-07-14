@@ -113,6 +113,7 @@ function peNormSM(m){
   if(!m) return null;
   return { id:(m.id||null), key:m.key, name:m.name,
            price:(m.price!=null ? m.price : (m.price_pp!=null ? m.price_pp : null)),
+           cost:(m.cost!=null ? m.cost : (m.cost_pp!=null ? m.cost_pp : null)),
            line:(m.line||''), courses:(m.courses||[]), pdf:(m.pdf||null),
            active:(m.active!==false) };
 }
@@ -921,6 +922,12 @@ function peCalcTotals(e){
     pcs += p;
     if(!(d.allergens||[]).length && d.category!=='Dessert') missing.push(d.name);
   });
+  // A set-menu event has no dish items — the chef's cost/guest on the menu
+  // keeps the food-cost % honest (vs the agreed price, so discounts show).
+  if(!items.length && e.set_menu){
+    var smCost = peSetMenuByKey(e.set_menu.key);
+    if(smCost && smCost.cost!=null) cost = Number(smCost.cost)||0;
+  }
   var foodPP = (e.food_price_pp!=null && e.food_price_pp!=='') ? Number(e.food_price_pp) : (foodComputed||null);
   var bev = e.bev_package_id ? peBevById(e.bev_package_id) : null;
   // Dry event: an alcoholic (or not-yet-flagged) package can never be charged —
@@ -2875,9 +2882,9 @@ function peSmDraftFrom(courses){
     return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice(), desc:(c.desc||null) };
   });
 }
-function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; renderMain(); }
-function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; renderMain(); }
-function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; renderMain(); }
+function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
 // ── chef uploads the designed menu PDF ───────────────────────────────────────
 // One upload does two jobs: the text is read out and laid into courses by the
 // same "Structure it" flow the paste box uses, and the file itself is stored
@@ -2946,6 +2953,8 @@ async function peSmPdfUpload(input){
 function peSmSync(){
   var nEl=document.getElementById('pe-sm-name'); if(nEl) peState.smName=nEl.value;
   var pEl=document.getElementById('pe-sm-paste'); if(pEl) peState.smText=pEl.value;
+  var cEl=document.getElementById('pe-sm-cost'); if(cEl) peState.smCost=cEl.value;
+  var prEl=document.getElementById('pe-sm-price'); if(prEl) peState.smPrice=prEl.value;
   (peState.smDraft||[]).forEach(function(c,i){
     var a=document.getElementById('pe-sm-cname-'+i), b=document.getElementById('pe-sm-citems-'+i), ch=document.getElementById('pe-sm-choose-'+i);
     if(a) c.name=a.value;
@@ -3030,11 +3039,14 @@ function peRenderSetMenuLib(){
   var raw = (peState.editSetMenuId && peState.editSetMenuId!=='new') ? peSmRawById(peState.editSetMenuId) : null;
   var editing = peState.editSetMenuId==='new' || !!raw;
   var curPrice = raw ? (raw.price_pp!=null?raw.price_pp:(raw.price!=null?raw.price:null)) : null;
+  var curCost = raw ? (raw.cost_pp!=null?raw.cost_pp:null) : null;
   var ce = peCanEdit();
   var h='';
   if(editing){
+    var priceVal2 = peState.smPrice!=null ? peState.smPrice : (curPrice!=null?curPrice:'');
+    var costVal = peState.smCost!=null ? peState.smCost : (curCost!=null?curCost:'');
     var priceRow = ce
-      ? '<input class="pe-in" id="pe-sm-price" type="number" min="0" style="max-width:190px" value="'+peEsc(curPrice!=null?curPrice:'')+'" placeholder="e.g. 395">'
+      ? '<input class="pe-in" id="pe-sm-price" type="number" min="0" style="max-width:190px" value="'+peEsc(priceVal2)+'" placeholder="e.g. 395">'
       : '<input class="pe-in" style="max-width:190px;background:#EFE7DA;color:#9C8E75" value="'+(curPrice!=null?('AED '+peMoney(curPrice)):'Price pending')+'" disabled><div style="font-size:11px;color:#9A7B12;margin-top:5px">Price is set by Valentina, Andrea or Francesco.</div>';
     h += '<div class="pe-card"><b style="color:#400207">'+(raw?'Edit set menu':'New set menu')+'</b>'+
       '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">Saved here it appears in Valentina’s dropdown, the guest proposal and the kitchen brief.</div>'+
@@ -3054,6 +3066,8 @@ function peRenderSetMenuLib(){
       '<div class="pe-lbl" style="margin-top:12px">Courses</div>'+
       (peState.smDraft||[]).map(function(c,i){ return peSmCourseHTML(c,i); }).join('')+
       '<div style="margin-top:6px"><button class="pe-btn sec sm" onclick="peSmAddCourse()">+ Add course</button></div>'+
+      '<div style="margin-top:12px"><div class="pe-lbl">Kitchen cost / guest (AED) — chef’s number, never shown to guests</div>'+
+      '<input class="pe-in" id="pe-sm-cost" type="number" min="0" style="max-width:190px" value="'+peEsc(costVal)+'" placeholder="what it costs to produce"></div>'+
       '<div style="margin-top:12px"><div class="pe-lbl">Price / guest (AED)</div>'+priceRow+'</div>'+
       '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="pe-btn" onclick="peSaveSetMenu(\''+(raw?raw.id:'')+'\')">Save menu</button>'+
@@ -3066,9 +3080,13 @@ function peRenderSetMenuLib(){
   var list = peSetMenusRaw();
   h += '<div class="pe-card">'+(list.length?list.map(function(m){
     var mm=peNormSM(m); var pending=mm.price==null;
+    var costPct = (mm.cost!=null && mm.price) ? Math.round((mm.cost/(mm.price/PE_GROSS))*100) : null;
     return '<div class="pe-dishrow" style="opacity:'+(mm.active===false?.45:1)+'">'+
       '<span><b style="color:#400207">'+peEsc(mm.name)+'</b> '+
       (pending?'<span style="background:#FAEEDA;color:#854F0B;font-size:11px;padding:2px 9px;border-radius:20px;margin-left:2px">Price pending</span>':'· AED '+peMoney(mm.price)+'/guest')+
+      (mm.cost!=null
+        ? ' <span style="font-size:11px;color:'+(costPct==null?'#8B7355':(costPct<=27?'#2E6B34':'#B00020'))+'">· cost '+peMoney(mm.cost)+(costPct!=null?' ('+costPct+'% of net'+(costPct<=27?'':' — above 27% target')+')':'')+'</span>'
+        : ' <span style="font-size:11px;color:#B00020">· no cost yet — chef to add</span>')+
       (mm.active===false?' <span style="font-size:11px;color:#8B7355">· retired</span>':'')+
       '<br><span style="font-size:11px;color:#8B7355">'+peEsc(mm.line||peSmSummary(mm.courses))+'</span></span>'+
       (m.id?'<button class="pe-btn sec sm" onclick="peSmEdit(\''+m.id+'\')">Edit</button>':'<span style="font-size:11px;color:#A5876B">built-in</span>')+
@@ -3095,10 +3113,20 @@ async function peSaveSetMenu(id){
   }
   var row = { key:(raw&&raw.key)||peSmSlug(name), name:name, courses:courses,
               line:peSmSummary(courses), price_pp:priceVal, updated_at:new Date().toISOString() };
+  var ce2 = document.getElementById('pe-sm-cost');
+  if(ce2){ var cv = ce2.value.trim(); row.cost_pp = cv===''?null:Number(cv); }
   if(peState.smPdf) row.pdf = peState.smPdf;  // a fresh upload replaces the PDF; otherwise the existing one stays
   if(!id) row.created_by=peActor();
   var r = id ? await sb.from('event_set_menus').update(row).eq('id', id).select().single()
              : await sb.from('event_set_menus').insert(row).select().single();
+  // Cost column not added yet (SQL pending) — save everything else rather than
+  // losing the chef's work, and name exactly what's missing.
+  if(r.error && ('cost_pp' in row) && peColMissing(r.error, 'cost_pp')){
+    delete row.cost_pp;
+    r = id ? await sb.from('event_set_menus').update(row).eq('id', id).select().single()
+           : await sb.from('event_set_menus').insert(row).select().single();
+    if(!r.error) peToast('Saved without the cost — the cost field needs foh-events-setmenu-cost.sql run first.', true);
+  }
   if(r.error || !r.data){ peToast('Set menu NOT saved — '+String(r.error&&r.error.message||'').slice(0,110), true); return; }
   if(id){ peState.setMenus = peState.setMenus.map(function(m){ return m.id===id ? r.data : m; }); }
   else { if(!Array.isArray(peState.setMenus)) peState.setMenus=[]; peState.setMenus.push(r.data); }
