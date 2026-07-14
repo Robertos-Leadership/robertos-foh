@@ -391,7 +391,8 @@ async function peLoadAll(force){
       peFetchAllPaged(function(){ return sb.from('event_dishes').select('*').order('category').order('serve').order('name').order('id'); }),
       peFetchAllPaged(function(){ return sb.from('event_bev_packages').select('*').order('name').order('id'); }),
       peFetchAllPaged(function(){ return sb.from('event_packages').select('*').order('name').order('id'); }),
-      peFetchAllPaged(function(){ return sb.from('event_set_menus').select('*').order('name').order('id'); })
+      peFetchAllPaged(function(){ return sb.from('event_set_menus').select('*').order('name').order('id'); }),
+      sb.from('event_menu_choices').select('token,created_at').eq('applied', false).order('created_at',{ascending:false})
     ]);
     // event_set_menus (res[5]) is loaded non-fatally: if the table isn't there
     // yet (SQL not run), the module still works on the built-in PE_SET_MENUS.
@@ -404,6 +405,12 @@ async function peLoadAll(force){
     peState.bevs   = res[3].data||[];
     peState.packs  = res[4].data||[];
     peState.setMenus = (res[5] && !res[5].error && res[5].data && res[5].data.length) ? res[5].data : PE_SET_MENUS.map(peNormSM);
+    // res[6] (non-fatal): guest menu-number submissions not yet applied, so
+    // Valentina is told the moment she's in the app — token → newest arrival.
+    peState.menuChoicesPending = {};
+    if(res[6] && !res[6].error) (res[6].data||[]).forEach(function(c){
+      if(!peState.menuChoicesPending[c.token]) peState.menuChoicesPending[c.token] = c.created_at;
+    });
     peState.loaded = true;
   }catch(e){
     console.warn('[peLoadAll]', e);
@@ -1089,6 +1096,14 @@ function peRenderEvent(){
       '⚠ Also booked in <b>'+peEsc(e.area)+'</b> on <b>'+peEsc(peDLabel(e.event_date))+'</b>: '+
       clash.map(function(c){ return '<span style="text-decoration:underline;cursor:pointer" onclick="peGo(\'event\',\''+c.id+'\')">'+peEsc(c.client_name||c.company||'another event')+'</span> ('+peEsc(peStatusMeta(c.status).n)+')'; }).join(', ')+
       ' — check this is intentional.</div>';
+  }
+
+  // The guest sent their set-menu numbers — tell Valentina the moment she's on
+  // the event, with the review-and-apply one tap away.
+  if(ce && e.set_menu && peState.menuChoicesPending && peState.menuChoicesPending[e.client_token]){
+    h += '<div style="background:#EEF3E4;border:1px solid #B9C99A;border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#3F5222;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<span><b>✓ The guest sent their menu numbers</b> — review them and they go straight onto the kitchen brief.</span>'+
+      '<button class="pe-btn sm" onclick="peFetchMenuChoices(\''+e.id+'\')">Review &amp; apply</button></div>';
   }
 
   // P0/#6 — persistent banner when an edit voided the signed agreement (stays
@@ -1981,6 +1996,7 @@ async function peFetchMenuChoices(id){
   if(u.error){ peToast('NOT applied — '+(u.error.message||'check connection'), true); return; }
   e.set_menu = sm;
   sb.from('event_menu_choices').update({applied:true}).eq('id', row.id);
+  if(peState.menuChoicesPending) delete peState.menuChoicesPending[e.client_token];
   sb.from('event_log').insert({event_id:id, action:'client_selection', detail:'guest set-menu numbers applied', actor:peActor()});
   peToast('Guest’s numbers applied ✓ — check the green totals, then the kitchen brief is ready');
   renderMain();
