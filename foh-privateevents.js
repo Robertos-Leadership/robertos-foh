@@ -2678,7 +2678,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note){
       // Menus with a designed PDF link to it; menus without one (chef-added)
       // print their courses inline so the guest still sees the full menu.
       var extra = m.pdf
-        ? '<div style="text-align:center;margin:10px 0 20px"><a href="'+peBaseUrl()+m.pdf+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the full menu</a></div>'
+        ? '<div style="text-align:center;margin:10px 0 20px"><a href="'+(/^https?:/i.test(m.pdf)?m.pdf:peBaseUrl()+m.pdf)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the full menu</a></div>'
         : (m.courses||[]).map(function(c){
             var b = c.choose ? ('choice of '+((c.options||[]).join(' / '))) : ((c.items||[]).join(', '));
             return '<div class="dish"><span class="d"><b>'+peEsc(c.name)+'</b> — '+peEsc(b)+'</span></div>';
@@ -2873,9 +2873,72 @@ function peSmDraftFrom(courses){
     return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice() };
   });
 }
-function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; renderMain(); }
-function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; renderMain(); }
-function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; renderMain(); }
+function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; renderMain(); }
+function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; renderMain(); }
+function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; renderMain(); }
+// ── chef uploads the designed menu PDF ───────────────────────────────────────
+// One upload does two jobs: the text is read out and laid into courses by the
+// same "Structure it" flow the paste box uses, and the file itself is stored
+// so the guest email gets its "View the full menu" button.
+function peLoadPdfJs(){
+  return new Promise(function(res, rej){
+    if(window.pdfjsLib) return res(window.pdfjsLib);
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    s.onerror = function(){ rej(new Error('the PDF reader could not load — check the connection')); };
+    document.head.appendChild(s);
+  });
+}
+async function peSmPdfText(file){
+  var lib = await peLoadPdfJs();
+  var doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+  var text = '';
+  for(var i=1;i<=doc.numPages;i++){
+    var tc = await (await doc.getPage(i)).getTextContent();
+    text += tc.items.map(function(it){ return it.str; }).join(' ')+'\n';
+  }
+  return text.trim();
+}
+async function peSmPdfUpload(input){
+  var f = input.files && input.files[0]; if(!f) return;
+  input.value = '';
+  if(!/pdf$/i.test(f.type||'') && !/\.pdf$/i.test(f.name||'')){ peToast('That file is not a PDF — export the menu as PDF first', true); return; }
+  if(f.size > 8*1024*1024){ peToast('The PDF is over 8 MB — export a lighter version and try again', true); return; }
+  peSmSync(); peState.smBusy = true; renderMain();
+  var text = '';
+  try{ text = await peSmPdfText(f); }
+  catch(err){
+    peState.smBusy = false; renderMain();
+    peToast('Could not read the PDF — paste the menu text instead. '+String(err&&err.message||'').slice(0,60), true);
+    return;
+  }
+  if(!text){ peState.smBusy = false; renderMain(); peToast('The PDF has no readable text (it may be a scan) — paste the menu text instead', true); return; }
+  // Attach the file (non-fatal: without the storage bucket the menu still
+  // saves and works — it just has no "View the full menu" button yet).
+  peState.smPdf = null;
+  try{
+    var path = peSmSlug(peState.smName || f.name.replace(/\.pdf$/i,'')) + '.pdf';
+    var up = await sb.storage.from('event-menus').upload(path, f, {contentType:'application/pdf', upsert:true});
+    if(up.error) throw up.error;
+    var pub = sb.storage.from('event-menus').getPublicUrl(path);
+    peState.smPdf = (pub && pub.data && pub.data.publicUrl) || null;
+  }catch(err2){
+    peToast('Menu text read ✓ — but the PDF could not be attached (needs event-menus-bucket.sql). '+String(err2&&err2.message||'').slice(0,60), true);
+  }
+  peState.smText = text;
+  peState.smBusy = false;
+  renderMain();
+  await peStructureMenu();
+  if(!(peState.smName||'').trim()){
+    peState.smName = f.name.replace(/\.pdf$/i,'').replace(/[_-]+/g,' ').trim();
+    renderMain();
+  }
+  if(peState.smPdf) peToast('PDF attached ✓ — check the courses below, then save');
+}
 // Read the live form back into state before any structural re-render so typing
 // is never lost when a course is added/removed.
 function peSmSync(){
@@ -2976,6 +3039,12 @@ function peRenderSetMenuLib(){
         '<textarea class="pe-in" id="pe-sm-paste" rows="3" placeholder="Antipasti: Burrata, artichokes · Primi: truffle risotto · Secondi (choice): melanzane / tortelli · Dolci: tiramisù">'+peEsc(peState.smText||'')+'</textarea>'+
         '<div style="margin-top:6px"><button class="pe-btn sec sm" onclick="peStructureMenu()"'+(peState.smBusy?' disabled':'')+'>'+(peState.smBusy?'Reading…':'Structure it')+'</button>'+
         '<span style="font-size:11px;color:#8B7355;margin-left:8px">or add courses by hand below</span></div>'+
+        '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<label class="pe-btn sec sm" style="cursor:pointer">'+(peState.smBusy?'Reading…':'…or upload the menu PDF')+
+            '<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="peSmPdfUpload(this)"'+(peState.smBusy?' disabled':'')+'></label>'+
+          '<span style="font-size:11px;color:#8B7355">'+(peState.smPdf
+            ? 'PDF attached ✓ — guests get a “View the full menu” button'
+            : (raw&&raw.pdf ? 'this menu already has a PDF — uploading replaces it' : 'reads the courses AND attaches the designed PDF for guests'))+'</span></div>'+
       '</div>'+
       '<div class="pe-lbl" style="margin-top:12px">Courses</div>'+
       (peState.smDraft||[]).map(function(c,i){ return peSmCourseHTML(c,i); }).join('')+
@@ -3019,13 +3088,14 @@ async function peSaveSetMenu(id){
   }
   var row = { key:(raw&&raw.key)||peSmSlug(name), name:name, courses:courses,
               line:peSmSummary(courses), price_pp:priceVal, updated_at:new Date().toISOString() };
+  if(peState.smPdf) row.pdf = peState.smPdf;  // a fresh upload replaces the PDF; otherwise the existing one stays
   if(!id) row.created_by=peActor();
   var r = id ? await sb.from('event_set_menus').update(row).eq('id', id).select().single()
              : await sb.from('event_set_menus').insert(row).select().single();
   if(r.error || !r.data){ peToast('Set menu NOT saved — '+String(r.error&&r.error.message||'').slice(0,110), true); return; }
   if(id){ peState.setMenus = peState.setMenus.map(function(m){ return m.id===id ? r.data : m; }); }
   else { if(!Array.isArray(peState.setMenus)) peState.setMenus=[]; peState.setMenus.push(r.data); }
-  peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText='';
+  peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null;
   peToast(priceVal!=null ? 'Set menu saved ✓ — ready for the events desk' : 'Set menu saved ✓ — Valentina sets the price before it can be quoted');
   renderMain();
 }
