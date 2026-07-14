@@ -1951,21 +1951,48 @@ function peFoodSetMenuHTML(e){
     if(ce && e.client_token){
       h += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+
         '<button class="pe-btn sec sm" onclick="peCopyMenuChoicesLink(\''+e.id+'\')">Copy link — guest picks the numbers</button>'+
+        '<button class="pe-btn sec sm" onclick="peWaMenuChoicesLink(\''+e.id+'\')">WhatsApp it'+(e.contact_phone?'':' (add phone first)')+'</button>'+
         '<button class="pe-btn sec sm" onclick="peFetchMenuChoices(\''+e.id+'\')">Check for the guest’s numbers</button></div>';
     }
   }
   return h+'</div>';
 }
+function peMenuChoicesUrl(e){
+  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');
+  return base + 'client-setmenu.html?t=' + e.client_token + '&m=' + encodeURIComponent(e.set_menu.key) + (e.guests ? '&g=' + Number(e.guests) : '') +
+    ((e.food_price_pp!=null && e.food_price_pp!=='') ? '&p=' + Number(e.food_price_pp) : '');
+}
 function peCopyMenuChoicesLink(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.set_menu) return;
-  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');
-  var url = base + 'client-setmenu.html?t=' + e.client_token + '&m=' + encodeURIComponent(e.set_menu.key) + (e.guests ? '&g=' + Number(e.guests) : '') +
-    ((e.food_price_pp!=null && e.food_price_pp!=='') ? '&p=' + Number(e.food_price_pp) : '');
+  var url = peMenuChoicesUrl(e);
   (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){
     peToast('Link copied — the guest picks how many of each dish, then tap “Check for the guest’s numbers”');
   }).catch(function(){ prompt('Copy this link:', url); });
   sb.from('event_log').insert({event_id:id, action:'client_link', detail:'set-menu choices link copied', actor:peActor()});
+}
+// WhatsApp the pick-your-numbers link straight to the event's contact.
+function peWaMenuChoicesLink(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var e = peEvById(id); if(!e || !e.set_menu) return;
+  if(!e.contact_phone){ peToast('Add the client’s phone on the event first — then this sends in one tap', true); return; }
+  var digits = String(e.contact_phone).replace(/[^0-9]/g,'');
+  if(digits.length && digits[0]==='0') digits = '971'+digits.slice(1);
+  if(digits.length <= 9) digits = '971'+digits;
+  var m = peSetMenuByKey(e.set_menu.key);
+  var msg = 'Ciao'+(e.contact_name?' '+e.contact_name.split(' ')[0]:'')+'! Here is the menu for your event at Roberto’s'+
+    (m?' — '+m.name:'')+'. Tap to see every dish and tell us your choices:\n'+peMenuChoicesUrl(e)+'\nGrazie — Valentina';
+  window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(msg), '_blank');
+  sb.from('event_log').insert({event_id:id, action:'whatsapp', detail:'set-menu choices link → '+e.contact_phone, actor:peActor()});
+}
+// Share ANY menu as a read-only page (no event needed) — WhatsApp opens with
+// the contact picker, so it works for any number.
+function peWaShareMenu(key){
+  var m = peSetMenuByKey(key); if(!m) return;
+  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');
+  var url = base + 'client-setmenu.html?m=' + encodeURIComponent(key);
+  var msg = 'Roberto’s — '+m.name+(m.price!=null?' · AED '+m.price+' per guest':'')+'. Tap to see the full menu:\n'+url;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
 }
 // Pull the guest's submitted numbers and apply them to this event after a
 // preview — the newest submission for this event's link wins.
@@ -2604,7 +2631,9 @@ function peRenderPacksView(){
       return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
         '<b>'+peEsc(m.name)+'</b> · AED '+m.price+' / person</label><br>'+
         '<span style="font-size:11px;color:#8B7355">'+peEsc(m.line||peSmSummary(m.courses))+'</span></span>'+
-        (m.pdf?'<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button>':'')+'</div>';
+        '<span style="display:flex;gap:6px;flex-shrink:0">'+
+        '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
+        (m.pdf?'<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button>':'')+'</span></div>';
     }).join('')+'</div>';
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner.</div>'+

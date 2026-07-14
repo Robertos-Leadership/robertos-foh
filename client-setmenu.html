@@ -60,8 +60,11 @@ function flash(msg){
 }
 function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
 
+// With a token the page collects the guest's numbers; without one it is a
+// beautiful read-only menu — the link Valentina shares on WhatsApp.
+var viewOnly = !token;
 async function load(){
-  if(!token || !menuKey) return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
+  if(!menuKey) return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
   try{
     var r = await fetch(SUPA+'/rest/v1/event_set_menus?key=eq.'+encodeURIComponent(menuKey)+'&active=is.true&select=key,name,price_pp,courses',
       { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
@@ -77,7 +80,20 @@ function chooseCourses(){ return (menu.courses||[]).filter(function(c){ return c
 function render(){
   var h = '<div class="brand">R O B E R T O ’ S</div>'+
     '<div class="sub">'+esc(menu.name)+'</div>'+
-    '<div class="sub2">'+(guests?guests+' guests · ':'')+(isFinite(agreedPP)?'AED '+agreedPP+' per guest':(menu.price_pp!=null?'AED '+menu.price_pp+' per guest':''))+'</div>';
+    '<div class="sub2">'+(!viewOnly&&guests?guests+' guests · ':'')+(isFinite(agreedPP)?'AED '+agreedPP+' per guest':(menu.price_pp!=null?'AED '+menu.price_pp+' per guest':''))+'</div>';
+  if(viewOnly){
+    (menu.courses||[]).forEach(function(c){
+      var dsc = c.desc||{};
+      h += '<div class="sect"><div class="sect-h"><b>'+esc(c.name)+'</b>'+(c.choose?'<span class="cnt" style="color:#A5876B">each guest chooses one</span>':'')+'</div>'+
+        ((c.choose?c.options:c.items)||[]).map(function(o){
+          return '<div class="shared">'+esc(o)+(dsc[o]?'<span class="ds">'+esc(dsc[o])+'</span>':'')+'</div>';
+        }).join('')+'</div>';
+    });
+    h += '<div class="btnrow"><div class="ft">To book your event or ask us anything:<br>'+
+      '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a> — Valentina will take care of the rest.</div></div>';
+    el('card').innerHTML = h;
+    return;
+  }
   if(guests){
     h += '<div class="gbox">For each course below, tell us how many guests would like each dish — the numbers should add up to '+guests+'. Your kitchen brief is prepared from exactly what you enter here.</div>';
   } else {
