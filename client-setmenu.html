@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Roberto's — Your menu choices</title>
+<style>
+  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
+  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .sub{font-size:14px;color:#8A6A4F;text-align:center}
+  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
+  .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
+  .sect-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+  .sect-h b{font-size:15px;color:#400207;font-weight:normal}
+  .cnt{font-size:11px;font-family:Arial,sans-serif}
+  .hint{font-size:12px;color:#8A6A4F;margin-bottom:6px}
+  .opt{display:flex;gap:11px;align-items:center;padding:7px 0}
+  .nm{font-size:13.5px;flex:1}
+  .step{display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .sbtn{width:30px;height:30px;border-radius:8px;border:1px solid #C9AD96;background:#fff;color:#400207;font-size:16px;font-family:Georgia,serif;cursor:pointer;line-height:1}
+  .qin{width:44px;border:1px solid #C9AD96;border-radius:7px;background:#fff;padding:6px 2px;font-family:Arial,sans-serif;font-size:13px;text-align:center}
+  .shared{font-size:13.5px;padding:4px 0}
+  .shared .tag{font-size:10.5px;color:#8A9A5B;font-family:Arial,sans-serif}
+  .note{margin:18px 22px 0}
+  .note textarea{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:64px;resize:vertical}
+  .gbox{margin:16px 22px 0;background:#F3E9DA;border-radius:10px;padding:12px 14px;font-family:Arial,sans-serif;font-size:12.5px;color:#400207}
+  .btnrow{padding:20px 22px 26px}
+  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer}
+  .btn:disabled{opacity:.55}
+  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:#400207;color:#F3E7D8;border-radius:10px;padding:11px 14px;font-family:Arial,sans-serif;font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card">
+  <div class="msg">Loading your menu…</div>
+</div></div>
+<script>
+var SUPA = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
+var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
+var q = new URLSearchParams(location.search);
+var token = q.get('t')||'', menuKey = q.get('m')||'', guests = parseInt(q.get('g'),10)||0;
+var agreedPP = parseFloat(q.get('p')); // the event's agreed per-guest price, when Valentina negotiated one
+var menu = null, counts = {};
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function el(id){ return document.getElementById(id); }
+var flashTimer = null;
+function flash(msg){
+  var f = el('cl-flash');
+  if(!f){ f = document.createElement('div'); f.id='cl-flash'; f.className='flash'; document.body.appendChild(f); }
+  f.textContent = msg; f.style.display = 'block';
+  if(flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(function(){ f.style.display='none'; }, 4200);
+}
+function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+
+async function load(){
+  if(!token || !menuKey) return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
+  try{
+    var r = await fetch(SUPA+'/rest/v1/event_set_menus?key=eq.'+encodeURIComponent(menuKey)+'&active=is.true&select=key,name,price_pp,courses',
+      { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+    var rows = await r.json();
+    if(!r.ok || !rows.length) return fail('This menu is no longer available — please get in touch and we’ll help right away.');
+    menu = rows[0];
+    render();
+  }catch(e){ fail('Could not load the menu — please check your connection and reopen the link.'); }
+}
+
+function chooseCourses(){ return (menu.courses||[]).filter(function(c){ return c.choose; }); }
+
+function render(){
+  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+    '<div class="sub">'+esc(menu.name)+'</div>'+
+    '<div class="sub2">'+(guests?guests+' guests · ':'')+(isFinite(agreedPP)?'AED '+agreedPP+' per guest':(menu.price_pp!=null?'AED '+menu.price_pp+' per guest':''))+'</div>';
+  if(guests){
+    h += '<div class="gbox">For each course below, tell us how many guests would like each dish — the numbers should add up to '+guests+'. Your kitchen brief is prepared from exactly what you enter here.</div>';
+  } else {
+    h += '<div class="gbox">How many guests will you be?'+
+      '<input class="qin" id="cl-g" type="number" min="1" style="width:64px;margin-left:8px" oninput="onGuests(this.value)"></div>';
+  }
+  (menu.courses||[]).forEach(function(c, ci){
+    h += '<div class="sect"><div class="sect-h"><b>'+esc(c.name)+'</b>'+(c.choose?'<span class="cnt" id="cnt-'+ci+'"></span>':'')+'</div>';
+    if(c.choose){
+      counts[c.name] = counts[c.name] || {};
+      h += '<div class="hint">How many guests would like each?</div>'+
+        (c.options||[]).map(function(o, oi){
+          return '<div class="opt"><span class="nm">'+esc(o)+'</span><span class="step">'+
+            '<button class="sbtn" onclick="bump('+ci+','+oi+',-1)">−</button>'+
+            '<input class="qin" id="q-'+ci+'-'+oi+'" type="number" min="0" value="" placeholder="0" oninput="setN('+ci+','+oi+',this.value)">'+
+            '<button class="sbtn" onclick="bump('+ci+','+oi+',1)">+</button></span></div>';
+        }).join('');
+    } else {
+      h += (c.items||[]).map(function(it){ return '<div class="shared">'+esc(it)+' <span class="tag">— served for everyone</span></div>'; }).join('');
+    }
+    h += '</div>';
+  });
+  h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">Anything we should change or know? A vegan main, allergies, the occasion…</div>'+
+       '<textarea id="cl-note" maxlength="900"></textarea></div>';
+  h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send my choices to Roberto’s</button>'+
+       '<div class="ft">Valentina will confirm everything back to you.<br>Our chefs will do their best to accommodate your dietary requirements.</div></div>';
+  el('card').innerHTML = h;
+  sums();
+}
+
+function onGuests(v){ guests = parseInt(v,10)||0; sums(); }
+function optName(ci, oi){ return menu.courses[ci].options[oi]; }
+function setN(ci, oi, v){
+  var c = menu.courses[ci];
+  var n = parseInt(v,10);
+  counts[c.name] = counts[c.name] || {};
+  if(n>0) counts[c.name][optName(ci,oi)] = n; else delete counts[c.name][optName(ci,oi)];
+  sums();
+}
+function bump(ci, oi, d){
+  var inp = el('q-'+ci+'-'+oi);
+  var n = Math.max(0, (parseInt(inp.value,10)||0) + d);
+  inp.value = n || '';
+  setN(ci, oi, n);
+}
+function courseSum(c){
+  var m = counts[c.name]||{}; var s = 0;
+  Object.keys(m).forEach(function(k){ s += Number(m[k])||0; });
+  return s;
+}
+function sums(){
+  (menu.courses||[]).forEach(function(c, ci){
+    if(!c.choose) return;
+    var node = el('cnt-'+ci); if(!node) return;
+    var s = courseSum(c);
+    if(!guests){ node.textContent = s ? s+' chosen' : ''; node.style.color = '#A5876B'; return; }
+    if(s===guests){ node.textContent = s+' of '+guests+' ✓'; node.style.color = '#2E6B34'; }
+    else { node.textContent = s+' of '+guests+(s<guests?' — '+(guests-s)+' to go':' — '+(s-guests)+' too many'); node.style.color = s?'#B00020':'#A5876B'; }
+  });
+}
+async function send(){
+  if(!guests){ flash('First, how many guests will you be?'); var g = el('cl-g'); if(g) g.focus(); return; }
+  var short = null;
+  chooseCourses().forEach(function(c){ if(!short && courseSum(c)!==guests) short = c; });
+  if(short){ flash(short.name+': the numbers add up to '+courseSum(short)+' of '+guests+' guests — please adjust so everyone has a dish.'); return; }
+  var btn = el('cl-send'); btn.disabled = true; btn.textContent = 'Sending…';
+  try{
+    var payload = { token:token, menu_key:menu.key, guests:guests, choices:counts, note:((el('cl-note')||{}).value||'').trim()||null };
+    var r = await fetch(SUPA+'/rest/v1/event_menu_choices', { method:'POST',
+      headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify(payload) });
+    if(!r.ok){ var t = await r.text(); throw new Error(t.slice(0,120)); }
+    el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div>'+
+      '<div class="msg">Grazie! Your choices have been sent.<br><br>Valentina will confirm everything back to you shortly.</div>';
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Send my choices to Roberto’s';
+    flash('Could not send — please try again in a moment.');
+  }
+}
+load();
+</script>
+</body>
+</html>

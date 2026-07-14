@@ -1923,8 +1923,67 @@ function peFoodSetMenuHTML(e){
     // promised and what gets cooked can never drift apart.
     h += '<div style="margin-top:8px"><div class="pe-lbl">Menu changes the guest asked for — shows on the proposal AND the kitchen brief</div>'+
       '<textarea class="pe-in" rows="2" style="width:100%;box-sizing:border-box" placeholder="e.g. 2 guests need a vegan main — chef to propose" onchange="peSetMenuNote(\''+e.id+'\',this.value)"'+(ce?'':' disabled')+'>'+peEsc(sm.note||'')+'</textarea></div>';
+    // Let the guest enter their own numbers: send them a link, they fill each
+    // course to the guest count, then ONE tap here applies it — nothing reaches
+    // the kitchen or the documents without Valentina seeing it first.
+    if(ce && e.client_token){
+      h += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="pe-btn sec sm" onclick="peCopyMenuChoicesLink(\''+e.id+'\')">Copy link — guest picks the numbers</button>'+
+        '<button class="pe-btn sec sm" onclick="peFetchMenuChoices(\''+e.id+'\')">Check for the guest’s numbers</button></div>';
+    }
   }
   return h+'</div>';
+}
+function peCopyMenuChoicesLink(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var e = peEvById(id); if(!e || !e.set_menu) return;
+  var base = location.origin + location.pathname.replace(/[^\/]*$/, '');
+  var url = base + 'client-setmenu.html?t=' + e.client_token + '&m=' + encodeURIComponent(e.set_menu.key) + (e.guests ? '&g=' + Number(e.guests) : '') +
+    ((e.food_price_pp!=null && e.food_price_pp!=='') ? '&p=' + Number(e.food_price_pp) : '');
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){
+    peToast('Link copied — the guest picks how many of each dish, then tap “Check for the guest’s numbers”');
+  }).catch(function(){ prompt('Copy this link:', url); });
+  sb.from('event_log').insert({event_id:id, action:'client_link', detail:'set-menu choices link copied', actor:peActor()});
+}
+// Pull the guest's submitted numbers and apply them to this event after a
+// preview — the newest submission for this event's link wins.
+async function peFetchMenuChoices(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var e = peEvById(id); if(!e || !e.set_menu) return;
+  var r = await sb.from('event_menu_choices').select('*').eq('token', e.client_token).order('created_at', {ascending:false}).limit(1);
+  if(r.error){
+    if(/event_menu_choices/.test(r.error.message||'')) peToast('This needs the database update first — run event-menu-choices.sql in Supabase', true);
+    else peToast('Could not check — '+(r.error.message||'connection'), true);
+    return;
+  }
+  if(!r.data || !r.data.length){ peToast('Nothing from the guest yet — they haven’t sent their numbers'); return; }
+  var row = r.data[0];
+  var m = peSetMenuByKey(e.set_menu.key);
+  var warn = [];
+  if(row.menu_key && row.menu_key!==e.set_menu.key) warn.push('they picked on a different version of the menu ('+peEsc(row.menu_key)+')');
+  if(row.guests && Number(e.guests) && Number(row.guests)!==Number(e.guests)) warn.push('they entered '+row.guests+' guests, the event says '+e.guests);
+  var lines = [];
+  Object.keys(row.choices||{}).forEach(function(course){
+    var cc = row.choices[course]||{};
+    lines.push('<b>'+peEsc(course)+'</b>: '+Object.keys(cc).map(function(o){ return cc[o]+' × '+peEsc(o); }).join(', '));
+  });
+  var body = 'Received '+new Date(row.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+':<br>'+
+    (lines.length ? lines.join('<br>') : 'No course numbers')+
+    (row.note ? '<br><b>Their note:</b> '+peEsc(row.note) : '')+
+    (warn.length ? '<br><span style="color:#B00020">▲ '+warn.join(' · ')+'</span>' : '')+
+    '<br><br>Applying replaces the numbers on this event'+(row.note?' and adds their note to the menu changes':'')+'.';
+  if(!(await peConfirm({title:'Use the guest’s numbers?', body:body, ok:'Apply to the event', cancel:'Not now'}))) return;
+  if(!(await peConfirmSignedEdit(id, 'the menu'))){ renderMain(); return; }
+  var sm = JSON.parse(JSON.stringify(e.set_menu));
+  sm.choices = row.choices||{};
+  if(row.note) sm.note = sm.note ? (sm.note+' · Guest: '+row.note) : ('Guest: '+row.note);
+  var u = await sb.from('events_desk').update({set_menu:sm, updated_at:new Date().toISOString()}).eq('id', id);
+  if(u.error){ peToast('NOT applied — '+(u.error.message||'check connection'), true); return; }
+  e.set_menu = sm;
+  sb.from('event_menu_choices').update({applied:true}).eq('id', row.id);
+  sb.from('event_log').insert({event_id:id, action:'client_selection', detail:'guest set-menu numbers applied', actor:peActor()});
+  peToast('Guest’s numbers applied ✓ — check the green totals, then the kitchen brief is ready');
+  renderMain();
 }
 // A set menu REPLACES the menu, like peApplyPackage: confirm, then clear any
 // existing dishes — otherwise the guest proposal and kitchen brief print BOTH.
