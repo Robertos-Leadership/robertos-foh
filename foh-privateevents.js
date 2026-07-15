@@ -2653,15 +2653,15 @@ function peMpSelectAll(kind, on){
   peMpCount();
 }
 function peMpCount(){
-  var f = document.querySelectorAll('.pe-mp-check[data-kind=food]:checked').length;
-  var b = document.querySelectorAll('.pe-mp-check[data-kind=bev]:checked').length;
-  var parts = [];
-  if(f) parts.push(f+' set menu'+(f>1?'s':''));
-  if(b) parts.push(b+' beverage package'+(b>1?'s':''));
+  var t = peMpTicked();
+  var n = t.food.length + t.bev.length;
   var el = document.getElementById('pe-mp-count');
-  if(el) el.innerHTML = (f+b) ? 'Will send: <b style="color:#400207">'+parts.join(' + ')+'</b>' : 'Nothing ticked yet — tick at least one menu or package above.';
+  if(el) el.innerHTML = n ? 'Will send: <b style="color:#400207">'+peEsc(peMpSummary(t))+'</b> — by email, or one WhatsApp with one link.'
+                          : 'Nothing ticked yet — tick at least one menu or package above.';
   var btn = document.getElementById('pe-mp-send');
-  if(btn) btn.disabled = !(f+b);
+  if(btn) btn.disabled = !n;
+  var wa = document.getElementById('pe-mp-wa');
+  if(wa) wa.disabled = !n;
 }
 function peRenderPacksLibView(){
   var h = peHeader('packs');
@@ -2672,14 +2672,71 @@ function peRenderPacksLibView(){
 }
 function peMenuPackEmailForm(){
   if(!peCanEdit()) return '';   // read-only users browse the menus; sending is the editors'
-  return '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Email to a guest</b>'+
-    '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">The guest receives ONE branded email with everything ticked above — a button opens each set menu. You are copied, and their reply comes straight to you.</div>'+
+  return '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Send to the guest</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">Tick above once, then choose how it travels. <b>Email</b> — ONE branded email with everything ticked, you are copied and their reply comes to you. <b>WhatsApp</b> — ONE message with ONE link to a page holding everything ticked, food and beverage together.</div>'+
     '<div class="pe-grid2"><div><div class="pe-lbl">Guest name</div><input class="pe-in" id="pe-mp-name" placeholder="e.g. Sara"></div>'+
-    '<div><div class="pe-lbl">Guest email</div><input class="pe-in" id="pe-mp-email" type="email" placeholder="guest@email.com"></div></div>'+
-    '<div style="margin-top:8px"><div class="pe-lbl">Personal note (optional — appears at the top of the email)</div>'+
+    '<div><div class="pe-lbl">Guest email (for email)</div><input class="pe-in" id="pe-mp-email" type="email" placeholder="guest@email.com"></div></div>'+
+    '<div style="margin-top:8px"><div class="pe-lbl">Guest mobile (for WhatsApp)</div><input class="pe-in" id="pe-mp-phone" type="tel" placeholder="e.g. 050 123 4567 — a UAE number needs no +971"></div>'+
+    '<div style="margin-top:8px"><div class="pe-lbl">Personal note (optional — appears in the email and the WhatsApp message)</div>'+
     '<input class="pe-in" id="pe-mp-note" placeholder="e.g. It was lovely speaking with you today — as promised…"></div>'+
-    '<div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="pe-btn" id="pe-mp-send" onclick="peSendMenuPack()" disabled>Send to the guest</button>'+
-    '<span style="font-size:11.5px;color:#8B7355" id="pe-mp-count">Nothing ticked yet — tick at least one menu or package above.</span></div></div>';
+    '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+    '<button class="pe-btn" id="pe-mp-send" onclick="peSendMenuPack()" disabled>Send email</button>'+
+    '<button class="pe-btn sec" id="pe-mp-wa" onclick="peSendMenuPackWa()" disabled>Send by WhatsApp</button></div>'+
+    '<div style="font-size:11.5px;color:#8B7355;margin-top:8px" id="pe-mp-count">Nothing ticked yet — tick at least one menu or package above.</div></div>';
+}
+// What Valentina has ticked, in the order the screen shows them — read once and
+// used by both doors, so email and WhatsApp can never disagree about what's sent.
+function peMpTicked(){
+  var food = [], bev = [];
+  document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){
+    (el.getAttribute('data-kind')==='food' ? food : bev).push(el.getAttribute('data-key'));
+  });
+  return { food:food, bev:bev };
+}
+function peMpSummary(t){
+  var parts = [];
+  if(t.food.length) parts.push(t.food.length+' set menu'+(t.food.length>1?'s':''));
+  if(t.bev.length) parts.push(t.bev.length+' beverage package'+(t.bev.length>1?'s':''));
+  return parts.join(' + ');
+}
+// The ONE guest link: a branded page carrying every ticked menu and package.
+// One link, however many she ticked — never one WhatsApp per menu.
+function peMenuPackUrl(t, name){
+  var p = [];
+  if(t.food.length) p.push('food='+t.food.map(encodeURIComponent).join(','));
+  if(t.bev.length)  p.push('bev='+t.bev.map(encodeURIComponent).join(','));
+  if(name) p.push('n='+encodeURIComponent(name));
+  return peBaseUrl()+'client-menus.html?'+p.join('&');
+}
+// A UAE mobile typed the way people actually type it (050…, 00971…, +971…) all
+// reach the same number. Returns '' when it can't be one.
+function peWaDigits(phone){
+  var d = String(phone==null?'':phone).replace(/[^0-9]/g,'');
+  if(d.indexOf('00')===0) d = d.slice(2);
+  if(d.length && d[0]==='0') d = '971'+d.slice(1);
+  if(d.length <= 9) d = '971'+d;
+  return d.length >= 11 ? d : '';
+}
+function peSendMenuPackWa(){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+  var phone = g('pe-mp-phone'), name = g('pe-mp-name'), note = g('pe-mp-note');
+  var pEl = document.getElementById('pe-mp-phone');
+  if(!phone){ peToast('Type the guest’s mobile first', true); peInlineErr(pEl,'Type the guest’s mobile first.'); return; }
+  var digits = peWaDigits(phone);
+  if(!digits){ peToast('That mobile looks too short — check the number', true); peInlineErr(pEl,'That doesn’t look like a full mobile number.'); return; }
+  peInlineErr(pEl,'');
+  var t = peMpTicked();
+  if(!t.food.length && !t.bev.length){ peToast('Tick at least one menu or package to send', true); return; }
+  var msg = 'Ciao'+(name?' '+name.split(' ')[0]:'')+'! Thank you for thinking of Roberto’s for your occasion.'+
+    (note?'\n\n'+note:'')+
+    '\n\nHere is everything for your occasion ('+peMpSummary(t)+'), on one page:\n'+
+    peMenuPackUrl(t, name)+
+    '\n\nIt will be our pleasure — Valentina';
+  window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(msg), '_blank');
+  // WhatsApp opens with the message written — she still presses send there, so
+  // this never claims it has gone.
+  peToast('WhatsApp opened for '+phone+' with '+peMpSummary(t)+' — press send in WhatsApp to deliver it');
 }
 function peBaseUrl(){ return location.origin + location.pathname.replace(/[^\/]*$/, ''); }
 function peGuestEmailHTML(title, intro, name, note, inner){
@@ -2739,15 +2796,9 @@ async function peSendMenuPack(){
   if(!email){ peToast('Type the guest’s email first', true); peInlineErr(document.getElementById('pe-mp-email'),'Type the guest’s email first.'); return; }
   if(!peIsEmail(email)){ peToast('That email looks off — check for a missing “@”', true); peInlineErr(document.getElementById('pe-mp-email'),'That doesn’t look like an email — check for a missing “@”.'); return; }
   peInlineErr(document.getElementById('pe-mp-email'),'');
-  var food = [], bev = [];
-  document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){
-    (el.getAttribute('data-kind')==='food' ? food : bev).push(el.getAttribute('data-key'));
-  });
+  var t = peMpTicked(), food = t.food, bev = t.bev;
   if(!food.length && !bev.length){ peToast('Tick at least one menu or package to send', true); return; }
-  var parts = [];
-  if(food.length) parts.push(food.length+' set menu'+(food.length>1?'s':''));
-  if(bev.length) parts.push(bev.length+' beverage package'+(bev.length>1?'s':''));
-  if(!(await peConfirm({title:'Send to the guest?', html:'Send <b>'+peEsc(parts.join(' + '))+'</b> to <b>'+peEsc(email)+'</b> in one email now?', ok:'Send email', cancel:'Not yet'}))) return;
+  if(!(await peConfirm({title:'Send to the guest?', html:'Send <b>'+peEsc(peMpSummary(t))+'</b> to <b>'+peEsc(email)+'</b> in one email now?', ok:'Send email', cancel:'Not yet'}))) return;
   // The sender is copied and set as reply-to, same as client proposals.
   var sender = state.userEmail || 'vdetoni@robertos.ae';
   var subject = food.length && bev.length ? 'Roberto’s — menus & beverage packages for your occasion'
@@ -2761,11 +2812,11 @@ async function peSendMenuPack(){
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     peToast('Sent to '+email+' ✓ — you are copied and replies come to you');
-    if(btn){ btn.disabled=false; btn.textContent='Send to the guest'; }
+    if(btn){ btn.disabled=false; btn.textContent='Send email'; }
     var el = document.getElementById('pe-mp-email'); if(el) el.value='';
   }catch(err){
     peToast('NOT sent — '+String(err&&err.message||err).slice(0,120), true);
-    if(btn){ btn.disabled=false; btn.textContent='Send to the guest'; }
+    if(btn){ btn.disabled=false; btn.textContent='Send email'; }
   }
 }
 function peBuildGoal(){
@@ -2836,16 +2887,24 @@ function peRenderDishLib(){
       '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="pe-btn" onclick="peSaveDish(\''+(ed.id||'')+'\')">Save dish</button>'+
       '<button class="pe-btn sec" onclick="peState.editDishId=null;peState.aiDesc=null;renderMain()">Cancel</button>'+
-      (ed.id?'<button class="pe-btn sec" style="margin-left:auto;color:#B00020;border-color:#B00020" onclick="peToggleDish(\''+ed.id+'\','+(ed.active?'false':'true')+')">'+(ed.active?'Retire dish':'Reactivate')+'</button>':'')+
+      (ed.id?'<button class="pe-btn sec" style="margin-left:auto" onclick="peToggleDish(\''+ed.id+'\','+(ed.active?'false':'true')+')">'+(ed.active?'Pause dish':'Resume dish')+'</button>':'')+
       '</div></div>';
   } else {
     h += '<div style="margin-bottom:10px"><button class="pe-btn" onclick="peState.editDishId=\'new\';peState.aiDesc=null;renderMain()">+ Add a dish</button></div>';
   }
   h += '<div class="pe-card">'+peState.dishes.map(function(d){
-    return '<div class="pe-dishrow" style="opacity:'+(d.active?1:.45)+'">'+
-      '<span><b>'+peEsc(d.name)+'</b> <span style="color:#A5876B;font-size:10.5px">'+peEsc(peAllergenText(d.allergens))+'</span><br>'+
+    var why = peDishLockReason(peDishUsage(d.id));
+    return '<div class="pe-dishrow" style="opacity:'+(d.active?1:.55)+'">'+
+      '<span><b>'+peEsc(d.name)+'</b>'+
+      (d.active?'':' <span style="font-size:10px;background:#E4DBCC;color:#4E4433;border-radius:8px;padding:2px 7px;font-weight:600">paused</span>')+
+      ' <span style="color:#A5876B;font-size:10.5px">'+peEsc(peAllergenText(d.allergens))+'</span><br>'+
       '<span style="font-size:11px;color:#8B7355">'+peEsc(d.category)+' · '+peEsc(d.serve)+' · '+peEsc(d.tier||'')+' · AED '+peMoney(d.sell_price)+'/pc · cost '+(d.cost!=null?d.cost:'—')+(d.description?' · “'+peEsc(d.description)+'”':' · <span style="color:#B00020">no menu line</span>')+'</span></span>'+
-      '<button class="pe-btn sec sm" onclick="peState.editDishId=\''+d.id+'\';peState.aiDesc=null;renderMain()">Edit</button></div>';
+      '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">'+
+      '<button class="pe-btn sec sm" onclick="peState.editDishId=\''+d.id+'\';peState.aiDesc=null;renderMain()">Edit</button>'+
+      '<button class="pe-btn sec sm" onclick="peToggleDish(\''+d.id+'\','+(d.active?'false':'true')+')">'+(d.active?'Pause':'Resume')+'</button>'+
+      (why ? '<span style="font-size:10px;color:#8B7355;max-width:190px;text-align:right;line-height:1.35">'+peEsc(why)+'</span>'
+           : '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peDeleteDish(\''+d.id+'\')">Delete</button>')+
+      '</span></div>';
   }).join('')+'</div>';
   return h;
 }
@@ -2894,10 +2953,54 @@ async function peSaveDish(id){
   renderMain();
 }
 async function peToggleDish(id, active){
-  var r = await sb.from('event_dishes').update({active:active==='true'||active===true}).eq('id', id);
+  var on = (active==='true'||active===true);
+  var r = await sb.from('event_dishes').update({active:on}).eq('id', id);
   if(r.error){ peToast('NOT changed — check connection', true); return; }
-  peState.dishes.forEach(function(d){ if(d.id===id) d.active = (active==='true'||active===true); });
-  peState.editDishId = null; renderMain();
+  var d = peDishById(id);
+  peState.dishes.forEach(function(x){ if(x.id===id) x.active = on; });
+  peState.editDishId = null;
+  peToast((d?d.name:'Canapé')+(on?' is back on the list ✓':' paused ✓ — off the events desk, kept for later'));
+  renderMain();
+}
+// Where a canapé is still in use. A package holds dish ids, and every quoted
+// event holds line items — delete one of those and the package silently loses a
+// canapé while past events lose the dish AND its money from their totals
+// (peCalcTotals skips an item whose dish no longer resolves). So delete is
+// offered only when both are clear; pause is always safe and always offered.
+function peDishUsage(id){
+  var packs = peState.packs.filter(function(p){ return (p.dish_ids||[]).indexOf(id) >= 0; })
+                           .map(function(p){ return p.name; });
+  var evs = 0;
+  Object.keys(peState.items||{}).forEach(function(eid){
+    var used = (peState.items[eid]||[]).some(function(it){ return it.dish_id===id; });
+    if(used) evs++;
+  });
+  return { packs:packs, events:evs };
+}
+// The reason a canapé can't be deleted, said out loud in the row itself — never
+// a hover tooltip, never a dead grey button with no explanation.
+function peDishLockReason(use){
+  var bits = [];
+  if(use.packs.length) bits.push('in '+use.packs.join(', '));
+  if(use.events) bits.push('used by '+use.events+' event'+(use.events>1?'s':''));
+  return bits.length ? bits.join(' · ')+' — pause it instead' : '';
+}
+async function peDeleteDish(id){
+  var d = peDishById(id); if(!d) return;
+  var use = peDishUsage(id);
+  if(use.packs.length || use.events){ peToast(d.name+' is '+peDishLockReason(use), true); return; }
+  var ok = await peConfirm({
+    title:'Delete '+d.name+'?',
+    html:'It goes off the canapé list for everyone, for good. No package and no event uses it, so nothing else changes.<br><br>If you may want it back one day, <b>pause</b> it instead — paused canapés stay here and never reach the events desk.',
+    ok:'Delete for good', cancel:'Keep it', danger:true
+  });
+  if(!ok) return;
+  var r = await sb.from('event_dishes').delete().eq('id', id);
+  if(r.error){ peToast('NOT deleted — '+String(r.error&&r.error.message||'').slice(0,90), true); return; }
+  peState.dishes = peState.dishes.filter(function(x){ return x.id!==id; });
+  peState.editDishId = null;
+  peToast(d.name+' deleted ✓');
+  renderMain();
 }
 // ── set-menu library (Chef Corner → Set menus) ───────────────────────────────
 // Chef builds the menu + courses (open to whoever opens Chef Corner); the

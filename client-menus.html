@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Roberto's — Menus for your occasion</title>
+<style>
+  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
+  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .sub{font-size:14px;color:#8A6A4F;text-align:center}
+  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
+  .sect{border-top:1px solid #E3D5C2;margin:18px 22px 0;padding-top:14px}
+  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;margin-bottom:10px;font-family:Arial,sans-serif}
+  .item{padding:9px 0}
+  .item + .item{border-top:1px solid #EFE4D4}
+  .nm{font-size:14.5px;color:#400207}
+  .pr{font-size:12px;color:#8A6A4F;font-family:Arial,sans-serif;margin-top:2px}
+  .ds{font-size:11.5px;color:#8A6A4F;display:block;margin-top:4px;line-height:1.55}
+  .open{display:inline-block;background:#400207;color:#E8D9C7;padding:8px 22px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px;margin-top:9px}
+  .btnrow{padding:20px 22px 26px}
+  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card">
+  <div class="msg">Loading…</div>
+</div></div>
+<script>
+var SUPA = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
+var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
+var q = new URLSearchParams(location.search);
+// Only well-formed keys/ids ever reach the query string of the API call — the
+// guest's URL must never be able to steer the filter.
+function clean(list, re){
+  return (list||'').split(',').map(function(s){ return s.trim(); }).filter(function(s){ return s && re.test(s); });
+}
+var foodKeys = clean(q.get('food'), /^[a-z0-9-]{1,60}$/i);
+var bevIds   = clean(q.get('bev'),  /^[0-9a-f-]{36}$/i);
+var who      = (q.get('n')||'').slice(0, 40).trim();
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function el(id){ return document.getElementById(id); }
+function money(n){ return (n==null||isNaN(n)) ? '' : Number(n).toLocaleString('en-US'); }
+function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+function inList(a){ return 'in.(' + a.map(function(x){ return '"'+x+'"'; }).join(',') + ')'; }
+
+async function get(path){
+  var r = await fetch(SUPA+'/rest/v1/'+path, { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+  if(!r.ok) throw new Error(r.status);
+  return await r.json();
+}
+
+async function load(){
+  if(!foodKeys.length && !bevIds.length){
+    return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
+  }
+  try{
+    var res = await Promise.all([
+      foodKeys.length ? get('event_set_menus?key='+inList(foodKeys)+'&active=is.true&select=key,name,price_pp,line,pdf') : [],
+      // event_bev_public is the guest-safe view: name, hours, price and what's
+      // included. Our cost per guest lives on the base table and never leaves it.
+      bevIds.length ? get('event_bev_public?id='+inList(bevIds)+'&select=id,name,duration_hours,price_pp,includes') : []
+    ]);
+    render(res[0]||[], res[1]||[]);
+  }catch(e){
+    fail('Could not load the menus — please check your connection and reopen the link.');
+  }
+}
+
+function render(menus, bevs){
+  if(!menus.length && !bevs.length){
+    return fail('These menus are no longer available — please get in touch and we’ll help right away.');
+  }
+  // Keep the order Valentina ticked them in, not whatever the database returns.
+  menus.sort(function(a,b){ return foodKeys.indexOf(a.key) - foodKeys.indexOf(b.key); });
+  bevs.sort(function(a,b){ return bevIds.indexOf(a.id) - bevIds.indexOf(b.id); });
+
+  var both = menus.length && bevs.length;
+  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+    '<div class="sub">'+(both ? 'Menus &amp; beverage packages' : (menus.length ? 'Our set menus' : 'Beverage packages'))+'</div>'+
+    '<div class="sub2">'+(who ? 'For '+esc(who)+' · ' : '')+'DIFC, Dubai — private dining &amp; events</div>';
+
+  if(menus.length){
+    h += '<div class="sect">'+(both ? '<div class="sect-t">The food — set menus</div>' : '')+
+      menus.map(function(m){
+        // A designed PDF opens as the menu; a chef-added menu opens its own
+        // page, which prints the courses in full. Either way: one tap.
+        var href = m.pdf ? (/^https?:/i.test(m.pdf) ? m.pdf : m.pdf)
+                         : 'client-setmenu.html?m='+encodeURIComponent(m.key);
+        return '<div class="item"><div class="nm">'+esc(m.name)+'</div>'+
+          '<div class="pr">AED '+money(m.price_pp)+' per guest</div>'+
+          (m.line ? '<span class="ds">'+esc(m.line)+'</span>' : '')+
+          '<a class="open" href="'+esc(href)+'" target="_blank" rel="noopener">View the full menu</a></div>';
+      }).join('')+'</div>';
+  }
+
+  if(bevs.length){
+    h += '<div class="sect">'+(both ? '<div class="sect-t">Beverage packages</div>' : '')+
+      bevs.map(function(b){
+        return '<div class="item"><div class="nm">'+esc(b.name)+'</div>'+
+          '<div class="pr">'+(b.duration_hours ? b.duration_hours+' hours · ' : '')+'AED '+money(b.price_pp)+' per guest</div>'+
+          (b.includes ? '<span class="ds">'+esc(b.includes)+'</span>' : '')+'</div>';
+      }).join('')+'</div>';
+  }
+
+  h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
+    '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a>.<br><br>'+
+    'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
+    'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
+  el('card').innerHTML = h;
+}
+load();
+</script>
+</body>
+</html>

@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260710b';
+const CACHE = 'robertos-foh-v20260715a';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -68,6 +68,16 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return;   // same-origin only
+
+  // The guest-facing pages are NOT the app and must never be touched by it.
+  // Cloudflare Pages 308-redirects "/client-menus.html?…" to "/client-menus?…",
+  // and that redirect trips the offline fallback below — which answers any
+  // unmatched navigation with index.html. The result: on a staff device that has
+  // the app installed, a link we sent a guest opens the APP instead of their
+  // menu. Left to the network, these pages always resolve correctly, and there
+  // is nothing to gain by caching them — a guest opens the link once.
+  // Matches both "/client-menus.html" and the redirected "/client-menus".
+  if (/\/client-[a-z0-9-]+(\.html)?$/i.test(url.pathname)) return;
 
   e.respondWith(
     fetch(e.request, { cache: 'no-store' })
