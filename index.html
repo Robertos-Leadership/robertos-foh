@@ -3318,7 +3318,7 @@ function renderAdmin(){
 }
 function admSetView(v){
   state.adminView=v;
-  if(v==='usage' && !state.usageRows && !state.usageErr) admUsageLoad();
+  if(v==='usage' && !state.usageSummary && !state.usageErr) admUsageLoad();
   if(v==='feedback' && !state.fbRows && !state.fbErr) admFbLoad();
   renderMain();
   if(v==='people') admAfterRender(function(){ try{admApplyFilter();}catch(e){} });
@@ -3348,13 +3348,25 @@ function admUsageAgo(ts){
   var days=Math.floor(h/24); if(days<7) return days+(days===1?' day ago':' days ago');
   return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 }
+// Per-person totals are counted in the DB (view app_activity_summary), NOT here.
+// This used to read the newest 500 raw rows and tally them in the browser, which
+// quietly broke once the table outgrew that window: by 16 Jul it held 1,104 rows
+// and 500 only reached back to 14 Jul, so anyone whose last visit was older simply
+// vanished from the list (Danilo looked like he'd never signed in; Nicole's last
+// visit on 11 Jul was invisible). Raising the number only moves the cliff — and
+// PostgREST caps at 1000/request anyway — so the count belongs in SQL.
+// The raw read below is ONLY the short "recent activity" ticker, where a limit is
+// the actual intent rather than an accident.
 async function admUsageLoad(){
-  state.usageRows=null; state.usageErr=null;
+  state.usageSummary=null; state.usageRecent=null; state.usageErr=null;
   if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
   try{
-    var r=await sb.from('app_activity').select('user_email,action,module,created_at').order('created_at',{ascending:false}).limit(500);
+    var s=await sb.from('app_activity_summary').select('user_email,last_seen,events,logins7,mods').order('last_seen',{ascending:false});
+    if(s.error) throw s.error;
+    state.usageSummary=s.data||[];
+    var r=await sb.from('app_activity').select('user_email,action,module,created_at').order('created_at',{ascending:false}).limit(30);
     if(r.error) throw r.error;
-    state.usageRows=r.data||[];
+    state.usageRecent=r.data||[];
   }catch(err){ state.usageErr=(err&&err.message)||'Could not load usage data.'; }
   if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
 }
@@ -3362,34 +3374,28 @@ function admUsageHTML(){
   var head='<div class="adm-head"><h2>Usage — who&rsquo;s using the app</h2><button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div>'
     +'<div class="ppl-sum">Every sign-in and module open, recorded automatically from this build on. Read-only — nothing here changes anyone&rsquo;s access.</div>';
   if(state.usageErr) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Couldn&rsquo;t load the usage data — '+admEsc(state.usageErr)+'<br><br>If this is the first time, run <b>foh-app-activity.sql</b> once in Supabase, then tap Refresh.</div></div>';
-  if(!state.usageRows) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
-  var rows=state.usageRows;
-  if(!rows.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Nothing recorded yet — usage starts counting from this build. Check back after the team has used the app.</div></div>';
-  // ── per-user summary (rows arrive newest-first) ──
-  var weekAgo=Date.now()-7*86400000, byUser={}, order=[];
-  rows.forEach(function(r){
-    var e=(r.user_email||'unknown').toLowerCase();
-    var u=byUser[e]; if(!u){ u=byUser[e]={email:e,last:r.created_at,logins7:0,mods:{}}; order.push(e); }
-    if(r.action==='login' && new Date(r.created_at).getTime()>=weekAgo) u.logins7++;
-    if(r.action==='open' && r.module) u.mods[r.module]=(u.mods[r.module]||0)+1;
-  });
-  var cards=order.map(function(e){
-    var u=byUser[e];
-    var top=Object.keys(u.mods).sort(function(a,b){ return u.mods[b]-u.mods[a]; }).slice(0,3)
-      .map(function(m){ return '<span style="font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;">'+admEsc(admUsageModName(m))+' &middot; '+u.mods[m]+'</span>'; }).join(' ');
+  if(!state.usageSummary) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
+  var people=state.usageSummary;
+  if(!people.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Nothing recorded yet — usage starts counting from this build. Check back after the team has used the app.</div></div>';
+  // ── per-user summary (counted in SQL, complete for all time — see admUsageLoad) ──
+  var cards=people.map(function(u){
+    var mods=u.mods||{};
+    var top=Object.keys(mods).sort(function(a,b){ return mods[b]-mods[a]; }).slice(0,3)
+      .map(function(m){ return '<span style="font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;">'+admEsc(admUsageModName(m))+' &middot; '+mods[m]+'</span>'; }).join(' ');
     return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
-      +'<div style="min-width:170px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:14.5px;">'+admEsc(admUsageWho(u.email))+'</div><div style="font-size:11.5px;color:#9c8a72;">'+admEsc(u.email)+'</div></div>'
-      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last seen<br><b style="color:#400207;">'+admEsc(admUsageAgo(u.last))+'</b></div>'
-      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+u.logins7+'</b></div>'
+      +'<div style="min-width:170px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:14.5px;">'+admEsc(admUsageWho(u.user_email))+'</div><div style="font-size:11.5px;color:#9c8a72;">'+admEsc(u.user_email)+'</div></div>'
+      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last seen<br><b style="color:#400207;">'+admEsc(admUsageAgo(u.last_seen))+'</b></div>'
+      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+(u.logins7||0)+'</b></div>'
       +'<div style="flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;">'+(top||'<span style="font-size:12px;color:#9c8a72;">no modules opened yet</span>')+'</div></div>';
   }).join('');
   // ── short recent-activity list ──
-  var recent=rows.slice(0,30).map(function(r){
+  var recent=(state.usageRecent||[]).map(function(r){
     var what=r.action==='login' ? 'signed in' : ('opened <b style="color:#400207;">'+admEsc(admUsageModName(r.module))+'</b>');
     return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
   }).join('');
+  var totalEvents=people.reduce(function(a,u){ return a+(u.events||0); },0);
   return '<div class="adm-wrap">'+head
-    +'<div class="ppl-grp">By person <span>&middot; '+order.length+' people, last '+rows.length+' records</span></div>'+cards
+    +'<div class="ppl-grp">By person <span>&middot; '+people.length+' people, '+totalEvents+' records all-time</span></div>'+cards
     +'<div class="ppl-grp" style="margin-top:26px;">Recent activity</div>'+recent+'</div>';
 }
 
