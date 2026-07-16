@@ -457,9 +457,21 @@ if ('serviceWorker' in navigator) {
   .module-cols { display: flex; gap: 14px; align-items: stretch; }
   .module-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
   .module-col .module-section { padding: 6px 0 0; }
+  /* Every card in a column stretches equally -> a 3x2 grid of six same-size
+     cards, whatever each one's text length. The stat line is pinned to the
+     bottom so all six read along the same baseline. */
+  .module-col .module-card { flex: 1; display: flex; flex-direction: column; }
+  .module-col .module-body { flex: 1; display: flex; flex-direction: column; }
+  .module-col .module-stat { margin-top: auto; }
   .module-card.module-tall { flex: 1; display: flex; flex-direction: column; }
   .module-tall .module-body { flex: 1; display: flex; flex-direction: column; }
   .module-tall .module-stat { margin-top: auto; }
+  /* NEW badge on a freshly shipped module. Clears per person once they open
+     it (fohNewSeen) — it marks "you haven't seen this yet", not "this is new". */
+  .module-new {
+    margin-left: auto; font-size: 8.5px; letter-spacing: .14em; font-weight: 700;
+    color: #4A1520; background: var(--gold); border-radius: 20px; padding: 2px 7px;
+  }
   @media (max-width: 900px) { .module-cols { flex-direction: column; } .module-col .module-section { padding: 10px 0 0; } }
   .landing-titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .landing-date { font-size: 11px; color: #8B7355; white-space: nowrap; }
@@ -2219,7 +2231,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-15.5</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-16.3</div>
   </div>
 
   <!-- main scroll area -->
@@ -2369,9 +2381,9 @@ if ('serviceWorker' in navigator) {
           </div>
         </div>
       </div>
-      <div class="module-col" id="col-privateevents">
-      <div class="module-section" id="sec-privateevents" style="display:none;">Events</div>
-      <div class="module-card module-tall" id="mod-card-privateevents" onclick="enterApp('privateevents')" style="--acc:#8A9A5B; display:none;">
+      <div class="module-col" id="col-guests">
+      <div class="module-section" id="sec-guests" style="display:none;">Guests</div>
+      <div class="module-card" id="mod-card-privateevents" onclick="enterApp('privateevents')" style="--acc:#8A9A5B; display:none;">
         <div class="module-band">
           <span class="module-ico"><span class="module-mono">E</span></span>
           <div class="module-name">Events</div>
@@ -2380,6 +2392,18 @@ if ('serviceWorker' in navigator) {
         <div class="module-body">
           <div class="module-desc">Quotations, canap&eacute; menus &amp; function sheets &mdash; private events desk.</div>
           <div class="module-stat" id="hubstat-privateevents"></div>
+        </div>
+      </div>
+      <div class="module-card" id="mod-card-reviews" onclick="enterApp('reviews')" style="--acc:#5B7B9A; display:none;">
+        <div class="module-band">
+          <span class="module-ico"><span class="module-mono">G</span></span>
+          <div class="module-name">Guest Reviews</div>
+          <span class="module-new" id="mod-new-reviews" style="display:none;">NEW</span>
+        </div>
+        <div class="module-accent"></div>
+        <div class="module-body">
+          <div class="module-desc">Our Google rating, what guests write &amp; how DIFC compares.</div>
+          <div class="module-stat" id="hubstat-reviews"></div>
         </div>
       </div>
       </div>
@@ -2720,7 +2744,7 @@ function renderNav(){
   const active = resolveTab(state.currentTab);
   // Module-scoped nav: Revenue and Operations are single pages reached from the Manager
   // landing — no cross-module links there. Only the Events module keeps its own sub-tabs.
-  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin' || active==='privateevents'){ nav.innerHTML=''; return; }
+  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin' || active==='privateevents' || active==='reviews'){ nav.innerHTML=''; return; }
   const eventTabs = state.events.slice().sort(eventSort).map(ev=>
     `<div class="nav-tab ${active===eventTab(ev)?'active':''}" data-tab="${eventTab(ev)}" onclick="switchTab('${eventTab(ev)}')">${ev.name}</div>`
   ).join('');
@@ -2747,7 +2771,7 @@ function currentStageForTasks(tasks){
 // ── Per-user module access — driven by the app_users table (managed in the Admin module). ──
 // state.access = { modules:[...], isAdmin:bool } for the logged-in user; loaded on sign-in.
 function moduleOf(t){
-  if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin'||t==='privateevents') return t;
+  if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin'||t==='privateevents'||t==='reviews') return t;
   return 'events';   // dashboard, event_*, events => the Events module
 }
 // DEFAULT-DENY: a signed-in user with no app_users row (or whose access hasn't
@@ -2755,6 +2779,17 @@ function moduleOf(t){
 // explicit grant in the Admin module — a missing row or a failed lookup must
 // never silently expose the finance modules.
 var FOH_DEFAULT_MODULES=['events','operations'];
+// ── The NEW badge ──
+// Per person, per device: it clears the first time THAT user opens the module,
+// so it means "you haven't looked at this yet" rather than "this is recent".
+// Keyed by email so a shared iPad doesn't clear Ouafaa's badge because
+// Francesco opened it. Storage failing (private mode) just shows the badge.
+function fohNewSeen(key){
+  try{ return localStorage.getItem('foh_new_'+key+'_'+(state.userEmail||'')) === '1'; }catch(e){ return false; }
+}
+function fohMarkSeen(key){
+  try{ localStorage.setItem('foh_new_'+key+'_'+(state.userEmail||''), '1'); }catch(e){}
+}
 function fohBlocked(module){
   var m=moduleOf(module);
   if(m==='admin') return !(state.access && state.access.isAdmin);
@@ -2762,7 +2797,7 @@ function fohBlocked(module){
   return mods.indexOf(m)===-1;
 }
 function applyFohAccess(){
-  ['events','operations','revenue','stocktake','privateevents'].forEach(function(m){
+  ['events','operations','revenue','stocktake','privateevents','reviews'].forEach(function(m){
     var c=document.getElementById('mod-card-'+m);
     if(c) c.style.display = fohBlocked(m) ? 'none' : '';
   });
@@ -2773,10 +2808,15 @@ function applyFohAccess(){
   if(s1) s1.style.display = (!fohBlocked('operations') || !fohBlocked('events')) ? '' : 'none';
   var s2=document.getElementById('sec-business');
   if(s2) s2.style.display = (!fohBlocked('revenue') || !fohBlocked('stocktake')) ? '' : 'none';
-  var s3=document.getElementById('sec-privateevents');
-  if(s3) s3.style.display = fohBlocked('privateevents') ? 'none' : '';
-  var col3=document.getElementById('col-privateevents');
-  if(col3) col3.style.display = fohBlocked('privateevents') ? 'none' : '';
+  // The Guests column carries Events + Guest Reviews. It only disappears when
+  // the user has neither — holding just one of them still shows the column.
+  var guests = !fohBlocked('privateevents') || !fohBlocked('reviews');
+  var s3=document.getElementById('sec-guests');
+  if(s3) s3.style.display = guests ? '' : 'none';
+  var col3=document.getElementById('col-guests');
+  if(col3) col3.style.display = guests ? '' : 'none';
+  var nb=document.getElementById('mod-new-reviews');
+  if(nb) nb.style.display = fohNewSeen('reviews') ? 'none' : '';
   var hd=document.getElementById('hub-date');
   if(hd) hd.textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   try{ fohLoadHubStats(); }catch(e){}
@@ -2848,6 +2888,28 @@ async function fohLoadHubStats(){
       var iRes = await sb.from('stock_take_items').select('id',{count:'exact',head:true}).eq('venue_id','robertos-difc').eq('month',mo).eq('active',true);
       var prog = (cRes.count!=null && iRes.count) ? Math.min(cRes.count, iRes.count)+'/'+iRes.count+' counted \u00b7 ' : '';
       setStat('stocktake', left<=3?'#B00020':'#A88930', prog+'month-end in '+left+(left===1?' day':' days'));
+    }
+  }catch(e){}
+  // Guest Reviews: our latest Google rating + where that puts us in DIFC.
+  // Reads the snapshot trail only — no Google call from the landing, so the
+  // home screen never waits on their API. Blank until the first daily pull.
+  try{
+    if(!fohBlocked('reviews')){
+      var gv = await sb.from('google_reviews_daily').select('venue_key,snapshot_date,rating,user_rating_count').order('snapshot_date',{ascending:false}).limit(60);
+      if(!gv.error && gv.data && gv.data.length){
+        var latest = {};   // newest row per venue (rows arrive newest-first)
+        gv.data.forEach(function(x){ if(!latest[x.venue_key]) latest[x.venue_key] = x; });
+        var all = Object.keys(latest).map(function(k){ return latest[k]; });
+        var me = latest['robertos'];
+        if(me && me.rating!=null){
+          var better = all.filter(function(x){ return Number(x.rating) > Number(me.rating); }).length;
+          var same = all.filter(function(x){ return Number(x.rating) === Number(me.rating); }).length;
+          var pos = better+1;
+          var ord = pos===1?'1st':pos===2?'2nd':pos===3?'3rd':(pos+'th');
+          var rk = (all.length>1) ? (' · '+(same>1?'joint ':'')+ord+' in DIFC') : '';
+          setStat('reviews', '#5B7B9A', me.rating+' ★ · '+Number(me.user_rating_count||0).toLocaleString('en-US')+' ratings'+rk);
+        }
+      }
     }
   }catch(e){}
 }
@@ -2955,7 +3017,7 @@ async function loadFohAccess(){
 //  ADMIN MODULE — manage logins + module access (notifications: phase 2). Admin-only.
 // ══════════════════════════════════════════════
 var SUPA_USERS_URL='https://supabase.com/dashboard/project/paoaivwtkzujmrgrfjuq/auth/users';
-var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'}];
+var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'},{k:'reviews',n:'Guest Reviews'}];
 var ADMIN_NOTIFY=[{k:'closing_report',n:'Closing-report email'}];
 function admEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function loadAdminUsers(){
@@ -3772,6 +3834,7 @@ function admPasteApply(){
 function enterApp(module){
   if(fohBlocked(module)){ showManagerLanding(); return; }   // access gate
   logAppUsage('open', moduleOf(module));                    // usage tracker (fire-and-forget)
+  fohMarkSeen(moduleOf(module));                            // clears this user's NEW badge
   if(module==='admin') state.adminLoaded=false;             // always pull the latest list on open
   document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -3789,7 +3852,7 @@ function enterApp(module){
   // Land in the chosen module — Revenue/Operations go straight there; Events keeps the
   // current Events-family tab (Leaders or an event) but NEVER another module's tab.
   var cur=state.currentTab;
-  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin'||module==='privateevents') ? module
+  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin'||module==='privateevents'||module==='reviews') ? module
     : ((cur==='dashboard' || (cur && cur.indexOf('event_')===0)) ? cur : 'dashboard');
   switchTab(target);
 }
@@ -6929,6 +6992,7 @@ async function chkShowHistory(){
 <script src="foh-closing.js?v=20260714a"></script>
 <script src="foh-ops.js?v=20260710b"></script>
 <script src="stock-take.js?v=20260710b"></script>
+<script src="foh-reviews.js?v=20260715a"></script>
 
 <!-- FOH Schedule: PIN modal -->
 <div id="foh-sch-pin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center" onclick="fohSchedClosePin(event)">
@@ -7482,6 +7546,107 @@ async function chkShowHistory(){
   .rev-split{display:flex;height:26px;border-radius:5px;overflow:hidden;margin-bottom:12px;font-size:11px;font-weight:600}
   .rev-split-r{background:var(--vino);color:#fff;display:flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap;overflow:hidden}
   .rev-split-l{background:var(--gold,#C9A84C);color:#5a4a14;display:flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap;overflow:hidden}
+
+  /* ── GUEST REVIEWS module (foh-reviews.js) ── */
+  .gr-wrap{max-width:880px;margin:0 auto;padding:8px 4px 60px}
+  .gr-sec{font-family:var(--font-sans);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-dim,#A88930);font-weight:600;margin:26px 0 9px}
+  .gr-sec:first-child{margin-top:4px}
+  .gr-card{background:#fff;border:1px solid #E3D7C8;border-radius:8px;padding:18px 20px;box-shadow:0 1px 3px rgba(44,24,16,.06)}
+  .gr-loading{padding:26px 20px;text-align:center;font-family:var(--font-sans);font-size:13px;color:#8B7355}
+  .gr-loading-sm{padding:14px;text-align:left}
+  .gr-hero{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .gr-score{font-family:var(--font-serif);font-size:52px;line-height:1;color:var(--vino)}
+  .gr-stars{color:var(--gold,#C9A84C);font-size:19px;letter-spacing:2px}
+  .gr-meta{font-family:var(--font-sans);font-size:12.5px;color:#8B7355;margin-top:5px}
+  .gr-rank{margin-left:auto;text-align:right}
+  .gr-rank-big{font-family:var(--font-serif);font-size:25px;color:var(--ink,#2C1810)}
+  .gr-rank-sub{font-family:var(--font-sans);font-size:11.5px;color:#8B7355}
+  .gr-delta{display:inline-block;font-family:var(--font-sans);font-size:11px;font-weight:600;background:#e8f3ec;color:#1e6b46;border-radius:20px;padding:2px 9px;margin-top:7px}
+  .gr-delta-mut{background:#F0E9DE;color:#8B7355;font-weight:400}
+  .gr-table{width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:13.5px}
+  .gr-table th{text-align:left;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8B7355;font-weight:600;padding:0 8px 9px;border-bottom:1px solid #E3D7C8}
+  .gr-table th.n,.gr-table td.n{text-align:right}
+  .gr-table td{padding:11px 8px;border-bottom:1px solid #F0E9DE;vertical-align:middle}
+  .gr-table tr:not(.gr-exp){cursor:pointer}
+  .gr-table tr:not(.gr-exp):hover td{background:#FBF7F1}
+  .gr-me td{background:#FAF4EC;font-weight:600}
+  .gr-me:hover td{background:#F6EEE2}
+  .gr-me .gr-name:before{content:"";display:inline-block;width:4px;height:15px;background:var(--vino);border-radius:2px;margin-right:9px;vertical-align:-3px}
+  .gr-name{color:var(--ink,#2C1810)}
+  .gr-rt{font-variant-numeric:tabular-nums;color:var(--ink,#2C1810)}
+  .gr-ct{font-variant-numeric:tabular-nums;color:#8B7355;font-size:12.5px}
+  .gr-vel{font-variant-numeric:tabular-nums;font-weight:600;color:#1e6b46;background:#e8f3ec;border-radius:20px;padding:2px 8px;font-size:12px;white-space:nowrap}
+  .gr-vel-hot{color:#8a5a12;background:#f7edda}
+  .gr-hero-photo{position:relative;border-radius:10px;overflow:hidden;min-height:158px;border:1px solid #E3D7C8;
+    background:url('robertos-interior.jpg') center 42%/cover;display:flex;align-items:flex-end;box-shadow:0 1px 3px rgba(44,24,16,.10)}
+  .gr-hero-veil{position:absolute;inset:0;background:linear-gradient(90deg,rgba(43,7,11,.90) 0%,rgba(43,7,11,.62) 52%,rgba(43,7,11,.28) 100%)}
+  .gr-hero-body{position:relative;padding:20px 22px;color:#fff}
+  .gr-hero-kicker{font-family:var(--font-sans);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold,#C9A84C);font-weight:600}
+  .gr-hero-title{font-family:var(--font-serif);font-size:30px;line-height:1.12;margin-top:3px}
+  .gr-hero-sub{font-family:var(--font-sans);font-size:12px;color:rgba(255,255,255,.88);margin-top:6px;max-width:46ch;line-height:1.5}
+  .gr-hero-btn{position:absolute;top:14px;right:14px;z-index:1;font-family:var(--font-sans);font-size:11.5px;font-weight:600;color:#fff;
+    border:1px solid rgba(255,255,255,.55);border-radius:6px;padding:6px 13px;text-decoration:none;background:rgba(43,7,11,.35)}
+  .gr-hero-btn:hover{background:rgba(43,7,11,.65)}
+  .gr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+  .gr-kpi{background:#fff;border:1px solid #E3D7C8;border-radius:8px;padding:13px 15px;box-shadow:0 1px 3px rgba(44,24,16,.06)}
+  .gr-kpi-l{font-family:var(--font-sans);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:#8B7355;font-weight:600}
+  .gr-kpi-v{font-family:var(--font-serif);font-size:26px;color:var(--vino);margin-top:4px;line-height:1.1}
+  .gr-kpi-v .gr-stars{font-size:13px;letter-spacing:1.5px;display:block;margin-top:2px}
+  .gr-kpi-s{font-family:var(--font-sans);font-size:11px;color:#8B7355;margin-top:3px;line-height:1.45}
+  .gr-kpi-s .gr-rank-move{margin-top:2px;font-size:10.5px}
+  .gr-trend{margin-top:10px}
+  .gr-trend-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .gr-trend-t{font-family:var(--font-serif);font-size:16.5px;color:var(--ink,#2C1810)}
+  .gr-trend-plus{font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--vino);font-variant-numeric:tabular-nums}
+  @media(max-width:560px){.gr-kpis{grid-template-columns:1fr 1fr}.gr-hero-title{font-size:24px}}
+  .gr-tag{display:inline-block;font-family:var(--font-sans);font-size:10.5px;font-weight:600;color:#6B4A33;background:#F6F0E7;border:1px solid #E9DFD0;border-radius:20px;padding:1px 8px;letter-spacing:.02em}
+  .gr-tag-mut{color:#9c8a72;background:#FAF6EF}
+  .gr-split{font-family:var(--font-sans);font-size:12px;color:#7a6a55;margin:0 0 10px}
+  .gr-split b{color:var(--ink,#2C1810)}
+  .gr-move{display:block;font-family:var(--font-sans);font-size:10.5px;font-weight:600;margin-top:2px}
+  .gr-move-up{color:#1e6b46}
+  .gr-move-dn{color:#B3402F}
+  .gr-rank-move{font-family:var(--font-sans);font-size:11.5px;font-weight:600;margin-top:7px}
+  .gr-race-tabs{display:flex;gap:8px;margin-bottom:14px}
+  .gr-race-tab{font-family:var(--font-sans);font-size:11.5px;font-weight:600;color:#8B7355;background:#F6F0E7;border:1px solid #E3D7C8;border-radius:20px;padding:4px 13px;cursor:pointer}
+  .gr-race-tab.on{color:#fff;background:var(--vino);border-color:var(--vino)}
+  .gr-race{display:flex;flex-direction:column;gap:9px}
+  .gr-race-row{display:grid;grid-template-columns:118px 1fr 48px;align-items:center;gap:10px;font-family:var(--font-sans)}
+  .gr-race-name{font-size:12.5px;color:#8B7355;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gr-race-track{height:16px;display:flex;align-items:center}
+  .gr-race-bar{height:11px;border-radius:0 4px 4px 0;background:#2E6FAE;min-width:4px}
+  .gr-race-us .gr-race-bar{background:#96343D}
+  .gr-race-us .gr-race-name,.gr-race-us .gr-race-val{color:var(--ink,#2C1810);font-weight:600}
+  .gr-race-neg .gr-race-bar{background:#C9B8A6}
+  .gr-race-neg .gr-race-val{color:#B3402F}
+  .gr-race-val{font-size:12.5px;color:#8B7355;text-align:right;font-variant-numeric:tabular-nums}
+  @media(max-width:560px){.gr-race-row{grid-template-columns:96px 1fr 44px}}
+  .gr-chev{color:var(--gold,#C9A84C);font-size:16px}
+  .gr-me .gr-chev{color:var(--vino)}
+  .gr-exp td{background:#FBF7F1;padding:14px 8px}
+  .gr-mut-sm{font-size:11.5px;color:#9c8a72;font-family:var(--font-sans)}
+  .gr-note{font-family:var(--font-sans);font-size:11.5px;color:#7a6a55;margin-top:14px;line-height:1.65}
+  .gr-rev{background:#fff;border:1px solid #E3D7C8;border-radius:8px;padding:15px 17px;margin-bottom:10px}
+  .gr-rev-bad{border-left:4px solid #B3402F;background:#FEF8F7}
+  .gr-revhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-family:var(--font-sans);font-size:12px;color:#8B7355}
+  .gr-revhead .gr-stars{font-size:14px;letter-spacing:1.5px}
+  .gr-rev-bad .gr-stars{color:#B3402F}
+  .gr-revwho{color:var(--ink,#2C1810);font-weight:600}
+  .gr-revtext{margin:8px 0 0;font-family:var(--font-serif);font-size:14.5px;line-height:1.55;color:#3d3129}
+  .gr-link{font-family:var(--font-sans);font-size:11.5px;color:var(--vino);text-decoration:none;display:inline-block;margin-top:8px}
+  .gr-link:hover{text-decoration:underline}
+  .gr-flag{background:#FDF0EE;border:1px solid #D9A29A;border-radius:6px;padding:11px 14px;margin-bottom:12px;font-family:var(--font-sans);font-size:12.5px;color:#7a2a1e;line-height:1.55}
+  .gr-attrib{font-family:var(--font-sans);font-size:11px;color:#9c8a72;margin-top:14px;line-height:1.6}
+  .gr-attrib-sm{margin-top:6px}
+  .gr-problem{border-left:4px solid #B3402F}
+  .gr-problem-t{font-family:var(--font-serif);font-size:17px;color:var(--ink,#2C1810);margin-bottom:5px}
+  .gr-problem-s{font-family:var(--font-sans);font-size:13px;color:#6B4A33;line-height:1.55}
+  .gr-problem-x{font-family:var(--font-sans);font-size:10.5px;color:#b3a794;margin-top:9px;word-break:break-word}
+  @media(max-width:560px){
+    .gr-rank{margin-left:0;text-align:left}
+    .gr-table{font-size:12.5px}
+    .gr-table td,.gr-table th{padding-left:4px;padding-right:4px}
+  }
 </style>
 
 </body>
