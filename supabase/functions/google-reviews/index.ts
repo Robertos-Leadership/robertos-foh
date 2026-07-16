@@ -265,33 +265,63 @@ Deno.serve(async (req) => {
     // land under two different keys (which would display twice).
     const SERP = Deno.env.get("SERPAPI_KEY");
     let serpKept = 0, serpFail = 0;
+    const serpCapped: string[] = [];
     if (SERP) {
+      // SerpApi's page 1 is HARD-LOCKED to 8 rows - their docs, verbatim:
+      // "Parameter cannot be used on the initial page when neither
+      // next_page_token, topic_id, nor query is set. It always returns 8
+      // results." (Passing num there is an ERROR, not an override - it made
+      // all 7 venues fail once. Do not re-add it to the first call.)
+      // So a busy venue's week needs page 2, which DOES take num (max 20).
+      // We only ever ask for page 2 when page 1's oldest row is still inside
+      // the 7-day window - i.e. only when the week is provably truncated -
+      // so quiet venues stay at one search a night.
+      // deno-lint-ignore no-explicit-any
+      const take = (v: { key: string }, list: any[]) => {
+        // deno-lint-ignore no-explicit-any
+        list.forEach((rv: any) => {
+          const pub = Date.parse(rv.iso_date || "");
+          if (!pub || pub < weekAgo) return; // only under-7-day reviews, his rule
+          seen.push({
+            venue_key: v.key,
+            review_key: "serp:" + (rv.review_id || (((rv.user && rv.user.name) || "anon") + "|" + rv.iso_date)),
+            rating: rv.rating ?? null,
+            review_text: ((rv.extracted_snippet && rv.extracted_snippet.translated && rv.extracted_snippet.translated.snippet) ||
+              rv.snippet || "").slice(0, 2000),
+            author: (rv.user && rv.user.name) || "A Google user",
+            author_uri: (rv.user && rv.user.link) || null,
+            maps_uri: rv.link || null,
+            publish_time: new Date(pub).toISOString(),
+            lang: rv.original_language || null,
+            last_seen: today,
+            _pri: 2,
+          });
+          serpKept++;
+        });
+      };
+      // deno-lint-ignore no-explicit-any
+      const oldestOf = (list: any[]) =>
+        list.length ? Date.parse(list[list.length - 1].iso_date || "") : 0;
+
       await Promise.all(VENUES.map(async (v) => {
         try {
-          const r = await fetch("https://serpapi.com/search.json?engine=google_maps_reviews&place_id=" +
-            v.place_id + "&sort_by=newestFirst&hl=en&api_key=" + SERP);
-          const d = await r.json();
-          if (!r.ok || d.error) { serpFail++; return; }
-          // deno-lint-ignore no-explicit-any
-          (Array.isArray(d.reviews) ? d.reviews : []).forEach((rv: any) => {
-            const pub = Date.parse(rv.iso_date || "");
-            if (!pub || pub < weekAgo) return; // only under-7-day reviews, his rule
-            seen.push({
-              venue_key: v.key,
-              review_key: "serp:" + (rv.review_id || (((rv.user && rv.user.name) || "anon") + "|" + rv.iso_date)),
-              rating: rv.rating ?? null,
-              review_text: ((rv.extracted_snippet && rv.extracted_snippet.translated && rv.extracted_snippet.translated.snippet) ||
-                rv.snippet || "").slice(0, 2000),
-              author: (rv.user && rv.user.name) || "A Google user",
-              author_uri: (rv.user && rv.user.link) || null,
-              maps_uri: rv.link || null,
-              publish_time: new Date(pub).toISOString(),
-              lang: rv.original_language || null,
-              last_seen: today,
-              _pri: 2,
-            });
-            serpKept++;
-          });
+          const base = "https://serpapi.com/search.json?engine=google_maps_reviews&place_id=" +
+            v.place_id + "&sort_by=newestFirst&hl=en&api_key=" + SERP;
+          const r1 = await fetch(base);
+          const d1 = await r1.json();
+          if (!r1.ok || d1.error) { serpFail++; return; }
+          const p1 = Array.isArray(d1.reviews) ? d1.reviews : [];
+          take(v, p1);
+          // Page 1 exhausted the week? Then we have the venue's full week.
+          const tok = d1.serpapi_pagination && d1.serpapi_pagination.next_page_token;
+          if (!tok || !p1.length || oldestOf(p1) < weekAgo) return;
+          const r2 = await fetch(base + "&num=20&next_page_token=" + encodeURIComponent(tok));
+          const d2 = await r2.json();
+          if (!r2.ok || d2.error) { serpCapped.push(v.key); return; } // page 2 refused: week may be short
+          const p2 = Array.isArray(d2.reviews) ? d2.reviews : [];
+          take(v, p2);
+          // 28 rows and STILL inside the week: flag it rather than pretend.
+          if (p2.length >= 20 && oldestOf(p2) > weekAgo) serpCapped.push(v.key);
         } catch (_e) { serpFail++; }
       }));
     }
@@ -482,6 +512,7 @@ Deno.serve(async (req) => {
       pace_written: pace.length, pace_error: paceErr,
       source: SERP ? (useGoogleNet ? "google-net (serpapi down)" : "serpapi") : "google-net",
       serp_kept: serpKept, serp_failed_venues: serpFail,
+      serp_capped_venues: serpCapped,
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e).slice(0, 200) }, 500);
