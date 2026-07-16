@@ -166,7 +166,12 @@ Deno.serve(async (req) => {
     if (mode === "digest") {
       const RESEND = Deno.env.get("RESEND_API_KEY");
       const FROM = "Roberto's DIFC Operations <reports@kitchenteam.robertos.ae>";
-      const TO = ["fguarracino@robertos.ae", "onafid@robertos.ae"];
+      // WHO GETS IT (Francesco, 16 Jul): him ALONE until he has read a real
+      // one and approved the numbers - nothing half-checked reaches the GM's
+      // inbox. TO ADD SOMEONE: put their address in this list, redeploy the
+      // function. (Deliberately a code list, not a database one, like the
+      // other report recipients - one obvious place to look at handover.)
+      const TO = ["fguarracino@robertos.ae"];
       const hdr = { apikey: svcKey, Authorization: "Bearer " + svcKey };
       const weekIso = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
       const monthIso = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
