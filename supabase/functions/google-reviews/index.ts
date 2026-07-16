@@ -312,6 +312,14 @@ Deno.serve(async (req) => {
           if (!r1.ok || d1.error) { serpFail++; return; }
           const p1 = Array.isArray(d1.reviews) ? d1.reviews : [];
           take(v, p1);
+          // COST RULE (Francesco, 16 Jul: "stay free"): page 2 is one extra
+          // search, and paginating all 7 would need ~330/month against the
+          // 250 free tier. So only OUR OWN venue is paginated to a complete
+          // week - that is the one where a missed review matters. Competitors
+          // keep page 1's 8 newest, and the UI says so rather than implying
+          // it is their whole week. Their RATINGS (the board, the race) come
+          // from Google's own free API and are unaffected by this.
+          if (!v.us) return;
           // Page 1 exhausted the week? Then we have the venue's full week.
           const tok = d1.serpapi_pagination && d1.serpapi_pagination.next_page_token;
           if (!tok || !p1.length || oldestOf(p1) < weekAgo) return;

@@ -211,7 +211,12 @@ function renderReviews(){
     h.push(grKpi('Average rating', (us.rating!=null?us.rating:'—'), grStars(us.rating)));
     h.push(grKpi('Total ratings', grNum(us.count),
       (us.delta!=null ? '+'+grNum(us.delta)+' in 30 days' : 'counting from today')));
-    h.push(grKpi('New this week', String((week||[]).length), 'collected reviews'));
+    // Counts every review published in the last 7 days, text or not — a star
+    // with no words is still a guest's verdict. The sub-line says so, because
+    // "8" must never quietly mean something other than what a reader assumes.
+    var withText = (week||[]).filter(function(x){ return String(x.review_text||'').trim(); }).length;
+    h.push(grKpi('New this week', String((week||[]).length),
+      withText ? (withText+' with a comment') : 'ratings only, no comments'));
     h.push(grKpi('DIFC rank', rank.label, 'of '+rank.of+' by star rating' + grRankMove(board, rank)));
     h.push('</div>');
     h.push(grTrendHTML());
@@ -531,8 +536,14 @@ function grWeekHTML(key){
         + 'Worth a read — but never treat this page as the alarm: it updates once a night, not live.</div>');
     }
   }
-  h.push(list.slice(0,10).map(function(x){ return grReviewHTML(grWeekRow(x), mine); }).join(''));
-  h.push('<div class="gr-attrib gr-attrib-sm">Collected nightly from Google — newest first, kept 30 days, then deleted.</div>');
+  h.push(list.slice(0, mine?20:10).map(function(x){ return grReviewHTML(grWeekRow(x), mine); }).join(''));
+  // Honesty about scope: our own week is fetched to completion; for a
+  // competitor we deliberately take only the 8 newest a night (cost), so
+  // never let their list imply "this is their whole week".
+  h.push('<div class="gr-attrib gr-attrib-sm">'
+    + (mine ? 'Every review written in the last 7 days, collected nightly — newest first, kept 30 days, then deleted.'
+            : 'Their newest reviews, up to 8 a night — a sample of their week, not all of it. Their rating and count above are complete.')
+    + '</div>');
   return h.join('');
 }
 
