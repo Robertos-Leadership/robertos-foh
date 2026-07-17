@@ -839,10 +839,62 @@ async function peTidyDeleteAll(){
   if(ok) peToast('Empty drafts cleared ✓');
   renderMain();
 }
+// What a booking is WORTH to the business. This must agree with the agreement we
+// signed, so it simply asks peAgBase — the same function the deposit is taken on.
+// It used to read the package total first, so a minimum-spend booking that ordered
+// less than its minimum was reported at what they ordered (60k) while the contract
+// said 150k, and every headline number was short by the difference.
+// Andrea Sacchi, 17 Jul 2026: the balance between the minimum spend and what they
+// actually consume (F&B, decoration, AV, extra staffing) "is to be billed as venue
+// rental" — so the whole minimum is ours either way. Splitting that balance into
+// its parts is a separate piece of work; this only makes the TOTAL honest.
 function peEventValue(e){
-  var t = peCalcTotals(e);
-  if(t.total) return t.total;
+  var v = peAgBase(e);                       // respects pricing_type — min spend means the minimum
+  if(v != null && v !== 0) return v;
   return e.min_spend ? Number(e.min_spend) : null;
+}
+
+// ── Andrea's reporting lens ──────────────────────────────────────────────────
+// The COO reads the book as lead → prospect → tentative → converted. Valentina
+// works in draft → proposal sent → confirmed → deposit paid → done. These are the
+// SAME rows: the stage is DERIVED here and never stored, so her screens keep her
+// words and the report speaks his. Never show PE_STAGE names on the events desk.
+// Andrea Sacchi, 17 Jul 2026:
+//   "unconfirmed prospect without a date should be recorded under leads and
+//    highlighted as to be actioned but not included in the pipeline yet"
+//   "we need to know whats a prospect, tentative and converted"
+//   "future confirmed event on the book are converted pipeline"
+var PE_STAGE = {
+  lead:      {n:'Lead',      d:'No date yet — needs chasing'},
+  prospect:  {n:'Prospect',  d:'Has a date, not quoted yet'},
+  tentative: {n:'Tentative', d:'Quoted, waiting on the client'},
+  converted: {n:'Converted', d:'Confirmed, deposit paid or delivered'},
+  lost:      {n:'Lost',      d:'Gone'}
+};
+function peIsConverted(e){ return ['confirmed','deposit','done'].indexOf(e.status) >= 0; }
+function peStage(e){
+  if(e.status === 'lost') return 'lost';
+  if(peIsConverted(e)) return 'converted';   // a confirmed booking is converted even with no date yet
+  if(!e.event_date) return 'lead';           // unconfirmed AND undated = a lead, deliberately NOT pipeline
+  return e.status === 'sent' ? 'tentative' : 'prospect';
+}
+// Only real, dated, unconfirmed business counts as pipeline. Leads are excluded on
+// Andrea's instruction — an undated maybe used to inflate the pipeline while an
+// undated CONFIRMED booking counted in nothing at all.
+function peInPipeline(e){ var s = peStage(e); return s === 'prospect' || s === 'tentative'; }
+// A converted booking with no date is real money we cannot schedule — it must be
+// visible and chased, never silently dropped the way it used to be.
+function peNeedsDate(e){ return peIsConverted(e) && !e.event_date; }
+// Every price in this module is what the client is quoted: GROSS, carrying 10%
+// service + 7% DIFC + 5% VAT (PE_GROSS). Finance books the net. Andrea asked to
+// see "both numbers", so nothing is ever shown without saying which it is.
+function peNetOf(gross){ return (gross == null) ? null : gross / PE_GROSS; }
+// A buyout takes the whole venue — it hits every other guest and the whole
+// operation, so Andrea asked for these to stand out rather than read like a
+// normal booking. ("Buy out affect the whole operation and our guest and should
+// be better monitored by highlighting them.")
+function peIsBuyout(e){
+  return String(e.event_type || '') === 'Full buyout' || String(e.area || '') === 'Full venue';
 }
 
 // ── calendar view ────────────────────────────────────────────────────────────
@@ -859,6 +911,14 @@ function peRenderCalendar(){
   });
   var mLbl = first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   var monthCount = Object.keys(byDate).reduce(function(a,k){ return a + byDate[k].length; }, 0);
+  // The month header counted events but never added them up, so a 400k buyout read
+  // the same as a 45k gathering. Converted money is separated from what is still
+  // only in play — a calendar full of maybes is not a calendar full of money.
+  var mConv = 0, mPipe = 0;
+  Object.keys(byDate).forEach(function(k){ byDate[k].forEach(function(e){
+    var v = peEventValue(e)||0;
+    if(peStage(e)==='converted') mConv += v; else if(peInPipeline(e)) mPipe += v;
+  }); });
   var h = peHeader('calendar');
   h += '<div style="margin-bottom:12px"><div class="pe-title">Calendar</div>'+
     '<div style="font-size:12px;color:#8B7355">Every booking on the day it lands. Tap one to open it.</div></div>';
@@ -866,7 +926,8 @@ function peRenderCalendar(){
   h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--vino);color:var(--cream);border-radius:12px;padding:11px 14px;margin-bottom:12px">'+
        '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(-1)">‹ Prev</button>'+
        '<div style="text-align:center;line-height:1.25"><div style="font-family:\'Playfair Display\',serif;font-size:20px">'+mLbl+'</div>'+
-         '<div style="font-size:10.5px;letter-spacing:.06em;opacity:.85">'+(monthCount?monthCount+' event'+(monthCount>1?'s':''):'no events yet')+'</div></div>'+
+         '<div style="font-size:10.5px;letter-spacing:.06em;opacity:.85">'+(monthCount?monthCount+' event'+(monthCount>1?'s':''):'no events yet')+
+         (mConv?' &middot; AED '+peMoney(mConv)+' converted':'')+(mPipe?' &middot; '+peMoney(mPipe)+' in play':'')+'</div></div>'+
        '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalToday()">Today</button>'+
        '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button></span></div>';
   // colour legend — a tidy card so the meaning of each colour is always in view
@@ -888,7 +949,14 @@ function peRenderCalendar(){
     h += '<div class="pe-cal-d'+(isToday?' today':'')+(dow>=5?' we':'')+'">'+num+
       evs.map(function(e){
         var c = PE_STATUS_COL[e.status]||PE_STATUS_COL.draft;
-        return '<div class="pe-cal-ev" style="background:'+c.bg+';color:'+c.t+';border:1px solid '+c.b+'" onclick="peGo(\'event\',\''+e.id+'\')" title="'+peEsc(e.client_name||e.company||'')+'">'+peEsc((e.client_name||e.company||'?'))+(e.guests?' · '+e.guests:'')+'</div>';
+        var v = peEventValue(e), bo = peIsBuyout(e);
+        // A buyout closes the whole venue — it gets a heavy border so it cannot be
+        // mistaken for a normal booking sitting in one room.
+        return '<div class="pe-cal-ev" style="background:'+c.bg+';color:'+c.t+';border:1px solid '+c.b+
+          (bo?';border-left:4px solid #400207;font-weight:700':'')+'" onclick="peGo(\'event\',\''+e.id+'\')" title="'+
+          peEsc((e.client_name||e.company||'')+(bo?' — FULL BUYOUT':'')+(v?' — AED '+peMoney(v):''))+'">'+
+          (bo?'&#9679; ':'')+peEsc((e.client_name||e.company||'?'))+(e.guests?' · '+e.guests:'')+
+          (v?'<br><span style="opacity:.75">'+peMoney(v)+'</span>':'')+'</div>';
       }).join('')+'</div>';
   }
   h += '</div>';
@@ -906,7 +974,37 @@ function peRenderCalendar(){
     });
   });
   h += '</div>';
+  h += peLeadsStrip();
   return h+PE_FOOT;
+}
+// Leads and undated confirmed bookings belong to no month, so a calendar can never
+// show them — and until now nothing else did either: an undated booking was invisible
+// on every screen while still being real money. This strip sits under the calendar so
+// the work is in front of whoever is looking.
+// Andrea Sacchi, 17 Jul 2026: "unconfirmed prospect without a date should be recorded
+// under leads and highlighted as to be actioned but not included in the pipeline yet".
+function peLeadsStrip(){
+  var leads = peState.events.filter(function(e){ return peStage(e)==='lead'; });
+  var undated = peState.events.filter(peNeedsDate);
+  if(!leads.length && !undated.length) return '';
+  function row(e, why){
+    var v = peEventValue(e);
+    return '<div class="pe-card" style="padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="peGo(\'event\',\''+e.id+'\')">'+
+      '<span><b style="font-size:13px;color:#2C1810">'+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' pax':'')+
+      '<br><span style="font-size:11px;color:#8B7355">'+why+'</span></span>'+
+      '<span style="font-size:12px;color:#6B4A33;white-space:nowrap">'+(v?'AED '+peMoney(v):'no value yet')+'</span></div>';
+  }
+  var h = '';
+  if(undated.length){
+    h += '<div style="margin:18px 2px 7px"><span class="pe-lbl" style="margin:0;font-size:11px;color:#8A6400">&#9888; Confirmed but no date ('+undated.length+') — book these in</span></div>';
+    h += undated.map(function(e){ return row(e, 'Confirmed &mdash; needs a date before anyone can plan it'); }).join('');
+  }
+  if(leads.length){
+    var lv = leads.reduce(function(a,e){ return a+(peEventValue(e)||0); }, 0);
+    h += '<div style="margin:18px 2px 7px"><span class="pe-lbl" style="margin:0;font-size:11px">Leads ('+leads.length+') — no date yet, not counted in the pipeline'+(lv?' · AED '+peMoney(lv)+' if they land':'')+'</span></div>';
+    h += leads.map(function(e){ return row(e, peStatusMeta(e.status).n+' &mdash; no date yet, chase it'); }).join('');
+  }
+  return h;
 }
 function peCalToday(){ peState.month = peMonthKey(peToday()); renderMain(); }
 function peCalShift(n){
@@ -3932,44 +4030,104 @@ async function peGuideFinish(action){
 }
 
 // ── monthly report (replaces the Group Report + RLL financials) ──────────────
-function peKpis(){
+// Every headline figure for the month being VIEWED, in one pass. This used to be
+// four raw sums pinned to today's month while the tables below followed the month
+// navigator — so one screen showed August tables under July numbers.
+// Andrea Sacchi, 17 Jul 2026, drives the rest of the shape:
+//   "year to date should reflect year to date only, future confirmed event on the
+//    book are converted pipeline"
+//   "we need to know whats a prospect, tentative and converted"
+//   "unconfirmed prospect without a date ... not included in the pipeline yet"
+function peReportData(mk){
   var today = peToday();
-  var mk = peMonthKey(today);
   var plus30 = localISO(new Date(Date.now()+30*86400000));
-  var k = { m:{n:0,v:0}, n30:{n:0,v:0}, pipe:{n:0,v:0}, ytd:{n:0,v:0} };
+  var yr = mk.slice(0,4);
+  var K = { month:{n:0,v:0}, n30:{n:0,v:0},
+            prospect:{n:0,v:0}, tentative:{n:0,v:0}, pipeline:{n:0,v:0},
+            leads:{n:0,v:0}, needDate:{n:0,v:0},
+            ytd:{n:0,v:0}, convPipe:{n:0,v:0},
+            lost:{n:0,v:0}, wonYr:{n:0,v:0} };
   peState.events.forEach(function(e){
-    var v = peEventValue(e)||0;
+    var v = peEventValue(e) || 0;
     var d = e.event_date ? String(e.event_date).slice(0,10) : null;
-    var conf = ['confirmed','deposit','done'].indexOf(e.status)>=0;
-    if(conf && d && peMonthKey(d)===mk){ k.m.n++; k.m.v+=v; }
-    if(conf && d && d>=today && d<plus30){ k.n30.n++; k.n30.v+=v; }
-    if(['draft','sent'].indexOf(e.status)>=0){ k.pipe.n++; k.pipe.v+=v; }
-    if(conf && d && d.slice(0,4)===today.slice(0,4)){ k.ytd.n++; k.ytd.v+=v; }
+    var s = peStage(e);
+    var add = function(b){ b.n++; b.v += v; };
+    if(s === 'converted' && d && peMonthKey(d) === mk) add(K.month);
+    if(s === 'converted' && d && d >= today && d < plus30) add(K.n30);
+    if(s === 'prospect')  { add(K.prospect);  add(K.pipeline); }
+    if(s === 'tentative') { add(K.tentative); add(K.pipeline); }
+    if(s === 'lead') add(K.leads);
+    if(peNeedsDate(e)) add(K.needDate);
+    // Year figures follow the year being VIEWED, not whatever today happens to be.
+    if(s === 'converted' && d && d.slice(0,4) === yr){
+      add(K.wonYr);
+      if(d <= today) add(K.ytd); else add(K.convPipe);   // to date vs converted pipeline
+    }
+    if(s === 'lost' && d && d.slice(0,4) === yr) add(K.lost);
   });
-  function card(lbl, v, sub, accent){
-    return '<div class="pe-kpi" style="border-top:3px solid '+accent+'">'+
-      '<div class="pe-kpi-l">'+lbl+'</div>'+
-      '<div class="pe-kpi-v">AED '+peMoney(v.v)+'</div>'+
-      '<div class="pe-kpi-s">'+v.n+' '+sub+'</div></div>';
-  }
-  return '<div class="pe-kpis">'+
-    card('This month', k.m, 'confirmed events', '#6B1F2A')+
-    card('Next 30 days', k.n30, 'events coming', '#C9A84C')+
-    card('Open pipeline', k.pipe, 'enquiries in play', '#3E7FBB')+
-    card(new Date().getFullYear()+' to date', k.ytd, 'confirmed events', '#4E9E56')+
+  // Andrea: "What percentage of enquiries do we convert, and what did we walk away
+  // from?" Won and lost are both counted on the viewed year so the rate is honest.
+  var decided = K.wonYr.n + K.lost.n;
+  K.winRate = decided ? Math.round(K.wonYr.n / decided * 100) : null;
+  K.decided = decided;
+  return K;
+}
+function peKpiCard(lbl, b, sub, accent, note){
+  return '<div class="pe-kpi" style="border-top:3px solid '+accent+'">'+
+    '<div class="pe-kpi-l">'+lbl+'</div>'+
+    '<div class="pe-kpi-v">AED '+peMoney(b.v)+'</div>'+
+    '<div class="pe-kpi-s">'+b.n+' '+sub+'</div>'+
+    (note ? '<div class="pe-kpi-s" style="color:#A5876B">'+note+'</div>' : '')+
   '</div>';
+}
+function peKpis(mk){
+  mk = mk || peState.month || peMonthKey(peToday());
+  var K = peReportData(mk);
+  var mLbl = new Date(+mk.slice(0,4), +mk.slice(5,7)-1, 1).toLocaleDateString('en-GB',{month:'long'});
+  var yr = mk.slice(0,4);
+  var h = '<div class="pe-kpis">'+
+    peKpiCard(mLbl+' — converted', K.month, 'events', '#6B1F2A', 'net AED '+peMoney(peNetOf(K.month.v)))+
+    peKpiCard('Next 30 days', K.n30, 'events coming', '#C9A84C')+
+    peKpiCard('Pipeline', K.pipeline, 'in play', '#3E7FBB',
+      K.prospect.n+' prospect &middot; '+K.tentative.n+' tentative')+
+    peKpiCard('Leads', K.leads, 'to action', '#8A6A4F', 'no date yet &mdash; not pipeline')+
+  '</div>';
+  h += '<div class="pe-kpis" style="margin-top:10px">'+
+    peKpiCard(yr+' to date', K.ytd, 'delivered', '#4E9E56', 'net AED '+peMoney(peNetOf(K.ytd.v)))+
+    peKpiCard('Converted pipeline', K.convPipe, 'still to come', '#4E9E56', 'confirmed, later this year')+
+    peKpiCard(yr+' lost', K.lost, 'walked away', '#BB3A28')+
+    '<div class="pe-kpi" style="border-top:3px solid #3E7FBB">'+
+      '<div class="pe-kpi-l">Conversion</div>'+
+      '<div class="pe-kpi-v">'+(K.winRate == null ? '&mdash;' : K.winRate+'%')+'</div>'+
+      '<div class="pe-kpi-s">'+(K.winRate == null ? 'nothing decided yet' : K.wonYr.n+' won of '+K.decided+' decided')+'</div>'+
+    '</div>'+
+  '</div>';
+  // Real money that cannot be scheduled. It used to vanish from every screen.
+  // It is deliberately NOT in the month/YTD/converted-pipeline figures above —
+  // an undated booking cannot honestly sit in any time bucket — so this banner
+  // says exactly that rather than implying it is counted somewhere.
+  if(K.needDate.n){
+    h += '<div style="margin-top:10px;background:#FBF0D6;border:1px solid #DFC680;border-radius:9px;padding:9px 13px;font-size:12.5px;color:#6B4A00;line-height:1.5">'+
+      '&#9888; <b>'+K.needDate.n+' confirmed booking'+(K.needDate.n>1?'s have':' has')+' no date</b> &mdash; AED '+peMoney(K.needDate.v)+
+      ' of real money that is in <b>none of the figures above</b>, because nothing undated can be put in a month or a year. '+
+      'Open '+(K.needDate.n>1?'them':'it')+' and set the date to bring '+(K.needDate.n>1?'them':'it')+' in.</div>';
+  }
+  return h;
 }
 function peForecastData(){
   var from = peState.fcFrom, to = peState.fcTo;
   if(!from || !to) return null;
-  var conf={n:0,v:0}, pipe={n:0,v:0}, lost=0, rows=[];
+  // Lost used to be a bare count — Andrea asked what we walked away from, which is
+  // a value, not a tally. Pipeline here means prospect + tentative only (a lead has
+  // no date, so it cannot fall inside a date window anyway).
+  var conf={n:0,v:0}, pipe={n:0,v:0}, lost={n:0,v:0}, rows=[];
   peState.events.forEach(function(e){
     var d = e.event_date ? String(e.event_date).slice(0,10) : null;
     if(!d || d<from || d>to) return;
-    var v = peEventValue(e)||0;
-    if(['confirmed','deposit','done'].indexOf(e.status)>=0){ conf.n++; conf.v+=v; rows.push(e); }
-    else if(['draft','sent'].indexOf(e.status)>=0){ pipe.n++; pipe.v+=v; rows.push(e); }
-    else if(e.status==='lost') lost++;
+    var v = peEventValue(e)||0, s = peStage(e);
+    if(s==='converted'){ conf.n++; conf.v+=v; rows.push(e); }
+    else if(s==='prospect' || s==='tentative'){ pipe.n++; pipe.v+=v; rows.push(e); }
+    else if(s==='lost'){ lost.n++; lost.v+=v; }
   });
   rows.sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
   return { from:from, to:to, conf:conf, pipe:pipe, lost:lost, rows:rows };
@@ -3982,7 +4140,10 @@ function peForecastHTML(fc){
   }).join('');
   return '<div class="brand">R O B E R T O \u2019 S</div><div class="fs-h">EVENTS FORECAST \u2014 '+peEsc(fc.from)+' to '+peEsc(fc.to)+'</div>'+
     '<p style="font-family:Arial,sans-serif;font-size:13px">Confirmed &amp; definite: <b>AED '+peMoney(fc.conf.v)+'</b> ('+fc.conf.n+' events) \u00b7 '+
-    'Pipeline: <b>AED '+peMoney(fc.pipe.v)+'</b> ('+fc.pipe.n+' enquiries) \u00b7 Lost: '+fc.lost+'</p>'+
+    'Pipeline: <b>AED '+peMoney(fc.pipe.v)+'</b> ('+fc.pipe.n+' enquiries) \u00b7 '+
+    'Lost: <b>AED '+peMoney(fc.lost.v)+'</b> ('+fc.lost.n+')</p>'+
+    '<p style="font-family:Arial,sans-serif;font-size:11.5px;color:#8B7355">All values are gross (they include service charge, DIFC fee and VAT). '+
+    'Confirmed net: <b>AED '+peMoney(peNetOf(fc.conf.v))+'</b>.</p>'+
     '<table><tr><td class="l">Date</td><td class="l">Client</td><td class="l">Venue</td><td class="l">Pax</td><td class="l">Status</td><td class="l" style="text-align:right">Value AED</td></tr>'+rows+'</table>'+
     '<div class="ft">Generated from the Events module \u00b7 '+new Date().toLocaleDateString('en-GB')+' \u00b7 values are minimum-spend or quoted package totals</div>';
 }
@@ -4024,10 +4185,14 @@ function peRenderReport(){
   var mk = peState.month;
   var first = new Date(+mk.slice(0,4), +mk.slice(5,7)-1, 1);
   var mLbl = first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  // Grouped by Andrea's stage, not by raw status. "Definite — deposit paid" also
+  // used to claim a payment for every 'done' event, whether a deposit was ever taken.
   var groups = [
-    {n:'Definite — deposit paid', st:['deposit','done']},
-    {n:'Confirmed (no deposit yet)', st:['confirmed']},
-    {n:'Pipeline — enquiries', st:['draft','sent']},
+    {n:'Converted — deposit paid', st:['deposit']},
+    {n:'Converted — delivered', st:['done']},
+    {n:'Converted — no deposit yet', st:['confirmed']},
+    {n:'Tentative — quoted, awaiting the client', st:['sent']},
+    {n:'Prospect — dated, not quoted yet', st:['draft']},
     {n:'Lost', st:['lost']}
   ];
   var monthEvents = peState.events.filter(function(e){ return e.event_date && peMonthKey(e.event_date)===mk; })
@@ -4036,8 +4201,8 @@ function peRenderReport(){
   var h = peHeader('report');
   h += '<div style="margin-bottom:14px"><div class="pe-title">Monthly report</div>'+
     '<div style="font-size:12px;color:#8B7355">Where the events business stands \u2014 confirmed, coming and in play.</div></div>';
-  h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance</div>';
-  h += peKpis();
+  h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance &middot; '+peEsc(mLbl)+'</div>';
+  h += peKpis(mk);   // follows the month navigator — it used to be pinned to today
   var fc = peState.fcRun ? peForecastData() : null;
   h += secHd('Forecast any period');
   h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.55);background:#FDFBF6">'+
@@ -4057,7 +4222,7 @@ function peRenderReport(){
     (fc?'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
       '<div style="flex:1;min-width:145px;background:#EEF6EC;border:1px solid #BAD9B4;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#2E6B34">Confirmed &amp; definite</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#1C5A25">AED '+peMoney(fc.conf.v)+'</div><div style="font-size:11px;color:#5C7A55">'+fc.conf.n+' event'+(fc.conf.n===1?'':'s')+'</div></div>'+
       '<div style="flex:1;min-width:145px;background:#FBF3DE;border:1px solid #DFC680;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8A6400">Pipeline</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#6B4A00">AED '+peMoney(fc.pipe.v)+'</div><div style="font-size:11px;color:#8A7340">'+fc.pipe.n+' enquir'+(fc.pipe.n===1?'y':'ies')+'</div></div>'+
-      '<div style="flex:1;min-width:110px;background:#F7E9E6;border:1px solid #DDBBB4;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#933">Lost</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#7E1A0C">'+fc.lost+'</div><div style="font-size:11px;color:#9A6258">in this window</div></div>'+
+      '<div style="flex:1;min-width:110px;background:#F7E9E6;border:1px solid #DDBBB4;border-radius:9px;padding:10px 12px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#933">Lost</div><div style="font-family:\'Playfair Display\',serif;font-size:18px;color:#7E1A0C">AED '+peMoney(fc.lost.v)+'</div><div style="font-size:11px;color:#9A6258">'+fc.lost.n+' walked away</div></div>'+
     '</div>':'')+
   '</div>';
   // ── Month detail — branded month navigator section ──
@@ -4068,34 +4233,66 @@ function peRenderReport(){
        '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button>'+
        '<button class="pe-btn sec sm" style="background:var(--cream);border-color:var(--cream);color:var(--vino);font-weight:700" onclick="pePrintReport()">Print / PDF</button></span></div>';
   var ytd = 0, mtot = 0;
-  peState.events.forEach(function(e){
-    if(['deposit','done','confirmed'].indexOf(e.status)<0) return;
-    var v = peEventValue(e)||0;
-    if(e.event_date && String(e.event_date).slice(0,4)===mk.slice(0,4)) ytd += v;
-    if(e.event_date && peMonthKey(e.event_date)===mk) mtot += v;
-  });
+  // Andrea: "year to date should reflect year to date only, future confirmed event
+  // on the book are converted pipeline". These now come from the one pass in
+  // peReportData so the footer, the cards and the tables can never disagree.
+  var RK = peReportData(mk);
+  mtot = RK.month.v; ytd = RK.ytd.v;
+  // Andrea asked whether 350k is a good month. It only means something next to
+  // the month before it.
+  // Build the previous month's key from the date parts directly. Going via
+  // toISOString() converts Dubai local midnight back to UTC and lands on the last
+  // day of the month BEFORE the one we want — July would compare itself to May.
+  var pd = new Date(+mk.slice(0,4), +mk.slice(5,7)-2, 1);
+  var prevMk = pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0');
+  var prev = peReportData(prevMk).month;
+  var prevLbl = new Date(+prevMk.slice(0,4), +prevMk.slice(5,7)-1, 1).toLocaleDateString('en-GB',{month:'long'});
+  var chg = prev.v ? Math.round((mtot - prev.v) / prev.v * 100) : null;
   groups.forEach(function(g){
     var isLost = g.st.length===1 && g.st[0]==='lost';
     if(isLost && !peState.lostReasons) peLoadLostReasons();
     var list = monthEvents.filter(function(e){ return g.st.indexOf(e.status)>=0; });
     var dotc = PE_STATUS_COL[g.st[0]]||PE_STATUS_COL.draft;
     h += '<div style="display:flex;align-items:center;gap:7px;margin:18px 2px 7px"><span style="width:9px;height:9px;border-radius:50%;background:'+dotc.bg+';border:1px solid '+dotc.b+'"></span><span class="pe-lbl" style="margin:0;font-size:11px">'+g.n+' ('+list.length+')</span></div>';
-    h += '<div class="pe-card" style="overflow-x:auto"><table class="pe-report"><tr><th>Date</th><th>Name / Company</th><th>Venue</th><th>Type</th><th>Time</th><th>Pax</th><th>Package</th><th>Min spend</th><th>Contact</th>'+(isLost?'<th>Why lost</th>':'')+'</tr>';
+    // The "Value" column is peEventValue — the SAME figure the totals below are
+    // summed from. This column used to be "Min spend", a different number, so the
+    // table never added up to its own total. Buyouts are marked because they take
+    // the whole venue (Andrea: "affect the whole operation and our guest").
+    h += '<div class="pe-card" style="overflow-x:auto"><table class="pe-report"><tr><th>Date</th><th>Name / Company</th><th>Venue</th><th>Type</th><th>Time</th><th>Pax</th><th>Package</th><th style="text-align:right">Value (gross)</th><th>Contact</th>'+(isLost?'<th>Why lost</th>':'')+'</tr>';
     if(!list.length) h += '<tr><td colspan="'+(isLost?10:9)+'" style="color:#8B7355">—</td></tr>';
+    var gTot = 0;
     list.forEach(function(e){
-      h += '<tr style="cursor:pointer" onclick="peGo(\'event\',\''+e.id+'\')"><td>'+peDLabel(e.event_date)+'</td>'+
+      var v = peEventValue(e)||0; gTot += v;
+      var bo = peIsBuyout(e);
+      h += '<tr style="cursor:pointer'+(bo?';background:#FBF0D6':'')+'" onclick="peGo(\'event\',\''+e.id+'\')"><td>'+peDLabel(e.event_date)+'</td>'+
         '<td>'+peEsc(e.client_name||'')+(e.company?'<br><span style="color:#8B7355">'+peEsc(e.company)+'</span>':'')+'</td>'+
-        '<td>'+peEsc(e.area||'')+'</td><td>'+peEsc(e.event_type||'')+'</td><td>'+peEsc(e.time_from||'')+'</td>'+
+        '<td>'+peEsc(e.area||'')+'</td>'+
+        '<td>'+peEsc(e.event_type||'')+(bo?' <b style="color:#8A6400">&#9679; BUYOUT</b>':'')+'</td><td>'+peEsc(e.time_from||'')+'</td>'+
         '<td>'+(e.guests||'')+'</td><td>'+peEsc(e.package_label||'')+'</td>'+
-        '<td>'+(e.min_spend?peMoney(e.min_spend):'')+'</td>'+
+        '<td style="text-align:right">'+peMoney(v)+(e.pricing_type==='min_spend'?'<br><span style="font-size:10px;color:#8B7355">min spend</span>':'')+'</td>'+
         '<td>'+peEsc(e.contact_name||'')+(e.contact_phone?'<br>'+peEsc(e.contact_phone):'')+'</td>'+
         (isLost?'<td>'+peEsc((peState.lostReasons||{})[e.id]||'')+'</td>':'')+'</tr>';
     });
+    if(list.length) h += '<tr><td colspan="7" style="text-align:right;color:#8B7355">Subtotal</td>'+
+      '<td style="text-align:right"><b>'+peMoney(gTot)+'</b></td><td'+(isLost?' colspan="2"':'')+'></td></tr>';
     h += '</table></div>';
   });
-  h += '<div style="max-width:440px;margin-top:22px;background:#F7EEE2;border:1px solid rgba(201,168,76,0.45);border-radius:12px;padding:14px 16px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 0"><span style="font-size:12.5px;color:#6B4A33">'+mLbl+' confirmed value</span><b style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(mtot)+'</b></div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-top:1px solid rgba(201,168,76,0.3);margin-top:4px"><span style="font-size:12.5px;color:#6B4A33">'+mk.slice(0,4)+' YTD confirmed value</span><b style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(ytd)+'</b></div>'+
+  function totRow(lbl, gross, sub, top){
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0'+
+      (top?';border-top:1px solid rgba(201,168,76,0.3);margin-top:4px':'')+'">'+
+      '<span style="font-size:12.5px;color:#6B4A33">'+lbl+(sub?'<br><span style="font-size:11px;color:#9A8468">'+sub+'</span>':'')+'</span>'+
+      '<b style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207;text-align:right">AED '+peMoney(gross)+
+      '<br><span style="font-family:Arial,sans-serif;font-size:11px;font-weight:normal;color:#8B7355">net '+peMoney(peNetOf(gross))+'</span></b></div>';
+  }
+  h += '<div style="max-width:460px;margin-top:22px;background:#F7EEE2;border:1px solid rgba(201,168,76,0.45);border-radius:12px;padding:14px 16px">'+
+    totRow(mLbl+' converted', mtot,
+      (chg==null ? 'no '+prevLbl+' to compare with'
+                 : prevLbl+' AED '+peMoney(prev.v)+' &middot; <b style="color:'+(chg>=0?'#2E6B34':'#8A2A1A')+'">'+(chg>=0?'+':'')+chg+'%</b>'), false)+
+    totRow(mk.slice(0,4)+' to date', ytd, 'delivered on or before today only', true)+
+    totRow('Converted pipeline', RK.convPipe.v, 'confirmed, still to come this year', true)+
+    '<div style="border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:8px;font-size:11px;color:#8B7355;line-height:1.5">'+
+      'Values are <b>gross</b> — they include 10% service charge, 7% DIFC fee and 5% VAT. '+
+      'Net is what finance books. A minimum-spend booking is valued at its minimum: the balance between that and what the guest consumes is billed as venue rental.</div>'+
   '</div>';
   h += peScrollTopBtn();
   return h+PE_FOOT;
