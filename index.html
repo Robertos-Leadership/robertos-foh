@@ -2231,7 +2231,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-16.7</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-17.1</div>
   </div>
 
   <!-- main scroll area -->
@@ -2457,6 +2457,11 @@ if ('serviceWorker' in navigator) {
 <div class="toast" id="toast"></div>
 
 <script src="common.js?v=20260710b"></script>
+<!-- The feedback rounds — shared with foh-feedback.html, the page the team
+     answer on. One round, one place: see the header of foh-rounds.js.
+     Loaded here, not with the foh-*.js at the foot of the body, because the
+     inline Admin code below READS it rather than just calling into it. -->
+<script src="foh-rounds.js?v=20260717a"></script>
 <script>
 const SUPABASE_URL = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
@@ -3401,21 +3406,16 @@ function admUsageHTML(){
 
 /* ===================================================================
    ADMIN → FEEDBACK — read what the team sent back from foh-feedback.html.
-   One row per person per round (app_feedback). Read-only. Grouped by round,
-   and within a round the "fix this" answers are counted first, because that
-   count IS the work list. Needs foh-app-feedback.sql run once.
+   One row per submission (app_feedback). Grouped by round, and within a round
+   the answers that ask us to act are counted first, because that count IS the
+   work list. Needs foh-app-feedback.sql run once; the tick and the "sent,
+   nothing back yet" list additionally need foh-app-feedback-actions.sql.
+
+   Rounds — their names, questions, labels and message copy — come from
+   foh-rounds.js, shared with the questionnaire itself. This file used to hold
+   its own half of that (FB_TOPIC_NAMES + FB_EMAIL) and could not see the other
+   half, which is why the work list could only ever print a question NUMBER.
    =================================================================== */
-var FB_TOPIC_NAMES={'events-20':'Events — the 20 enquiries we tested',
-  'coo-events':'Events — Calendar & Monthly report (COO review)',
-  'coo-events-2':'Events — what we fixed, what needs Valentina (COO round 2)'};
-// Display order only: loudest first. Every answer any round can produce must be
-// listed, or it renders no pill at all (the pills are built by filtering THIS list).
-var FB_ANSWER_ORDER=['Fix this',"NO — there's a problem",'Go ahead','Nice to have','Not yet','Agree, this is fine',"Doesn't happen",'Leave as is'];
-// Which answers mean "he is asking us to DO something". This used to be inferred
-// from position in the array above (indexOf(v) > 1), which quietly made any answer
-// missing from the list count AS work (indexOf → -1, and -1 is not > 1). Listing
-// them explicitly means a new answer is opt-in, never work by accident.
-var FB_WORK_ANSWERS={'Fix this':1, "NO — there's a problem":1, 'Go ahead':1};
 var FB_ANSWER_COL={'Fix this':{bg:'#F7DED9',t:'#8A2A1A',b:'#D89C90'},
   "NO — there's a problem":{bg:'#F7DED9',t:'#8A2A1A',b:'#D89C90'},
   'Go ahead':{bg:'#DCE9F6',t:'#12456E',b:'#8FB6DA'},
@@ -3424,7 +3424,10 @@ var FB_ANSWER_COL={'Fix this':{bg:'#F7DED9',t:'#8A2A1A',b:'#D89C90'},
   'Agree, this is fine':{bg:'#E7F0E4',t:'#2E6B34',b:'#A8C6A4'},
   "Doesn't happen":{bg:'#EDE7DC',t:'#7A6B55',b:'#CBBBA2'},
   'Leave as is':{bg:'#EDE7DC',t:'#7A6B55',b:'#CBBBA2'}};
-function admFbTopicName(t){ return FB_TOPIC_NAMES[t]||t||'—'; }
+// A round we no longer have a definition for still has real answers in the
+// table. Show its slug rather than hiding it: old feedback stays readable.
+function admFbTopicName(t){ var r=FB_ROUNDS[t]; return (r&&r.name)||t||'—'; }
+function admFbTopics(){ return Object.keys(FB_ROUNDS); }   // newest first — see foh-rounds.js
 // ── Send a round ──
 // The link is the whole product: foh-feedback.html?topic=<set>&who=<Name>. The
 // "who" is only a label on their answers, so a typo is cosmetic, not broken.
@@ -3436,18 +3439,35 @@ function admFbUrl(topic, name){
   return admFbBase()+'foh-feedback.html?topic='+encodeURIComponent(topic)
     + (name ? '&who='+encodeURIComponent(name) : '');
 }
-function admFbS(){ state.fbSend = state.fbSend || { topic:'events-20', email:'', phone:'' }; return state.fbSend; }
+// Default to the NEWEST round — the first key of FB_ROUNDS. This used to be
+// hardcoded to 'events-20', so every send started by changing it away from the
+// oldest, already-closed round.
+function admFbS(){ state.fbSend = state.fbSend || { topic:admFbTopics()[0], email:'', phone:'' }; return state.fbSend; }
 function admFbWho(){ var u=adminFind(admFbS().email); return (u&&u.name) ? u.name : ''; }
-// Repaint ONLY the link line — never re-render the card while he's typing in it.
+// Repaint ONLY the link line and the buttons — never re-render the card while
+// he's typing in it.
 function admFbPaintLink(){
-  var el=document.getElementById('fb-link'); if(!el) return;
-  el.textContent = admFbUrl(admFbS().topic, admFbWho());
+  var el=document.getElementById('fb-link'); if(el) el.textContent = admFbUrl(admFbS().topic, admFbWho());
+  var who=admFbWho(), why=document.getElementById('fb-why');
+  ['fb-a-mail','fb-a-wa','fb-a-cp'].forEach(function(id){
+    var b=document.getElementById(id); if(!b) return;
+    b.disabled = !who;
+    b.title = who ? '' : 'Choose a person first';
+  });
+  if(why) why.textContent = who
+    ? 'Sending ' + admFbTopicName(admFbS().topic) + ' to ' + who + '.'
+    : 'Choose a person first — the link carries their name, so their answers arrive with it.';
 }
 function admFbSet(f, v){ admFbS()[f]=v; admFbPaintLink(); }
 function admFbSendHTML(){
   var s=admFbS();
+  // The chosen person survives a re-render (it lives in state), so the buttons
+  // must be painted from it HERE too — hardcoding disabled left them dead after
+  // any repaint until he touched a dropdown again.
+  var who=admFbWho();
+  var dis=who?'':' disabled', tip=who?'':' title="Choose a person first"';
   var people=(state.adminUsers||[]).slice().sort(function(a,b){ return String(a.name||a.email).localeCompare(String(b.name||b.email)); });
-  var topics=Object.keys(FB_TOPIC_NAMES);
+  var topics=admFbTopics();
   var inp='width:100%;box-sizing:border-box;border:1.5px solid #e3d5c2;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:13.5px;background:#fff;color:#2c1810;';
   var lbl='display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9c8a72;margin-bottom:4px;';
   return '<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:14px 16px;margin-bottom:18px;">'
@@ -3456,7 +3476,7 @@ function admFbSendHTML(){
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
       +'<div style="flex:2;min-width:180px;"><label style="'+lbl+'" for="fb-topic">Which round</label>'
       +'<select id="fb-topic" style="'+inp+'" onchange="admFbSet(\'topic\',this.value)">'
-      + topics.map(function(t){ return '<option value="'+admEsc(t)+'"'+(s.topic===t?' selected':'')+'>'+admEsc(FB_TOPIC_NAMES[t])+'</option>'; }).join('')
+      + topics.map(function(t){ return '<option value="'+admEsc(t)+'"'+(s.topic===t?' selected':'')+'>'+admEsc(admFbTopicName(t))+'</option>'; }).join('')
       +'</select></div>'
       +'<div style="flex:2;min-width:180px;"><label style="'+lbl+'" for="fb-who">Who</label>'
       +'<select id="fb-who" style="'+inp+'" onchange="admFbSet(\'email\',this.value)">'
@@ -3467,10 +3487,18 @@ function admFbSendHTML(){
       +'<input id="fb-phone" style="'+inp+'" value="'+admEsc(s.phone||'')+'" placeholder="05x xxx xxxx" onchange="admFbS().phone=this.value">'
       +'</div>'
     +'</div>'
+    // Every send button is disabled until a person is chosen, and says why.
+    // "Copy the link" used to be the odd one out — it skipped the check the
+    // other two share, so copying without choosing anyone handed over a link
+    // with no name on it and the answers arrived filed as "Anonymous".
     +'<div style="margin-top:11px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
-      +'<button class="btn btn-sm" onclick="admFbEmail()">Send by email</button>'
-      +'<button class="btn btn-sm" onclick="admFbWa()">Open WhatsApp</button>'
-      +'<button class="btn btn-sm" onclick="admFbCopy()">Copy the link</button>'
+      +'<button class="btn btn-sm" id="fb-a-mail" onclick="admFbEmail()"'+dis+tip+'>Send by email</button>'
+      +'<button class="btn btn-sm" id="fb-a-wa" onclick="admFbWa()"'+dis+tip+'>Open WhatsApp</button>'
+      +'<button class="btn btn-sm" id="fb-a-cp" onclick="admFbCopy()"'+dis+tip+'>Copy the link</button>'
+      +'<span id="fb-why" style="font-size:11px;color:#9c8a72;">'
+        + admEsc(who ? 'Sending '+admFbTopicName(s.topic)+' to '+who+'.'
+                     : 'Choose a person first — the link carries their name, so their answers arrive with it.')
+      +'</span>'
     +'</div>'
     +'<div style="margin-top:9px;font-size:11px;color:#9c8a72;word-break:break-all;" id="fb-link">'+admEsc(admFbUrl(s.topic, admFbWho()))+'</div>'
     +'</div>';
@@ -3490,43 +3518,12 @@ function admFbPickedOr(msg){
   var u=adminFind(s.email);
   return { email:s.email, name:(u&&u.name)||s.email, url:admFbUrl(s.topic, (u&&u.name)||''), topic:s.topic };
 }
-function admFbCopy(){
-  var s=admFbS(), url=admFbUrl(s.topic, admFbWho());
-  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
-    .then(function(){ toast('Link copied — paste it wherever you like'); })
-    .catch(function(){ window.prompt('Copy this link:', url); });
-}
-// The message must describe the round it is actually linking to. Both the email
-// and the WhatsApp text used to be hardcoded to "20 real enquiries" and were sent
-// with ANY round — so the COO round would have arrived describing Valentina's
-// WhatsApp enquiries with a button to a questionnaire about something else.
-// Every round now brings its own words; an unknown topic falls back to the original.
-var FB_EMAIL={
-  'events-20':{
-    subject:'Two minutes on the Events app — what should we fix?',
-    body:['We tested the app against 20 real enquiries — the kind that land in your WhatsApp on a normal week. Some it handled well, some it made you do the work yourself, and a few it got wrong.',
-          'Before we change anything we want your read: which of these actually happen to you, and which are worth fixing? It takes a few minutes on your phone, and there are no wrong answers.'],
-    cta:'Tell us what to fix',
-    wa:'We tested the app against 20 real enquiries — the kind you get on a normal week. Before we change anything we’d like your read: which of these actually happen to you, and which are worth fixing?'
-  },
-  'coo-events':{
-    subject:'Events reporting — 11 things need your call',
-    body:['We put the events Calendar and Monthly report through the questions you would ask: what is the book worth, are we converting, can I send this to the board. It ran the app’s real calculations, not screenshots.',
-          '<b>11 things need your call.</b> Some are plainly wrong and we fix them either way. Others the app simply doesn’t do — they may not matter to you. Nothing gets built until you’ve been through it.',
-          'A few minutes on your phone. Revenue is a separate round, coming next.'],
-    cta:'Take a look',
-    wa:'We put the events Calendar and Monthly report through the questions you’d ask — what’s the book worth, are we converting, can I send this to the board. 11 things need your call.'
-  },
-  'coo-events-2':{
-    subject:'Your events feedback — 9 fixed and live, 3 need your decision',
-    body:['You flagged 11 things on the events Calendar and Monthly report. <b>Nine are fixed and live now</b> — the link below lists each one so you can check them against the app.',
-          'The other three can’t be done quietly. They change how <b>Valentina</b> works day to day: new fields on every enquiry, and a new step after each event. She’d need training, and it’s a real cost to her.',
-          '<b>That’s your call, not ours.</b> Say go ahead or not on each one.'],
-    cta:'See what changed',
-    wa:'Nine of the 11 things you flagged on the events reports are fixed and live — you can check them. The other three change how Valentina works day to day and she’d need training, so we’re not doing them without your say-so.'
-  }
-};
-function admFbEmailFor(topic){ return FB_EMAIL[topic] || FB_EMAIL['events-20']; }
+// A round MUST bring its own words. Both the email and the WhatsApp text were
+// once hardcoded to "20 real enquiries" and sent with ANY round; that was fixed
+// by giving every round its own copy — but the fix fell back to events-20's
+// words for any round that had none, which quietly rebuilt the same bug for the
+// next round written. There is no fallback now: no copy, no send, and it says so.
+function admFbEmailFor(topic){ var r=FB_ROUNDS[topic]; return (r&&r.email)||null; }
 function admFbEmailHTML(name, url, topic){
   var E=admFbEmailFor(topic);
   return '<div style="font-family:Georgia,serif;background:#F3EBDF;padding:26px 18px;">'
@@ -3538,35 +3535,59 @@ function admFbEmailHTML(name, url, topic){
     +'<p style="font-size:12px;color:#8B7355;text-align:center;">Tap an answer on each, then Send. You can stop and come back — nothing is lost.</p>'
     +'</div></div>';
 }
+// Record that a round went out, so the screen can tell him who has gone quiet.
+// Best-effort and deliberately silent: the round HAS been sent by the time we
+// get here, so a failure to log it must never be reported as a failure to send.
+// If foh-app-feedback-actions.sql has not been run yet, this simply does nothing.
+async function admFbLogSent(p, channel){
+  try{
+    await sb.from('app_feedback_sent').insert({
+      topic:p.topic, who:p.name, email:p.email, channel:channel, sent_by:(state.userEmail||null)
+    });
+    admFbLoad();
+  }catch(err){ /* never surfaced: the send itself already succeeded */ }
+}
 async function admFbEmail(){
   var p=admFbPickedOr('Choose who you’re sending to first'); if(!p) return;
+  var E=admFbEmailFor(p.topic);
+  if(!E){ toast('Not sent — this round has no email written for it yet. Add it to foh-rounds.js, or it would go out describing a different round.', true); return; }
   if(!confirm('Email the round to '+p.name+' ('+p.email+') now?')) return;
   var sender=state.userEmail||'fguarracino@robertos.ae';
   try{
     var r=await sb.functions.invoke('send-event-email', { body:{
       to:[p.email], reply_to:sender,
-      subject:admFbEmailFor(p.topic).subject,
+      subject:E.subject,
       html:admFbEmailHTML(p.name, p.url, p.topic)
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     toast('Sent to '+p.email+' ✓ — their answers land here the moment they tap Send');
+    admFbLogSent(p, 'email');
   }catch(err){
     toast('NOT sent — '+String(err&&err.message||err).slice(0,110), true);
   }
 }
 function admFbWa(){
   var p=admFbPickedOr('Choose who you’re sending to first'); if(!p) return;
+  var E=admFbEmailFor(p.topic);
+  if(!E){ toast('Not opened — this round has no message written for it yet. Add it to foh-rounds.js, or it would go out describing a different round.', true); return; }
   var d=String(admFbS().phone||'').replace(/[^0-9]/g,'');
   if(d.indexOf('00')===0) d=d.slice(2);
   if(d.length && d[0]==='0') d='971'+d.slice(1);
   if(d.length && d.length<=9) d='971'+d;
-  var msg='Ciao '+String(p.name).split(' ')[0]+'! '+admFbEmailFor(p.topic).wa+'\n\n'
+  var msg='Ciao '+String(p.name).split(' ')[0]+'! '+E.wa+'\n\n'
     +p.url+'\n\nTap an answer on each, then Send. A few minutes — Francesco';
   // No number on file just opens WhatsApp so he picks the chat himself. Either way
   // HE presses send in WhatsApp, so this never claims it has gone.
   window.open('https://wa.me/'+(d.length>=11?d:'')+'?text='+encodeURIComponent(msg), '_blank');
   toast(d.length>=11 ? 'WhatsApp opened for '+admFbS().phone+' — press send there to deliver it'
                      : 'WhatsApp opened — pick '+String(p.name).split(' ')[0]+' and press send');
+  admFbLogSent(p, 'whatsapp');
+}
+function admFbCopy(){
+  var p=admFbPickedOr('Choose who you’re sending to first — otherwise their answers arrive as “Anonymous”'); if(!p) return;
+  (navigator.clipboard ? navigator.clipboard.writeText(p.url) : Promise.reject())
+    .then(function(){ toast('Link for '+p.name+' copied — paste it wherever you like'); admFbLogSent(p, 'link'); })
+    .catch(function(){ window.prompt('Copy this link:', p.url); admFbLogSent(p, 'link'); });
 }
 async function admFbLoad(){
   state.fbRows=null; state.fbErr=null;
@@ -3576,33 +3597,107 @@ async function admFbLoad(){
     if(r.error) throw r.error;
     state.fbRows=r.data||[];
   }catch(err){ state.fbErr=(err&&err.message)||'Could not load the feedback.'; }
+  // The tick list and the send log are EXTRAS: if foh-app-feedback-actions.sql
+  // has not been run, the replies above still render exactly as they always did.
+  // A missing table must never take the answers down with it.
+  state.fbDone=null; state.fbSent=null; state.fbActionsErr=null;
+  try{
+    var d=await sb.from('app_feedback_done').select('topic,qkey');
+    if(d.error) throw d.error;
+    state.fbDone=d.data||[];
+    var s=await sb.from('app_feedback_sent').select('topic,who,email,sent_at').order('sent_at',{ascending:false});
+    if(s.error) throw s.error;
+    state.fbSent=s.data||[];
+  }catch(err){ state.fbActionsErr=(err&&err.message)||'not available'; }
   if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
+}
+function admFbDoneKey(t,q){ return t+' '+q; }
+function admFbDoneSet(){
+  var m={}; (state.fbDone||[]).forEach(function(d){ m[admFbDoneKey(d.topic,d.qkey)]=1; }); return m;
+}
+// Tick / untick one line of the work list. This writes ONLY to app_feedback_done
+// — an answer anyone sent is theirs and is never edited or deleted here.
+async function admFbTick(topic, qkey, on){
+  if(state.fbActionsErr){ toast('Run foh-app-feedback-actions.sql once in Supabase first — then this works.', true); return; }
+  var m=admFbDoneSet();
+  // paint immediately, reconcile after — this is a tick, it must feel instant
+  if(on) state.fbDone=(state.fbDone||[]).concat([{topic:topic,qkey:qkey}]);
+  else state.fbDone=(state.fbDone||[]).filter(function(d){ return !(d.topic===topic && String(d.qkey)===String(qkey)); });
+  renderMain();
+  try{
+    if(on){
+      var r=await sb.from('app_feedback_done').upsert({topic:topic,qkey:String(qkey),done_by:(state.userEmail||null)},{onConflict:'topic,qkey'});
+      if(r.error) throw r.error;
+    }else{
+      var r2=await sb.from('app_feedback_done').delete().eq('topic',topic).eq('qkey',String(qkey));
+      if(r2.error) throw r2.error;
+    }
+  }catch(err){
+    toast('Couldn’t save that — '+String(err&&err.message||err).slice(0,90), true);
+    admFbLoad();   // put the screen back to what the database actually says
+  }
 }
 function admFbPill(a){
   var c=FB_ANSWER_COL[a]||FB_ANSWER_COL["Doesn't happen"];
   return '<span style="font-size:11px;background:'+c.bg+';color:'+c.t+';border:1px solid '+c.b+';border-radius:10px;padding:2px 9px;white-space:nowrap;">'+admEsc(a)+'</span>';
 }
+// ── Who actually said what ──────────────────────────────────────────────────
+// One person answering a round TWICE is normal: the page invites it ("reopen
+// this page and send it again"), and stopping halfway on a phone and finishing
+// later produces exactly that. Each send is its own row, so counting rows
+// counted Andrea twice — the round showed "flagged by 2" with his name listed
+// twice directly underneath it.
+// Rows arrive newest-first, so the first row we see for a person is their
+// latest: keep that, and mark the rest as superseded. Nothing is deleted —
+// the older submission stays on screen, just not counted.
+function admFbLatest(rows){
+  var seen={}, out=[];
+  rows.forEach(function(r){
+    // Anonymous rows have no name to match on, so they can never be merged —
+    // key them by row id and each one stands alone.
+    var k = (r.who && String(r.who).trim()) ? 'w:'+String(r.who).trim().toLowerCase() : 'id:'+r.id;
+    if(seen[k]){ out.push({row:r, latest:false, dupOf:seen[k]}); }
+    else { seen[k]=r; out.push({row:r, latest:true, again:0}); }
+  });
+  // count how many times each person answered, for the note on their row
+  var n={};
+  out.forEach(function(o){ var k=(o.row.who&&String(o.row.who).trim())?String(o.row.who).trim().toLowerCase():null; if(k) n[k]=(n[k]||0)+1; });
+  out.forEach(function(o){ var k=(o.row.who&&String(o.row.who).trim())?String(o.row.who).trim().toLowerCase():null; o.again = k?n[k]:1; });
+  return out;
+}
 function admFbHTML(){
   var head='<div class="adm-head"><h2>Feedback — what the team sent back</h2><button class="btn btn-sm" onclick="admFbLoad()">Refresh</button></div>'
-    +'<div class="ppl-sum">Answers from the feedback rounds we send the team. Read-only. A row here means it arrived &mdash; nothing is waiting on anyone&rsquo;s phone.</div>';
+    +'<div class="ppl-sum">Answers from the feedback rounds we send the team. A row here means it arrived &mdash; nothing is waiting on anyone&rsquo;s phone.</div>';
   // The send card shows in EVERY state — the first time he opens this tab there are
   // no replies yet, and that is exactly when he needs to send one.
   var send = admFbSendHTML();
   if(state.fbErr) return '<div class="adm-wrap">'+head+send+'<div class="ppl-empty">Couldn&rsquo;t load the replies &mdash; '+admEsc(state.fbErr)+'<br><br>If this is the first time, run <b>foh-app-feedback.sql</b> once in Supabase, then tap Refresh.</div></div>';
   if(!state.fbRows) return '<div class="adm-wrap">'+head+send+'<div class="loading">Loading&hellip;</div></div>';
-  if(!state.fbRows.length) return '<div class="adm-wrap">'+head+send+'<div class="ppl-empty">Nothing back yet &mdash; send a round above and their answers land here the moment they tap Send.</div></div>';
-  // Group by round, newest round first (rows already arrive newest-first).
+
+  var done=admFbDoneSet();
+  var sentRows=state.fbSent||[];
+  // Rounds that have replies, newest reply first (rows already arrive newest-first),
+  // then any round that has only been SENT — so a round out with nobody back yet
+  // still appears, instead of looking like it was never sent.
   var byTopic={}, order=[];
   state.fbRows.forEach(function(r){
     if(!byTopic[r.topic]){ byTopic[r.topic]=[]; order.push(r.topic); }
     byTopic[r.topic].push(r);
   });
+  sentRows.forEach(function(s){ if(!byTopic[s.topic]){ byTopic[s.topic]=[]; order.push(s.topic); } });
+
+  if(!order.length) return '<div class="adm-wrap">'+head+send+'<div class="ppl-empty">Nothing back yet &mdash; send a round above and their answers land here the moment they tap Send.</div></div>';
+
   var out=order.map(function(t){
     var rows=byTopic[t];
-    // Across everyone in this round: how many flagged each question for work?
+    var marked=admFbLatest(rows);
+    var counted=marked.filter(function(m){ return m.latest; });
+    var dupes=marked.length-counted.length;
+
+    // Across everyone in this round: how many PEOPLE flagged each question for work?
     var tally={};
-    rows.forEach(function(r){
-      var a=r.answers||{};
+    counted.forEach(function(m){
+      var r=m.row, a=r.answers||{};
       Object.keys(a).forEach(function(q){
         var v=a[q]&&a[q].a; if(!v) return;
         if(!FB_WORK_ANSWERS[v]) return;                     // only answers that ask us to act
@@ -3611,30 +3706,89 @@ function admFbHTML(){
         if(a[q].note) tally[q].notes.push({who:r.who||'someone',note:a[q].note});
       });
     });
-    var flagged=Object.keys(tally).sort(function(x,y){ return tally[y].n-tally[x].n || Number(x)-Number(y); });
+    var round=FB_ROUNDS[t];
+    // Order: still-open first, then done; within each, loudest first, then the
+    // order the questions appear in the round itself.
+    var flagged=Object.keys(tally).sort(function(x,y){
+      var dx=done[admFbDoneKey(t,x)]?1:0, dy=done[admFbDoneKey(t,y)]?1:0;
+      return (dx-dy) || (tally[y].n-tally[x].n) || (fbKeyPos(round,x)-fbKeyPos(round,y));
+    });
+    var nOpen=flagged.filter(function(q){ return !done[admFbDoneKey(t,q)]; }).length;
+    var nDone=flagged.length-nOpen;
+
     var work=flagged.length
-      ? '<div style="padding:9px 4px 13px;">'+flagged.map(function(q){
-          var notes=tally[q].notes.map(function(nn){ return '<div style="font-size:11.5px;color:#6b5a44;padding:2px 0 0 22px;">&ldquo;'+admEsc(nn.note)+'&rdquo; <span style="color:#9c8a72;">&mdash; '+admEsc(nn.who)+'</span></div>'; }).join('');
-          return '<div style="padding:5px 0;border-bottom:1px solid #f1e9da;"><span style="display:inline-block;min-width:18px;font-weight:600;color:#400207;">'+admEsc(q)+'.</span>'
-            +'<span style="font-size:13px;color:#4a3b2a;">flagged by <b>'+tally[q].n+'</b></span>'+notes+'</div>';
-        }).join('')+'</div>'
+      ? '<div style="padding:6px 4px 13px;">'+flagged.map(function(q){
+          var isDone=!!done[admFbDoneKey(t,q)];
+          var notes=tally[q].notes.map(function(nn){ return '<div style="font-size:11.5px;color:#6b5a44;padding:3px 0 0;">&ldquo;'+admEsc(nn.note)+'&rdquo; <span style="color:#9c8a72;">&mdash; '+admEsc(nn.who)+'</span></div>'; }).join('');
+          // The question in his own words. The label is written on the item in
+          // foh-rounds.js; before that file existed Admin could not see it and
+          // printed the bare number, which told him nothing.
+          var lab=fbLabel(t,q);
+          var text=lab ? admEsc(lab)
+                       : '<span style="color:#9c8a72;">question '+admEsc(q)+' &mdash; this round is no longer in foh-rounds.js, so we can&rsquo;t say what it was</span>';
+          return '<div style="display:flex;gap:11px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #f1e9da;'+(isDone?'opacity:.45;':'')+'">'
+            +'<span style="min-width:20px;font-weight:600;color:#400207;font-size:13px;padding-top:1px;">'+admEsc(q)+'.</span>'
+            +'<div style="flex:1;min-width:0;">'
+              +'<div style="font-size:13.5px;color:#4a3b2a;line-height:1.45;'+(isDone?'text-decoration:line-through;':'')+'">'+text+'</div>'
+              +'<div style="font-size:11.5px;color:#9c8a72;margin-top:2px;">flagged by <b>'+tally[q].n+'</b>'+(isDone?' · done':'')+'</div>'
+              +notes
+            +'</div>'
+            +'<button class="btn btn-sm" style="flex:none;'+(isDone?'background:#E7F0E4;border-color:#A8C6A4;color:#2E6B34;':'')+'" onclick="admFbTick(\''+admEsc(t)+'\',\''+admEsc(q)+'\','+(isDone?'false':'true')+')">'+(isDone?'✓ Done':'Mark done')+'</button>'
+            +'</div>';
+        }).join('')
+        +(nDone?'<div style="font-size:11px;color:#9c8a72;padding:8px 0 0;">Done items stay on the list, struck through — what they asked for never disappears.</div>':'')
+        +'</div>'
       : '<div class="ppl-empty" style="padding:10px 4px;">Nobody asked for anything in this round.</div>';
+
     // Each person's own submission.
-    var people=rows.map(function(r){
-      var a=r.answers||{}, counts={};
+    var people=marked.map(function(m){
+      var r=m.row, a=r.answers||{}, counts={};
       Object.keys(a).forEach(function(q){ var v=a[q]&&a[q].a; if(v) counts[v]=(counts[v]||0)+1; });
       var pills=FB_ANSWER_ORDER.filter(function(k){ return counts[k]; })
         .map(function(k){ return admFbPill(k+' · '+counts[k]); }).join(' ');
-      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
+      var sub=admEsc(admUsageAgo(r.created_at))
+        + (m.again>1 ? (m.latest ? ' · answered '+(m.again===2?'twice':m.again+' times')+', this is the latest'
+                                 : ' · an earlier answer, not counted') : '');
+      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;'+(m.latest?'':'opacity:.5;')+'">'
         +'<div style="min-width:150px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:14.5px;">'+admEsc(r.who||'Anonymous')+'</div>'
-        +'<div style="font-size:11.5px;color:#9c8a72;">'+admEsc(admUsageAgo(r.created_at))+'</div></div>'
+        +'<div style="font-size:11.5px;color:#9c8a72;">'+sub+'</div></div>'
         +'<div style="flex:2;min-width:180px;display:flex;gap:5px;flex-wrap:wrap;">'+(pills||'<span style="font-size:12px;color:#9c8a72;">no answers, note only</span>')+'</div>'
         +(r.extra?'<div style="flex-basis:100%;font-size:12.5px;color:#4a3b2a;background:#f7f2e8;border-radius:8px;padding:8px 10px;"><b style="color:#400207;">What we missed:</b> '+admEsc(r.extra)+'</div>':'')
         +'</div>';
     }).join('');
-    return '<div class="ppl-grp">'+admEsc(admFbTopicName(t))+' <span>&middot; '+rows.length+(rows.length===1?' reply':' replies')+'</span></div>'
-      +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:10px 4px 0;">Flagged for action</div>'+work
-      +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:6px 4px 0;">Who replied</div>'+people;
+
+    // Sent, nothing back yet — who has gone quiet. Needs the actions SQL; without
+    // it this section simply does not appear and nothing else changes.
+    var replied={}; rows.forEach(function(r){ if(r.who) replied[String(r.who).trim().toLowerCase()]=1; });
+    var quietSeen={}, quiet=[];
+    sentRows.filter(function(s){ return s.topic===t; }).forEach(function(s){
+      var k=String(s.who||'').trim().toLowerCase();
+      if(!k || replied[k] || quietSeen[k]) return;
+      quietSeen[k]=1; quiet.push(s);
+    });
+    var quietHTML = quiet.length
+      ? '<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:11px 4px 0;">Sent, nothing back yet</div>'
+        + quiet.map(function(s){
+            return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f1e9da;">'
+              +'<div style="flex:1;font-size:13.5px;color:#9c8a72;">'+admEsc(s.who)+' &mdash; sent '+admEsc(admUsageAgo(s.sent_at))+'</div>'
+              +'</div>';
+          }).join('')
+      : '';
+
+    var follows = (round && round.follows && FB_ROUNDS[round.follows])
+      ? ' &middot; follows: '+admEsc(FB_ROUNDS[round.follows].name) : '';
+    var nPeople = counted.length;
+    var sum = nPeople ? (nPeople===1?'1 person answered':nPeople+' people answered') : 'sent, nobody back yet';
+
+    return '<div class="ppl-grp">'+admEsc(admFbTopicName(t))+' <span>&middot; '+sum+follows+'</span></div>'
+      +(dupes?'<div style="background:#F7DED9;border:1px solid #D89C90;border-radius:8px;padding:8px 11px;font-size:12px;color:#8A2A1A;line-height:1.5;margin:9px 4px 0;">'
+        +(dupes===1?'Someone answered this round twice.':dupes+' answers here are repeats.')
+        +' Counting each person once, using their latest answers — the earlier ones are still listed below, just not counted.</div>':'')
+      +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:10px 4px 0;">Flagged for action'
+        +(flagged.length?'<span style="text-transform:none;letter-spacing:0;"> &middot; '+nOpen+' still open'+(nDone?', '+nDone+' done':'')+'</span>':'')
+      +'</div>'+work
+      +(marked.length?'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:6px 4px 0;">Who replied</div>'+people:'')
+      +quietHTML;
   }).join('');
   return '<div class="adm-wrap">'+head+send+out+'</div>';
 }

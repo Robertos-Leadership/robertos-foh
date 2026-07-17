@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260716e';
+const CACHE = 'robertos-foh-v20260717a';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -25,6 +25,12 @@ const ASSETS = [
   './',
   './index.html',
   './common.js',
+  // Read by index.html AND by foh-feedback.html. The feedback page itself is
+  // deliberately bypassed below (it must never open inside the installed app),
+  // but this is an ordinary subresource: network-first like everything else, so
+  // it can go stale only while genuinely offline — where that page never worked
+  // anyway, since it is not cached at all.
+  './foh-rounds.js',
   './foh-events.js',
   './foh-revenue.js',
   './foh-closing.js',
