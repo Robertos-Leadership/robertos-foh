@@ -3406,15 +3406,21 @@ function admUsageHTML(){
    count IS the work list. Needs foh-app-feedback.sql run once.
    =================================================================== */
 var FB_TOPIC_NAMES={'events-20':'Events — the 20 enquiries we tested',
-  'coo-events':'Events — Calendar & Monthly report (COO review)'};
-// Order = how loudly it asks for work. EVERY answer a round can produce must be
-// listed here: the tally below treats "not in this list" as needing work
-// (indexOf → -1, which is not > 1), so an unlisted answer would be counted as a
-// request to fix. "Leave as is" is the COO round's version of "Doesn't happen".
-var FB_ANSWER_ORDER=['Fix this',"NO — there's a problem",'Nice to have','Agree, this is fine',"Doesn't happen",'Leave as is'];
+  'coo-events':'Events — Calendar & Monthly report (COO review)',
+  'coo-events-2':'Events — what we fixed, what needs Valentina (COO round 2)'};
+// Display order only: loudest first. Every answer any round can produce must be
+// listed, or it renders no pill at all (the pills are built by filtering THIS list).
+var FB_ANSWER_ORDER=['Fix this',"NO — there's a problem",'Go ahead','Nice to have','Not yet','Agree, this is fine',"Doesn't happen",'Leave as is'];
+// Which answers mean "he is asking us to DO something". This used to be inferred
+// from position in the array above (indexOf(v) > 1), which quietly made any answer
+// missing from the list count AS work (indexOf → -1, and -1 is not > 1). Listing
+// them explicitly means a new answer is opt-in, never work by accident.
+var FB_WORK_ANSWERS={'Fix this':1, "NO — there's a problem":1, 'Go ahead':1};
 var FB_ANSWER_COL={'Fix this':{bg:'#F7DED9',t:'#8A2A1A',b:'#D89C90'},
   "NO — there's a problem":{bg:'#F7DED9',t:'#8A2A1A',b:'#D89C90'},
+  'Go ahead':{bg:'#DCE9F6',t:'#12456E',b:'#8FB6DA'},
   'Nice to have':{bg:'#FBF0D6',t:'#7A5500',b:'#DFC680'},
+  'Not yet':{bg:'#FBF0D6',t:'#7A5500',b:'#DFC680'},
   'Agree, this is fine':{bg:'#E7F0E4',t:'#2E6B34',b:'#A8C6A4'},
   "Doesn't happen":{bg:'#EDE7DC',t:'#7A6B55',b:'#CBBBA2'},
   'Leave as is':{bg:'#EDE7DC',t:'#7A6B55',b:'#CBBBA2'}};
@@ -3490,14 +3496,45 @@ function admFbCopy(){
     .then(function(){ toast('Link copied — paste it wherever you like'); })
     .catch(function(){ window.prompt('Copy this link:', url); });
 }
-function admFbEmailHTML(name, url, topicName){
+// The message must describe the round it is actually linking to. Both the email
+// and the WhatsApp text used to be hardcoded to "20 real enquiries" and were sent
+// with ANY round — so the COO round would have arrived describing Valentina's
+// WhatsApp enquiries with a button to a questionnaire about something else.
+// Every round now brings its own words; an unknown topic falls back to the original.
+var FB_EMAIL={
+  'events-20':{
+    subject:'Two minutes on the Events app — what should we fix?',
+    body:['We tested the app against 20 real enquiries — the kind that land in your WhatsApp on a normal week. Some it handled well, some it made you do the work yourself, and a few it got wrong.',
+          'Before we change anything we want your read: which of these actually happen to you, and which are worth fixing? It takes a few minutes on your phone, and there are no wrong answers.'],
+    cta:'Tell us what to fix',
+    wa:'We tested the app against 20 real enquiries — the kind you get on a normal week. Before we change anything we’d like your read: which of these actually happen to you, and which are worth fixing?'
+  },
+  'coo-events':{
+    subject:'Events reporting — 11 things need your call',
+    body:['We put the events Calendar and Monthly report through the questions you would ask: what is the book worth, are we converting, can I send this to the board. It ran the app’s real calculations, not screenshots.',
+          '<b>11 things need your call.</b> Some are plainly wrong and we fix them either way. Others the app simply doesn’t do — they may not matter to you. Nothing gets built until you’ve been through it.',
+          'A few minutes on your phone. Revenue is a separate round, coming next.'],
+    cta:'Take a look',
+    wa:'We put the events Calendar and Monthly report through the questions you’d ask — what’s the book worth, are we converting, can I send this to the board. 11 things need your call.'
+  },
+  'coo-events-2':{
+    subject:'Your events feedback — 9 fixed and live, 3 need your decision',
+    body:['You flagged 11 things on the events Calendar and Monthly report. <b>Nine are fixed and live now</b> — the link below lists each one so you can check them against the app.',
+          'The other three can’t be done quietly. They change how <b>Valentina</b> works day to day: new fields on every enquiry, and a new step after each event. She’d need training, and it’s a real cost to her.',
+          '<b>That’s your call, not ours.</b> Say go ahead or not on each one.'],
+    cta:'See what changed',
+    wa:'Nine of the 11 things you flagged on the events reports are fixed and live — you can check them. The other three change how Valentina works day to day and she’d need training, so we’re not doing them without your say-so.'
+  }
+};
+function admFbEmailFor(topic){ return FB_EMAIL[topic] || FB_EMAIL['events-20']; }
+function admFbEmailHTML(name, url, topic){
+  var E=admFbEmailFor(topic);
   return '<div style="font-family:Georgia,serif;background:#F3EBDF;padding:26px 18px;">'
     +'<div style="max-width:520px;margin:0 auto;background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;padding:28px 26px;">'
     +'<div style="font-size:19px;letter-spacing:6px;color:#400207;text-align:center;">R O B E R T O ’ S</div>'
     +'<p style="font-size:15px;color:#3A2A1E;line-height:1.6;margin:22px 0 0;">Ciao '+admEsc(String(name).split(' ')[0])+',</p>'
-    +'<p style="font-size:14px;color:#3A2A1E;line-height:1.65;">We tested the app against 20 real enquiries — the kind that land in your WhatsApp on a normal week. Some it handled well, some it made you do the work yourself, and a few it got wrong.</p>'
-    +'<p style="font-size:14px;color:#3A2A1E;line-height:1.65;">Before we change anything we want your read: which of these actually happen to you, and which are worth fixing? It takes a few minutes on your phone, and there are no wrong answers.</p>'
-    +'<div style="text-align:center;margin:24px 0 10px;"><a href="'+admEsc(url)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px;">Tell us what to fix</a></div>'
+    + E.body.map(function(p){ return '<p style="font-size:14px;color:#3A2A1E;line-height:1.65;">'+p+'</p>'; }).join('')
+    +'<div style="text-align:center;margin:24px 0 10px;"><a href="'+admEsc(url)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px;">'+admEsc(E.cta)+'</a></div>'
     +'<p style="font-size:12px;color:#8B7355;text-align:center;">Tap an answer on each, then Send. You can stop and come back — nothing is lost.</p>'
     +'</div></div>';
 }
@@ -3508,8 +3545,8 @@ async function admFbEmail(){
   try{
     var r=await sb.functions.invoke('send-event-email', { body:{
       to:[p.email], reply_to:sender,
-      subject:'Two minutes on the Events app — what should we fix?',
-      html:admFbEmailHTML(p.name, p.url, admFbTopicName(p.topic))
+      subject:admFbEmailFor(p.topic).subject,
+      html:admFbEmailHTML(p.name, p.url, p.topic)
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     toast('Sent to '+p.email+' ✓ — their answers land here the moment they tap Send');
@@ -3523,9 +3560,8 @@ function admFbWa(){
   if(d.indexOf('00')===0) d=d.slice(2);
   if(d.length && d[0]==='0') d='971'+d.slice(1);
   if(d.length && d.length<=9) d='971'+d;
-  var msg='Ciao '+String(p.name).split(' ')[0]+'! We tested the app against 20 real enquiries — the kind you get on a normal week. '
-    +'Before we change anything we’d like your read: which of these actually happen to you, and which are worth fixing?\n\n'
-    +p.url+'\n\nTap an answer on each, then Send. A few minutes, no wrong answers — Francesco';
+  var msg='Ciao '+String(p.name).split(' ')[0]+'! '+admFbEmailFor(p.topic).wa+'\n\n'
+    +p.url+'\n\nTap an answer on each, then Send. A few minutes — Francesco';
   // No number on file just opens WhatsApp so he picks the chat himself. Either way
   // HE presses send in WhatsApp, so this never claims it has gone.
   window.open('https://wa.me/'+(d.length>=11?d:'')+'?text='+encodeURIComponent(msg), '_blank');
@@ -3569,7 +3605,7 @@ function admFbHTML(){
       var a=r.answers||{};
       Object.keys(a).forEach(function(q){
         var v=a[q]&&a[q].a; if(!v) return;
-        if(FB_ANSWER_ORDER.indexOf(v)>1) return;            // only the two "needs work" answers
+        if(!FB_WORK_ANSWERS[v]) return;                     // only answers that ask us to act
         tally[q]=tally[q]||{n:0,notes:[]};
         tally[q].n++;
         if(a[q].note) tally[q].notes.push({who:r.who||'someone',note:a[q].note});
@@ -3582,7 +3618,7 @@ function admFbHTML(){
           return '<div style="padding:5px 0;border-bottom:1px solid #f1e9da;"><span style="display:inline-block;min-width:18px;font-weight:600;color:#400207;">'+admEsc(q)+'.</span>'
             +'<span style="font-size:13px;color:#4a3b2a;">flagged by <b>'+tally[q].n+'</b></span>'+notes+'</div>';
         }).join('')+'</div>'
-      : '<div class="ppl-empty" style="padding:10px 4px;">Nobody flagged anything for work in this round.</div>';
+      : '<div class="ppl-empty" style="padding:10px 4px;">Nobody asked for anything in this round.</div>';
     // Each person's own submission.
     var people=rows.map(function(r){
       var a=r.answers||{}, counts={};
@@ -3597,7 +3633,7 @@ function admFbHTML(){
         +'</div>';
     }).join('');
     return '<div class="ppl-grp">'+admEsc(admFbTopicName(t))+' <span>&middot; '+rows.length+(rows.length===1?' reply':' replies')+'</span></div>'
-      +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:10px 4px 0;">Asked to be fixed</div>'+work
+      +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:10px 4px 0;">Flagged for action</div>'+work
       +'<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#9c8a72;padding:6px 4px 0;">Who replied</div>'+people;
   }).join('');
   return '<div class="adm-wrap">'+head+send+out+'</div>';
