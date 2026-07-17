@@ -2231,7 +2231,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-17.3</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-07-17.4</div>
   </div>
 
   <!-- main scroll area -->
@@ -2461,7 +2461,7 @@ if ('serviceWorker' in navigator) {
      answer on. One round, one place: see the header of foh-rounds.js.
      Loaded here, not with the foh-*.js at the foot of the body, because the
      inline Admin code below READS it rather than just calling into it. -->
-<script src="foh-rounds.js?v=20260717b"></script>
+<script src="foh-rounds.js?v=20260717c"></script>
 <script>
 const SUPABASE_URL = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
@@ -3822,15 +3822,58 @@ function admFbLatest(rows){
    constantly, and that card was pushing the actual work below the fold.
    ────────────────────────────────────────────────────────────────────────── */
 var FB_STATE_LABEL={ ok:'verified live', ship:'fixed, live', prog:'being worked on', open:'not started' };
+// What the row says, in the words that are actually true for THIS item. A state
+// derived from a follow-up round has no build behind it, so it must never
+// borrow "verified live" — that would be the unearned claim we just removed.
+// It says who confirmed it instead, which is stronger anyway: the person who
+// asked, not us.
+function admFbStateLabel(t,q){
+  if(admFbWorkOf(t,q)) return FB_STATE_LABEL[admFbStateOf(t,q)];
+  var c=admFbClosed(t,q);
+  if(!c) return FB_STATE_LABEL.open;
+  return c.confirmedBy
+    ? '✓ '+admEsc(String(c.confirmedBy).split(' ')[0])+' confirmed it'
+    : 'fixed — told them';
+}
 var FB_STATE_COL={ ok:'#5C9463', ship:'#7FA6CC', prog:'#D9B45B', open:'#C9BBA3' };
-// One item's state, from its work row. This is the ONLY place the four states
-// are decided, so the list, the bar and the panel can never disagree.
+// What the person who ASKED said about the item that closed this one. Their
+// latest submission only — the same rule everything else counts by.
+function admFbAnswerTo(topic, qkey){
+  var rows=(state.fbRows||[]).filter(function(r){ return r.topic===topic; });
+  for(var i=0;i<rows.length;i++){                      // newest first
+    var a=(rows[i].answers||{})[qkey];
+    if(a && a.a) return { a:a.a, who:rows[i].who };
+  }
+  return null;
+}
+// Was this closed by a later round saying so — and did they agree?
+// Nine of Andrea's eleven were fixed, shipped and described to him in round 2,
+// and he answered "Agree, this is fine" on every one. The screen still called
+// them "not started", because nothing linked the rounds. It does now (fixes:).
+// The claim is never ours alone: if they answered "NO — there's a problem" it
+// goes straight back to open, because they are the only ones who can say.
+function admFbClosed(t,q){
+  var c=(typeof fbClosedBy==='function') ? fbClosedBy(t,q) : null;
+  if(!c) return null;
+  var ans=admFbAnswerTo(c.topic, c.qkey);
+  if(ans && ans.a===FB_A.PROB) return null;            // they say we got it wrong
+  c.confirmedBy = (ans && ans.a===FB_A.FINE) ? (ans.who||'they') : null;
+  return c;
+}
+// One item's state. This is the ONLY place the four states are decided, so the
+// list, the bar and the panel can never disagree.
+// A recorded work row always WINS over what a round claims — an explicit fact
+// beats an inferred one.
 function admFbStateOf(t,q){
   var w=admFbWorkOf(t,q);
-  if(!w) return 'open';
-  if(w.status==='progress') return 'prog';
-  if(w.status==='verified' && admFbIsLive(w)) return 'ok';
-  return 'ship';                       // fixed, or verified-but-not-live-yet
+  if(w){
+    if(w.status==='progress') return 'prog';
+    if(w.status==='verified' && admFbIsLive(w)) return 'ok';
+    return 'ship';                     // fixed, or verified-but-not-live-yet
+  }
+  var c=admFbClosed(t,q);
+  if(c) return c.confirmedBy ? 'ok' : 'ship';
+  return 'open';
 }
 function admFbSel(){ return state.fbSel||null; }
 function admFbOpen(t,q){
@@ -3953,7 +3996,11 @@ function admFbPanelHTML(){
     says.push({who:r.who||'someone', a:a.a, note:a.note});
   });
 
-  var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:12px;">'
+  // top:64px clears the app's own sticky .topbar (52px, z-index 100) — at
+  // top:12px the panel slid UNDER it and the item's title and close button were
+  // hidden behind the nav. max-height + overflow keep a long panel on screen
+  // and scrolling inside itself instead of running off the bottom.
+  var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
     +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
       +'<div><div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;">'+admEsc(admFbTopicName(s.topic))+' &middot; item '+admEsc(s.qkey)+'</div>'
       +'<h3 style="font-size:16.5px;color:#400207;margin:5px 0 0;font-weight:600;line-height:1.35;">'+admEsc((it&&it.label)||('Question '+s.qkey))+'</h3></div>'
@@ -3975,8 +4022,30 @@ function admFbPanelHTML(){
           + '<span style="display:block;font-size:11px;color:#9c8a72;margin-top:4px;">&mdash; '+admEsc(x.who)+', answered &ldquo;'+admEsc(x.a)+'&rdquo;</span></div>';
       }).join('') : '<div style="font-size:12px;color:#9c8a72;">Nobody flagged this one.</div>';
 
+  // ── Already closed by a later round? Say so, with THEIR words ──
+  // Nine of Andrea's eleven were fixed and described to him in round 2, and he
+  // agreed to each. Showing him an empty "not started" form for those was the
+  // screen handing Francesco work he had already done.
+  var closed=admFbWorkOf(s.topic,s.qkey) ? null : admFbClosed(s.topic,s.qkey);
+  if(closed){
+    h+='<div style="border-top:1px solid #f1e9da;margin-top:14px;padding-top:12px;">'
+      +'<div style="background:#E7F0E4;border:1px solid #A8C6A4;border-radius:8px;padding:10px 12px;">'
+      +'<div style="font-size:12.5px;color:#2E6B34;font-weight:600;">'
+      + (closed.confirmedBy
+          ? '&#10003; Done &mdash; and '+admEsc(String(closed.confirmedBy).split(' ')[0])+' confirmed it himself'
+          : 'Done &mdash; we told them in '+admEsc(admFbTopicName(closed.topic)))
+      +'</div>'
+      +'<div style="font-size:12px;color:#4a3b2a;line-height:1.55;margin-top:5px;">'+String(closed.item.today||'')+'</div>'
+      +'<div style="font-size:11px;color:#6b5a44;margin-top:6px;">Sent in <b>'+admEsc(admFbTopicName(closed.topic))+'</b>, item '+admEsc(closed.qkey)
+      + (closed.confirmedBy?' &mdash; answered &ldquo;Agree, this is fine&rdquo;.':' &mdash; no answer back on it yet.')
+      +'</div></div>'
+      +'<div style="font-size:11px;color:#9c8a72;margin-top:8px;line-height:1.45;">Nothing to record &mdash; this is already accounted for. Set a state below only if you need to override it.</div>'
+      +'</div>';
+  }
+
   // ── Where it has got to ──
   var seg='display:flex;border:1.5px solid #e3d5c2;border-radius:8px;overflow:hidden;';
+  var noshout='text-transform:none;letter-spacing:0;';
   var on='background:#400207;color:#E8D9C7;', off='background:#fbf7f1;color:#9c8a72;';
   var STATES=[['open','Not started'],['progress','Working on it'],['fixed','Fixed'],['verified','Verified']];
   var isFixed = f.status==='fixed'||f.status==='verified';
@@ -3988,7 +4057,7 @@ function admFbPanelHTML(){
         // Verified is only reachable once a fix is recorded — it is the one state
         // that claims the thing WORKS, and there is nothing to have driven yet.
         var dis=(st[0]==='verified' && !isFixed);
-        return '<button class="btn" style="flex:1;border:0;border-right:'+(ix<3?'1px solid #e3d5c2':'0')+';border-radius:0;font-size:11.5px;padding:7px 4px;'+(sel?on:off)+(dis?'opacity:.4;':'')+'"'
+        return '<button class="btn" style="flex:1;border:0;border-right:'+(ix<3?'1px solid #e3d5c2':'0')+';border-radius:0;font-size:12px;padding:8px 4px;'+noshout+(sel?on:off)+(dis?'opacity:.4;':'')+'"'
           + (dis?' disabled title="Record the fix first — there is nothing to verify yet"':'')
           + ' onclick="admFbSetStatus(\''+st[0]+'\')">'+st[1]+'</button>';
       }).join('')
@@ -4012,8 +4081,8 @@ function admFbPanelHTML(){
 
   var v=admFbSaveState();
   h+='<div style="display:flex;gap:8px;margin-top:13px;flex-wrap:wrap;align-items:center;">'
-    +'<button class="btn btn-sm" id="fb-save" style="background:#400207;color:#E8D9C7;border-color:#400207;"'+(v.ok?'':' disabled title="'+admEsc(v.why.replace(/&[a-z]+;/g,''))+'"')+' onclick="admFbSaveForm()">Save</button>'
-    +'<button class="btn btn-sm" onclick="admFbBrief(\''+admEsc(s.topic)+'\',\''+admEsc(s.qkey)+'\')">Copy fix brief</button>'
+    +'<button class="btn btn-sm" id="fb-save" style="text-transform:none;letter-spacing:0;background:#400207;color:#E8D9C7;border-color:#400207;"'+(v.ok?'':' disabled title="'+admEsc(v.why.replace(/&[a-z]+;/g,''))+'"')+' onclick="admFbSaveForm()">Save</button>'
+    +'<button class="btn btn-sm" style="text-transform:none;letter-spacing:0;" onclick="admFbBrief(\''+admEsc(s.topic)+'\',\''+admEsc(s.qkey)+'\')">Copy fix brief</button>'
     +'<span id="fb-why-save" style="font-size:11.5px;line-height:1.45;"><span style="color:'+(v.ok?'#9c8a72':'#7A2430')+';">'+v.why+'</span></span>'
     +'</div>';
 
@@ -4126,7 +4195,7 @@ function admFbHTML(){
         + (note?'<span style="display:block;font-size:11.5px;color:#9c8a72;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&ldquo;'+admEsc(note)+'&rdquo;</span>':'')
         +'</span>'
         + (i.n>1?'<span style="font-size:11px;color:#9c8a72;white-space:nowrap;">'+i.n+' people</span>':'')
-        +'<span style="font-size:11px;white-space:nowrap;color:'+(i.st==='ok'?'#2E6B34':'#9c8a72')+';">'+(i.st==='ok'?'&#10003; ':'')+FB_STATE_LABEL[i.st]+'</span>'
+        +'<span style="font-size:11px;white-space:nowrap;color:'+(i.st==='ok'?'#2E6B34':'#9c8a72')+';">'+admFbStateLabel(i.topic,i.qkey)+'</span>'
         +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
         +'</button>';
     });
@@ -4149,7 +4218,7 @@ function admFbHTML(){
       return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:10px 4px;border-bottom:1px solid #f1e9da;'+(m.latest?'':'opacity:.5;')+'">'
         +'<div style="min-width:150px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:13.5px;">'+admEsc(r.who||'Anonymous')+'</div>'
         +'<div style="font-size:11.5px;color:#9c8a72;">'+sub+'</div>'
-        + (m.latest&&r.who?'<button class="btn btn-sm" style="font-size:10px;padding:3px 7px;margin-top:4px;" onclick="admFbStatusLink(\''+admEsc(r.who)+'\')">Copy their status link</button>':'')
+        + (m.latest&&r.who?'<button class="btn btn-sm" style="font-size:10.5px;padding:3px 7px;margin-top:4px;text-transform:none;letter-spacing:0;" onclick="admFbStatusLink(\''+admEsc(r.who)+'\')">Copy their status link</button>':'')
         +'</div>'
         +'<div style="flex:2;min-width:180px;display:flex;gap:5px;flex-wrap:wrap;">'+(pills||'<span style="font-size:12px;color:#9c8a72;">no answers, note only</span>')+'</div>'
         + (r.extra?'<div style="flex-basis:100%;font-size:12.5px;color:#4a3b2a;background:#f7f2e8;border-radius:8px;padding:8px 10px;"><b style="color:#400207;">What we missed:</b> '+admEsc(r.extra)+'</div>':'')
