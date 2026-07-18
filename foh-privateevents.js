@@ -401,7 +401,8 @@ async function peLoadAll(force){
       peFetchAllPaged(function(){ return sb.from('event_packages').select('*').order('name').order('id'); }),
       peFetchAllPaged(function(){ return sb.from('event_set_menus').select('*').order('name').order('id'); }),
       sb.from('event_menu_choices').select('token,created_at').eq('applied', false).order('created_at',{ascending:false}),
-      sb.from('event_log').select('event_id,created_at').eq('action','email').like('detail','event brief%').order('created_at',{ascending:true})
+      sb.from('event_log').select('event_id,created_at').eq('action','email').like('detail','event brief%').order('created_at',{ascending:true}),
+      sb.from('event_targets').select('month,target_events,target_revenue')
     ]);
     // event_set_menus (res[5]) is loaded non-fatally: if the table isn't there
     // yet (SQL not run), the module still works on the built-in PE_SET_MENUS.
@@ -428,6 +429,13 @@ async function peLoadAll(force){
     if(res[7] && !res[7].error) (res[7].data||[]).forEach(function(l){
       peState.briefSent[l.event_id] = l.created_at;
     });
+    // res[8] (non-fatal): the monthly events target — Andrea, coo-events-2 #11.
+    // targetsOk is what the report reads to tell the difference between "no
+    // target has been set for this month" and "this table isn't there yet",
+    // which are two completely different things to put in front of a COO.
+    peState.targets = {};
+    peState.targetsOk = !!(res[8] && !res[8].error);
+    if(peState.targetsOk) (res[8].data||[]).forEach(function(r){ peState.targets[r.month] = r; });
     peState.loaded = true;
   }catch(e){
     console.warn('[peLoadAll]', e);
@@ -865,6 +873,17 @@ async function peTidyDeleteAll(){
 // rental" — so the whole minimum is ours either way. Splitting that balance into
 // its parts is a separate piece of work; this only makes the TOTAL honest.
 function peEventValue(e){
+  // Valentina, 17 Jul 2026 (#12): "Send me three options and I'll pick one."
+  // Three options are ONE enquiry, so this returns ONE number — never the sum,
+  // which would book the same guest three times over. Until they pick, we count
+  // the LOWEST option: the most we can honestly claim is the least they might
+  // spend. The report says so in words rather than leaving it to be guessed.
+  // The moment an option is chosen it has been written onto the booking, so the
+  // ordinary calculation below is the right one again.
+  if(peHasOptions(e) && !peChosenOption(e)){
+    var vals = peOptionValues(e);
+    if(vals.length) return Math.min.apply(null, vals);
+  }
   var v = peAgBase(e);                       // respects pricing_type — min spend means the minimum
   if(v != null && v !== 0) return v;
   return e.min_spend ? Number(e.min_spend) : null;
@@ -913,6 +932,106 @@ function peIsBuyout(e){
   return String(e.event_type || '') === 'Full buyout' || String(e.area || '') === 'Full venue';
 }
 
+// ── One booking that is bigger than one row ─────────────────────────────────
+// Three separate things Valentina asked for on 17 Jul 2026 all had the same
+// shape: a real enquiry does not fit in one date, one room, or one price, so
+// she was building TWO OR THREE BOOKINGS and tidying up by hand afterwards.
+// Each is fixed on its own terms below, and all three share one rule: the
+// booking stays ONE row, so the pipeline still counts it once.
+//
+//   #5  spaces     — "Canapés in the Cortile first, then dinner in Piemonte."
+//   #12 options    — "Send me three options and I'll pick one."
+//   #13 alt_dates  — "Either the 12th or the 19th — whichever you have."
+//
+// In all three the ORIGINAL columns still hold the first/primary answer
+// (area + time_from/time_to, event_date, the event's own price). That is not
+// tidiness — it means every booking ever made is already valid, every screen
+// that reads e.area or e.event_date keeps working untouched, and there was
+// nothing to migrate.
+
+// ── #5 — the run of the evening ─────────────────────────────────────────────
+// Valentina's whole verdict on this one was two words: "only 1 price". So a
+// second space adds a ROOM and a TIME to the evening and never a second price.
+// There is exactly one total on the proposal, exactly as she asked.
+// RAW is what the editor shows: a leg she has just added is still blank, and
+// filtering it out would delete the row under her hands before she can type in
+// it. Everything that DISPLAYS or checks a booking uses the filtered list below,
+// so a half-typed leg never reaches a guest document or a clash warning.
+function peExtraSpacesRaw(e){
+  return (e && Array.isArray(e.spaces) ? e.spaces : []).filter(Boolean);
+}
+function peExtraSpaces(e){
+  return peExtraSpacesRaw(e).filter(function(s){ return !!s.area; });
+}
+function peIsMultiSpace(e){ return peExtraSpaces(e).length > 0; }
+// Every leg of the evening, first leg first. The first leg IS the event's own
+// area/time, so a one-room booking returns exactly what it always did.
+function peSpaceList(e){
+  var out = [];
+  if(e && (e.area || e.time_from)) out.push({ area:e.area||'', from:e.time_from||'', to:e.time_to||'', note:'', primary:true });
+  peExtraSpaces(e).forEach(function(s){
+    out.push({ area:s.area||'', from:s.from||'', to:s.to||'', note:s.note||'', primary:false });
+  });
+  return out;
+}
+// "Cortile 19:00–20:30, then Piemonte 20:30–23:00" — one line, for the guest.
+function peRunOfEvening(e){
+  return peSpaceList(e).map(function(s){
+    var t = [s.from, s.to].filter(Boolean).join('–');
+    return (s.note ? s.note+': ' : '') + (s.area||'—') + (t ? ' ' + t : '');
+  }).join(', then ');
+}
+
+// ── #13 — two possible dates ────────────────────────────────────────────────
+// event_date stays the FIRST choice, so the month filter, the report and every
+// total keep counting this booking exactly ONCE. The alternatives are dates the
+// booking also holds — they show on the calendar so neither is forgotten, and
+// they are deliberately NOT a second row in anybody's pipeline.
+function peAltDatesRaw(e){
+  return (e && Array.isArray(e.alt_dates) ? e.alt_dates : []).filter(Boolean);
+}
+function peAltDates(e){
+  return peAltDatesRaw(e).filter(function(d){ return !!d.date; });
+}
+function peHasAltDates(e){ return peAltDates(e).length > 0; }
+// Primary first, then the alternatives. Times fall back to the event's own.
+function peCandidateDates(e){
+  var out = [];
+  if(e && e.event_date) out.push({ date:String(e.event_date).slice(0,10), from:e.time_from||'', to:e.time_to||'', primary:true });
+  peAltDates(e).forEach(function(d){
+    out.push({ date:String(d.date).slice(0,10), from:d.from||'', to:d.to||'', primary:false });
+  });
+  return out;
+}
+
+// ── #12 — three options, one enquiry ────────────────────────────────────────
+// An option is a whole alternative the guest is being offered: its own room,
+// guest count and price. Picking one WRITES it onto the booking (peApplyOption),
+// so from that moment there is nothing special about this enquiry at all.
+var PE_OPTION_KEYS = ['A','B','C','D'];
+function peOptions(e){
+  return (e && Array.isArray(e.options) ? e.options : []).filter(function(o){ return o && o.key; });
+}
+function peHasOptions(e){ return peOptions(e).length > 0; }
+function peChosenOption(e){
+  if(!e || !e.option_chosen) return null;
+  var m = peOptions(e).filter(function(o){ return o.key === e.option_chosen; });
+  return m.length ? m[0] : null;
+}
+// What one option would come to. A minimum-spend option is worth its minimum,
+// exactly as a minimum-spend booking is (peEventValue) — the two must agree.
+function peOptionTotal(e, o){
+  if(!o) return null;
+  if(o.min_spend) return Number(o.min_spend) || null;
+  var g = (o.guests != null && o.guests !== '') ? Number(o.guests) : Number(e && e.guests);
+  var pp = Number(o.price_pp) || 0;
+  return (g && pp) ? g * pp : null;
+}
+function peOptionValues(e){
+  return peOptions(e).map(function(o){ return peOptionTotal(e, o); })
+                     .filter(function(v){ return v != null && v > 0; });
+}
+
 // ── calendar view ────────────────────────────────────────────────────────────
 function peRenderCalendar(){
   if(!peState.month) peState.month = peMonthKey(peToday());
@@ -921,19 +1040,32 @@ function peRenderCalendar(){
   var first = new Date(y, mo-1, 1);
   var startDow = (first.getDay()+6)%7;      // Monday-first
   var days = new Date(y, mo, 0).getDate();
+  // #13 — a booking that is holding two possible dates appears on BOTH, so
+  // neither is forgotten and nobody sells the second one out from under it. The
+  // alternative is marked `held`, and every COUNT and every TOTAL below ignores
+  // held entries — one booking is one booking, however many days it is sitting
+  // on. Getting this wrong would have shown the same money twice.
   var byDate = {};
+  var put = function(ds, e, held){ (byDate[ds] = byDate[ds] || []).push({e:e, held:held}); };
   peState.events.forEach(function(e){
-    if(e.event_date && peMonthKey(e.event_date)===mk) (byDate[String(e.event_date).slice(0,10)]=byDate[String(e.event_date).slice(0,10)]||[]).push(e);
+    if(e.event_date && peMonthKey(e.event_date)===mk) put(String(e.event_date).slice(0,10), e, false);
+    peAltDates(e).forEach(function(d){
+      if(peMonthKey(d.date)===mk) put(String(d.date).slice(0,10), e, true);
+    });
   });
   var mLbl = first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-  var monthCount = Object.keys(byDate).reduce(function(a,k){ return a + byDate[k].length; }, 0);
+  var monthCount = Object.keys(byDate).reduce(function(a,k){
+    return a + byDate[k].filter(function(r){ return !r.held; }).length; }, 0);
+  var heldCount = Object.keys(byDate).reduce(function(a,k){
+    return a + byDate[k].filter(function(r){ return r.held; }).length; }, 0);
   // The month header counted events but never added them up, so a 400k buyout read
   // the same as a 45k gathering. Converted money is separated from what is still
   // only in play — a calendar full of maybes is not a calendar full of money.
   var mConv = 0, mPipe = 0;
-  Object.keys(byDate).forEach(function(k){ byDate[k].forEach(function(e){
-    var v = peEventValue(e)||0;
-    if(peStage(e)==='converted') mConv += v; else if(peInPipeline(e)) mPipe += v;
+  Object.keys(byDate).forEach(function(k){ byDate[k].forEach(function(r){
+    if(r.held) return;                       // counted on its first-choice date only
+    var v = peEventValue(r.e)||0;
+    if(peStage(r.e)==='converted') mConv += v; else if(peInPipeline(r.e)) mPipe += v;
   }); });
   var h = peHeader('calendar');
   h += '<div style="margin-bottom:12px"><div class="pe-title">Calendar</div>'+
@@ -943,6 +1075,7 @@ function peRenderCalendar(){
        '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(-1)">‹ Prev</button>'+
        '<div style="text-align:center;line-height:1.25"><div style="font-family:\'Playfair Display\',serif;font-size:20px">'+mLbl+'</div>'+
          '<div style="font-size:10.5px;letter-spacing:.06em;opacity:.85">'+(monthCount?monthCount+' event'+(monthCount>1?'s':''):'no events yet')+
+         (heldCount?' &middot; '+heldCount+' date'+(heldCount>1?'s':'')+' held':'')+
          (mConv?' &middot; AED '+peMoney(mConv)+' converted':'')+(mPipe?' &middot; '+peMoney(mPipe)+' in play':'')+'</div></div>'+
        '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalToday()">Today</button>'+
        '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button></span></div>';
@@ -963,15 +1096,25 @@ function peRenderCalendar(){
     var isToday = ds===today;
     var num = isToday ? '<div class="pe-cal-n"><span class="pe-cal-today">'+d+'</span></div>' : '<div class="pe-cal-n">'+d+'</div>';
     h += '<div class="pe-cal-d'+(isToday?' today':'')+(dow>=5?' we':'')+'">'+num+
-      evs.map(function(e){
+      evs.map(function(r){
+        var e = r.e;
         var c = PE_STATUS_COL[e.status]||PE_STATUS_COL.draft;
         var v = peEventValue(e), bo = peIsBuyout(e);
+        // A date this booking is only HOLDING reads as a possibility, not a
+        // booking: dashed, faded, no money on it — the money belongs to its
+        // first-choice date and is shown there exactly once.
+        if(r.held){
+          return '<div class="pe-cal-ev" style="background:transparent;color:'+c.t+';border:1px dashed '+c.b+';opacity:.85" onclick="peGo(\'event\',\''+e.id+'\')" title="'+
+            peEsc((e.client_name||e.company||'')+' — one of the dates being held for this booking. Counted on '+peDLabel(e.event_date)+'.')+'">'+
+            'or: '+peEsc((e.client_name||e.company||'?'))+'</div>';
+        }
         // A buyout closes the whole venue — it gets a heavy border so it cannot be
         // mistaken for a normal booking sitting in one room.
         return '<div class="pe-cal-ev" style="background:'+c.bg+';color:'+c.t+';border:1px solid '+c.b+
           (bo?';border-left:4px solid #400207;font-weight:700':'')+'" onclick="peGo(\'event\',\''+e.id+'\')" title="'+
-          peEsc((e.client_name||e.company||'')+(bo?' — FULL BUYOUT':'')+(v?' — AED '+peMoney(v):''))+'">'+
+          peEsc((e.client_name||e.company||'')+(bo?' — FULL BUYOUT':'')+(v?' — AED '+peMoney(v):'')+(peIsMultiSpace(e)?' — '+peRunOfEvening(e):''))+'">'+
           (bo?'&#9679; ':'')+peEsc((e.client_name||e.company||'?'))+(e.guests?' · '+e.guests:'')+
+          (peIsMultiSpace(e)?' <span style="opacity:.75">'+(peSpaceList(e).length)+' spaces</span>':'')+
           (v?'<br><span style="opacity:.75">'+peMoney(v)+'</span>':'')+'</div>';
       }).join('')+'</div>';
   }
@@ -982,11 +1125,15 @@ function peRenderCalendar(){
   if(!agendaDates.length){ h += '<div style="font-size:12px;color:#8B7355;padding:10px 2px">No events this month.</div>'; }
   agendaDates.forEach(function(ds){
     h += '<div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B7355;margin:10px 2px 4px">'+peEsc(peDLabel(ds))+'</div>';
-    byDate[ds].forEach(function(e){
-      var pm = peStatusMeta(e.status);
-      h += '<div class="pe-card" style="padding:9px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="peGo(\'event\',\''+e.id+'\')">'+
-        '<span><b style="font-size:13px;color:#2C1810">'+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' pax':'')+'<br><span style="font-size:11px;color:#8B7355">'+peEsc(e.area||'')+(e.time_from?' · '+peEsc(e.time_from):'')+'</span></span>'+
-        '<span class="pe-pill '+pm.pill+'">'+pm.n+'</span></div>';
+    byDate[ds].forEach(function(r){
+      var e = r.e, pm = peStatusMeta(e.status);
+      // The run of the evening, so a two-space booking reads as one evening in
+      // order rather than as a single room that is only half the truth.
+      var where = peIsMultiSpace(e) ? peRunOfEvening(e) : (peEsc(e.area||'')+(e.time_from?' · '+peEsc(e.time_from):''));
+      h += '<div class="pe-card" style="padding:9px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer'+(r.held?';border-style:dashed;opacity:.85':'')+'" onclick="peGo(\'event\',\''+e.id+'\')">'+
+        '<span><b style="font-size:13px;color:#2C1810">'+(r.held?'<span style="color:#8B7355;font-weight:400">or: </span>':'')+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' pax':'')+'<br><span style="font-size:11px;color:#8B7355">'+
+        (r.held ? 'One of the dates held for this booking — counted on '+peEsc(peDLabel(e.event_date)) : peEsc(where))+'</span></span>'+
+        '<span class="pe-pill '+(r.held?'pe-p-draft':pm.pill)+'">'+(r.held?'Date held':pm.n)+'</span></div>';
     });
   });
   h += '</div>';
@@ -1258,12 +1405,20 @@ function peRenderEvent(){
   }
 
   // #3 — double-booking warning
-  var clash = peConflicts(e);
-  if(clash.length){
+  // With a second space (#5) or a second possible date (#13) in play, "they
+  // clash" stops being a useful sentence — one line per collision, naming the
+  // date and the room it actually happens in, and saying plainly when the
+  // collision is only on a date this booking is merely HOLDING.
+  var clashes = peClashPairs(e);
+  if(clashes.length){
     h += '<div style="background:#FBE9E7;border:1px solid #E8A99E;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#8A2A1A">'+
-      '⚠ Also booked in <b>'+peEsc(e.area)+'</b> on <b>'+peEsc(peDLabel(e.event_date))+'</b>: '+
-      clash.map(function(c){ return '<span style="text-decoration:underline;cursor:pointer" onclick="peGo(\'event\',\''+c.id+'\')">'+peEsc(c.client_name||c.company||'another event')+'</span> ('+peEsc(peStatusMeta(c.status).n)+')'; }).join(', ')+
-      ' — check this is intentional.</div>';
+      clashes.map(function(c){
+        var who = '<span style="text-decoration:underline;cursor:pointer" onclick="peGo(\'event\',\''+c.ev.id+'\')">'+peEsc(c.ev.client_name||c.ev.company||'another event')+'</span> ('+peEsc(peStatusMeta(c.ev.status).n)+')';
+        return '⚠ '+(c.mineAlt ? 'On the alternative date <b>' : 'On <b>')+peEsc(peDLabel(c.date))+'</b>'+
+          (c.buyout ? ' the <b>full venue</b> is taken' : ' <b>'+peEsc(c.area||'that space')+'</b> is already booked')+
+          ' — '+who+(c.theirAlt ? ' <i>(their alternative date)</i>' : '');
+      }).join('<br>')+
+      '<div style="margin-top:4px">Check this is intentional.</div></div>';
   }
 
   // The guest sent their set-menu numbers — tell Valentina the moment she's on
@@ -1343,6 +1498,10 @@ function peRenderEvent(){
   h += (ce?'<div style="margin-top:8px;font-size:11px;color:#8B7355">Every field saves as you leave it — you’ll see “Saved ✓”.</div>'+
   '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="pe-btn sec" onclick="peDeleteEvent(\''+e.id+'\')"'+(e.status==='draft'?'':' disabled')+'>Delete draft</button>'+
   (e.status==='draft'?'':'<span style="font-size:11px;color:#8B7355">Only a draft can be deleted — mark this event Lost instead.</span>')+'</div>':'')+'</div>';
+
+  h += peEveningCardHTML(e, ce);      // #5  two spaces in one evening, one price
+  h += peAltDatesCardHTML(e, ce);     // #13 two possible dates, one booking
+  h += peOptionsCardHTML(e, ce, t);   // #12 three options, one enquiry
 
   // 2col: food+bev | totals+actions
   h += '<div class="pe-2col"><div>';
@@ -1566,6 +1725,146 @@ function peRenderEvent(){
 }
 // Facts-card fields auto-save on blur (peFact), matching the fields below — one
 // save model per screen, each with a visible "Saved ✓".
+// ── The three "one booking, more than one answer" cards ────────────────────
+// Each stays a QUIET ONE-LINER until it is used. Most bookings are one room, one
+// date, one price, and an editor that shows three empty sections to everybody
+// would make the ordinary booking harder to serve the rare one.
+function peQuietAdd(prompt, act, ce, why){
+  if(!ce) return '';
+  return '<div class="pe-card" style="padding:9px 13px;background:#FCFAF6;border-style:dashed;cursor:pointer" onclick="'+act+'">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+    '<span style="font-size:12.5px;color:#8B7355">'+prompt+'</span>'+
+    '<span style="font-size:12px;color:#6B1F2A;font-weight:600;white-space:nowrap">'+why+' ›</span></div></div>';
+}
+var PE_SUBCARD = 'background:#FBF7F0;border:1px solid rgba(107,31,42,0.16);border-radius:9px;padding:10px 12px;margin-top:8px';
+
+// #5 — "Canapés in the Cortile first, then dinner in Piemonte." Valentina's
+// answer to what the guest should get was two words: "only 1 price". So this
+// card adds rooms and times and has nowhere to type a second price, and the
+// line at the bottom says the total is for the whole evening.
+function peEveningCardHTML(e, ce){
+  var extras = peExtraSpacesRaw(e);
+  if(!extras.length) return peQuietAdd(
+    'Canapés in one space first, then dinner in another? Keep it as <b>one booking at one price</b>.',
+    'peAddSpace(\''+e.id+'\')', ce, '+ Add a second space');
+  var t = peCalcTotals(e);
+  var h = '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14px;color:#400207">The run of the evening</b>'+
+    (ce?'<button class="pe-btn sec sm" onclick="peAddSpace(\''+e.id+'\')">+ Add another space</button>':'')+'</div>'+
+    '<div style="font-size:11.5px;color:#8B7355;margin-top:3px">One booking, one price — the guest is never quoted twice for one evening.</div>';
+  // The first leg is the event's own area and time, edited above. Shown here
+  // read-only so the evening reads in order, rather than starting mid-way.
+  h += '<div style="'+PE_SUBCARD+';background:#F3E9DA">'+
+    '<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8B7355">First</div>'+
+    '<div style="font-size:13.5px;color:#400207">'+peEsc(e.area||'— set the venue above')+
+    ((e.time_from||e.time_to)?' <span style="color:#8B7355">'+peEsc([e.time_from,e.time_to].filter(Boolean).join('–'))+'</span>':'')+'</div>'+
+    '<div style="font-size:11px;color:#A5876B">Set in the details above</div></div>';
+  extras.forEach(function(s, i){
+    h += '<div style="'+PE_SUBCARD+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+      '<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8B7355">Then</div>'+
+      (ce?'<span style="font-size:11.5px;color:#8A2A1A;cursor:pointer;text-decoration:underline" onclick="peRemoveSpace(\''+e.id+'\','+i+')">Remove</span>':'')+'</div>'+
+      '<div class="pe-grid2" style="margin-top:6px">'+
+      '<div><div class="pe-lbl">Venue / area</div><select class="pe-in" onchange="peSetSpace(this,\''+e.id+'\','+i+',\'area\')"'+(ce?'':' disabled')+'>'+
+        '<option value=""></option>'+PE_AREAS.map(function(a){ return '<option'+(s.area===a?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>'+
+      '<div><div class="pe-lbl">What happens here</div><input class="pe-in" value="'+peEsc(s.note||'')+'" placeholder="e.g. Dinner" onchange="peSetSpace(this,\''+e.id+'\','+i+',\'note\')"'+(ce?'':' disabled')+'></div>'+
+      '</div><div class="pe-grid2" style="margin-top:8px">'+
+      '<div><div class="pe-lbl">From</div><select class="pe-in" onchange="peSetSpace(this,\''+e.id+'\','+i+',\'from\')"'+(ce?'':' disabled')+'>'+peTimeOptions(s.from)+'</select></div>'+
+      '<div><div class="pe-lbl">Until</div><select class="pe-in" onchange="peSetSpace(this,\''+e.id+'\','+i+',\'to\')"'+(ce?'':' disabled')+'>'+peTimeOptions(s.to)+'</select></div>'+
+      '</div></div>';
+  });
+  h += '<div style="margin-top:10px;background:#EEF3E4;border:1px solid #C3D3A6;border-radius:9px;padding:9px 12px;font-size:12.5px;color:#3F5222">'+
+    '<b>One price for the whole evening</b> — '+(t.total!=null
+      ? 'AED '+peMoney(t.total)+(e.guests?' for '+e.guests+' guests':'')
+      : (e.min_spend ? 'minimum spend AED '+peMoney(e.min_spend) : 'set the food and guests above'))+
+    '. The guest sees the rooms and the times, and <b>one total</b>.</div>';
+  return h + '</div>';
+}
+
+// #13 — "Either the 12th or the 19th — whichever you have." One booking holds
+// both, so neither is forgotten. event_date stays the first choice, which is
+// why every report still counts this booking exactly once.
+function peAltDatesCardHTML(e, ce){
+  var alts = peAltDatesRaw(e);
+  if(!alts.length) return peQuietAdd(
+    'Guest gave you <b>two possible dates</b>? Hold them both on this one booking.',
+    'peAddAltDate(\''+e.id+'\')', ce, '+ Add another possible date');
+  var h = '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14px;color:#400207">Dates we are holding</b>'+
+    (ce?'<button class="pe-btn sec sm" onclick="peAddAltDate(\''+e.id+'\')">+ Add another</button>':'')+'</div>'+
+    '<div style="font-size:11.5px;color:#8B7355;margin-top:3px">One booking, not two drafts — so neither date gets forgotten. It shows on the calendar on every date below, and still counts <b>once</b> in the report.</div>';
+  h += '<div style="'+PE_SUBCARD+';background:#F3E9DA;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<span><span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8B7355">First choice</span><br>'+
+    '<b style="font-size:13.5px;color:#400207">'+peEsc(peDLabel(e.event_date))+'</b></span>'+
+    '<span style="font-size:11px;color:#A5876B">This is the date on the booking</span></div>';
+  alts.forEach(function(d, i){
+    h += '<div style="'+PE_SUBCARD+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+      '<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8B7355">Or</div>'+
+      (ce?'<span style="font-size:11.5px;color:#8A2A1A;cursor:pointer;text-decoration:underline" onclick="peRemoveAltDate(\''+e.id+'\','+i+')">Remove</span>':'')+'</div>'+
+      '<div class="pe-grid3" style="margin-top:6px">'+
+      '<div><div class="pe-lbl">Date</div><input class="pe-in" type="date" value="'+peEsc(d.date?String(d.date).slice(0,10):'')+'" onchange="peSetAltDate(this,\''+e.id+'\','+i+',\'date\')"'+(ce?'':' disabled')+'></div>'+
+      '<div><div class="pe-lbl">From (if different)</div><select class="pe-in" onchange="peSetAltDate(this,\''+e.id+'\','+i+',\'from\')"'+(ce?'':' disabled')+'>'+peTimeOptions(d.from)+'</select></div>'+
+      '<div><div class="pe-lbl">Until (if different)</div><select class="pe-in" onchange="peSetAltDate(this,\''+e.id+'\','+i+',\'to\')"'+(ce?'':' disabled')+'>'+peTimeOptions(d.to)+'</select></div>'+
+      '</div>'+
+      (ce?'<div style="margin-top:8px"><button class="pe-btn sm"'+(d.date?'':' disabled title="Put a date in first"')+' onclick="pePickDate(\''+e.id+'\','+i+')">Guest chose this date</button>'+
+        (d.date?'':'<span style="font-size:11px;color:#8B7355;margin-left:8px">Put a date in first</span>')+'</div>':'')+
+      '</div>';
+  });
+  return h + '</div>';
+}
+
+// #12 — "Send me three options and I'll pick one." One enquiry, one email, one
+// line in the pipeline. Picking one writes it onto the booking, so there is
+// nothing left to tidy up by hand afterwards.
+function peOptionsCardHTML(e, ce, t){
+  var opts = peOptions(e);
+  if(!opts.length) return peQuietAdd(
+    'Guest asked for <b>a few options to choose from</b>? Build them on this one enquiry.',
+    'peAddOption(\''+e.id+'\')', ce, '+ Offer options');
+  var chosen = peChosenOption(e);
+  var vals = peOptionValues(e);
+  var h = '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14px;color:#400207">Options for the guest</b>'+
+    (ce?'<button class="pe-btn sec sm" onclick="peAddOption(\''+e.id+'\')">+ Add an option</button>':'')+'</div>'+
+    '<div style="font-size:11.5px;color:#8B7355;margin-top:3px">One enquiry and <b>one email</b> with all of them — not three bookings and three emails to tidy up afterwards.</div>';
+  opts.forEach(function(o, i){
+    var tot = peOptionTotal(e, o);
+    var isChosen = chosen && chosen.key === o.key;
+    h += '<div style="'+PE_SUBCARD+(isChosen?';border-color:#4E9E56;background:#EEF6EC':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<b style="font-size:13px;color:#400207">Option '+peEsc(o.key)+(isChosen?' <span style="color:#2E6B34">✓ this is the booking</span>':'')+'</b>'+
+      '<span style="display:flex;gap:10px;align-items:center">'+
+      '<b style="font-size:13px;color:#400207">'+(tot!=null?'AED '+peMoney(tot):'—')+'</b>'+
+      (ce?'<span style="font-size:11.5px;color:#8A2A1A;cursor:pointer;text-decoration:underline" onclick="peRemoveOption(\''+e.id+'\','+i+')">Remove</span>':'')+
+      '</span></div>'+
+      '<div class="pe-grid2" style="margin-top:6px">'+
+      '<div><div class="pe-lbl">Call it</div><input class="pe-in" value="'+peEsc(o.name||'')+'" placeholder="e.g. Cortile canapés" onchange="peSetOption(this,\''+e.id+'\','+i+',\'name\')"'+(ce?'':' disabled')+'></div>'+
+      '<div><div class="pe-lbl">Venue / area</div><select class="pe-in" onchange="peSetOption(this,\''+e.id+'\','+i+',\'area\')"'+(ce?'':' disabled')+'>'+
+        '<option value=""></option>'+PE_AREAS.map(function(a){ return '<option'+(o.area===a?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>'+
+      '</div><div class="pe-grid3" style="margin-top:8px">'+
+      '<div><div class="pe-lbl">Guests</div><input class="pe-in" type="number" value="'+peEsc(o.guests==null?'':o.guests)+'" placeholder="'+peEsc(e.guests||'')+'" onchange="peSetOption(this,\''+e.id+'\','+i+',\'guests\')"'+(ce?'':' disabled')+'></div>'+
+      '<div><div class="pe-lbl">Price / guest (AED)</div><input class="pe-in" type="number" value="'+peEsc(o.price_pp==null?'':o.price_pp)+'" onchange="peSetOption(this,\''+e.id+'\','+i+',\'price_pp\')"'+(ce?'':' disabled')+'></div>'+
+      '<div><div class="pe-lbl">Or a minimum spend</div><input class="pe-in" type="number" value="'+peEsc(o.min_spend==null?'':o.min_spend)+'" onchange="peSetOption(this,\''+e.id+'\','+i+',\'min_spend\')"'+(ce?'':' disabled')+'></div>'+
+      '</div>'+
+      '<div style="margin-top:8px"><div class="pe-lbl">Anything to say about it</div>'+
+      '<input class="pe-in" value="'+peEsc(o.note||'')+'" placeholder="e.g. our quietest space" onchange="peSetOption(this,\''+e.id+'\','+i+',\'note\')"'+(ce?'':' disabled')+'></div>'+
+      (ce && !isChosen ? '<div style="margin-top:8px"><button class="pe-btn sm" onclick="peApplyOption(\''+e.id+'\',\''+peEsc(o.key)+'\')">Guest chose this one</button></div>' : '')+
+      '</div>';
+  });
+  // What this enquiry is worth to the pipeline, said out loud. An unanswered set
+  // of options is counted at its LOWEST — never the sum, which would book the
+  // same guest three times over.
+  h += chosen
+    ? '<div style="margin-top:10px;background:#EEF6EC;border:1px solid #BAD9B4;border-radius:9px;padding:9px 12px;font-size:12.5px;color:#2E6B34">'+
+      '<b>Option '+peEsc(chosen.key)+' is on the booking.</b> Its venue, guests and price were written onto the enquiry, so everything from here reads as an ordinary booking. The others stay here as a record of what was offered.</div>'
+    : '<div style="margin-top:10px;background:#FBF3DE;border:1px solid #DFC680;border-radius:9px;padding:9px 12px;font-size:12.5px;color:#6B4A00">'+
+      'Until the guest picks, the report counts this as <b>one enquiry</b> worth '+
+      (vals.length ? '<b>AED '+peMoney(Math.min.apply(null, vals))+'</b> — the lowest of the '+opts.length+' options, because that is the least they might spend' : '<b>—</b> (put a price on the options)')+
+      '. Never the '+opts.length+' added together.</div>';
+  return h + '</div>';
+}
+
 function peIn(lbl, field, e, type){
   var v = e[field];
   if(type==='date') v = v ? String(v).slice(0,10) : '';
@@ -1687,33 +1986,85 @@ function peEventOfItem(itemId){
 // every other area is independent, so a real clash needs the SAME area and an
 // overlapping time. A missing time is treated as a possible clash (better a false
 // nudge than a silent double-booking); a finish past midnight is handled.
-function peTimeWindow(e){
-  var a = peParseTimeMin(e.time_from); if(a==null) return null;   // no start → unknown
-  var b = peParseTimeMin(e.time_to);
+function peWindowOf(from, to){
+  var a = peParseTimeMin(from); if(a==null) return null;   // no start → unknown
+  var b = peParseTimeMin(to);
   if(b==null) b = a + 240;            // no end entered → assume a 4-hour block
   if(b <= a) b += 1440;               // finishes after midnight (e.g. 8pm–1am)
   return [a, b];
 }
-function peTimesOverlap(e, x){
-  var A = peTimeWindow(e), B = peTimeWindow(x);
+function peTimeWindow(e){ return peWindowOf(e.time_from, e.time_to); }
+function peWindowsOverlap(A, B){
   if(!A || !B) return true;           // can't tell → warn to be safe
   return A[0] < B[1] && B[0] < A[1];
 }
-function peConflicts(e){
-  if(!e || !e.event_date) return [];
-  var d = String(e.event_date).slice(0,10);
-  return peState.events.filter(function(x){
-    if(x.id===e.id || ['lost','done'].indexOf(x.status)>=0) return false;
-    if(String(x.event_date||'').slice(0,10)!==d) return false;
-    // A full-venue booking (either side) takes the whole place for the day — set-up
-    // and breakdown included — so it clashes with ANYTHING else booked that date,
-    // whatever the times (Francesco: "only Full venue blocks everything").
-    if(peIsBuyout(e) || peIsBuyout(x)) return true;
-    // Otherwise the two must be in the SAME named area AND overlap in time — so
-    // lunch and dinner in one room, two clients, is NOT a clash (#6).
-    if(!(e.area && x.area && x.area===e.area)) return false;
-    return peTimesOverlap(e, x);
+function peTimesOverlap(e, x){ return peWindowsOverlap(peTimeWindow(e), peTimeWindow(x)); }
+// Every (date · room · time) this booking would take up. A one-room, one-date
+// booking returns exactly one entry, so the rule below is the same rule it
+// always was — it just now has more than one thing to apply it to:
+//   #5  a second space means a second room on the same evening;
+//   #13 an alternative date means the same evening held on another day.
+// Both are why the old check could miss a real double-booking: it only ever
+// looked at e.area on e.event_date.
+function peOccupancy(e){
+  if(!e) return [];
+  var legs = peSpaceList(e), out = [];
+  peCandidateDates(e).forEach(function(d){
+    if(!legs.length){ out.push({date:d.date, alt:!d.primary, area:'', from:d.from, to:d.to}); return; }
+    legs.forEach(function(s){
+      // On an alternative date the FIRST leg follows that date's own times when
+      // it has them; the later legs keep the times they were given.
+      var from = (s.primary && !d.primary && d.from) ? d.from : s.from;
+      var to   = (s.primary && !d.primary && d.to)   ? d.to   : s.to;
+      out.push({date:d.date, alt:!d.primary, area:s.area, from:from, to:to, note:s.note});
+    });
   });
+  return out;
+}
+// The real collisions, one per other-booking-and-date, with enough detail to
+// say WHICH date and WHICH room — because with alternatives in play, "they
+// clash" is no longer a useful sentence on its own.
+function peClashPairs(e){
+  if(!e || !e.event_date) return [];
+  var mine = peOccupancy(e), pairs = [], seen = {};
+  peState.events.forEach(function(x){
+    if(x.id===e.id || ['lost','done'].indexOf(x.status)>=0) return;
+    var theirs = peOccupancy(x);
+    mine.forEach(function(a){
+      theirs.forEach(function(b){
+        if(a.date !== b.date) return;
+        // A full-venue booking (either side) takes the whole place for the day —
+        // set-up and breakdown included — so it clashes with ANYTHING else booked
+        // that date, whatever the times (Francesco: "only Full venue blocks
+        // everything").
+        var buyout = peIsBuyout(e) || peIsBuyout(x);
+        if(!buyout){
+          // Otherwise the two must be in the SAME named area AND overlap in time —
+          // so lunch and dinner in one room, two clients, is NOT a clash (#6).
+          if(!(a.area && b.area && a.area === b.area)) return;
+          if(!peWindowsOverlap(peWindowOf(a.from, a.to), peWindowOf(b.from, b.to))) return;
+        }
+        // Two rooms overlapping on one night is still ONE thing to tell her about.
+        var k = x.id + '|' + a.date;
+        if(seen[k]) return;
+        seen[k] = 1;
+        pairs.push({ ev:x, date:a.date, area:buyout ? (a.area || b.area) : a.area,
+                     mineAlt:a.alt, theirAlt:b.alt, buyout:buyout });
+      });
+    });
+  });
+  return pairs;
+}
+// The other live events that genuinely collide. Unchanged in meaning and in what
+// it returns (event rows), so every existing caller keeps working.
+function peConflicts(e){
+  var seen = {}, out = [];
+  peClashPairs(e).forEach(function(p){
+    if(seen[p.ev.id]) return;
+    seen[p.ev.id] = 1;
+    out.push(p.ev);
+  });
+  return out;
 }
 // P0 — the first set-menu "choose" course whose per-option split doesn't add up
 // to the guest count (so we can warn before a proposal/agreement goes out).
@@ -1760,8 +2111,10 @@ function peSendChecks(e){
   if(t.missingAllergens && t.missingAllergens.length) msgs.push(t.missingAllergens.length+(t.missingAllergens.length>1?' dishes have':' dish has')+' no allergens recorded: '+t.missingAllergens.join(', ')+'.');
   // Double-booking — the same date + area already holds another live event. Named
   // here so a send confirm says it out loud, not only the banner she may have scrolled past.
-  var clash = peConflicts(e);
-  if(clash.length) msgs.push((e.area||'This area')+' is already booked on '+peDLabel(e.event_date)+' for: '+clash.map(function(c){ return c.client_name||c.company||'an unnamed event'; }).join(', ')+'.');
+  peClashPairs(e).forEach(function(c){
+    msgs.push((c.buyout ? 'The full venue' : (c.area||'That space'))+' is already booked on '+peDLabel(c.date)+
+      (c.mineAlt ? ' (the alternative date you are holding)' : '')+' for: '+(c.ev.client_name||c.ev.company||'an unnamed event')+'.');
+  });
   return msgs;
 }
 // Confirm past any send gaps, naming each one. Returns true to proceed.
@@ -1803,6 +2156,147 @@ async function peSaveField(id, field, value, opts){
 // identical. peSaveField degrades gracefully if the column isn't in the DB yet.
 function peSetPriceDisplay(id, mode){
   peSaveField(id, 'price_display', mode==='pp' ? 'pp' : 'total');
+}
+
+// ── #5 — the run of the evening: add / edit / remove a space ───────────────
+// A second space adds a room and a time. It never adds a price: Valentina's
+// entire answer on this was "only 1 price", so there is deliberately nowhere
+// here to type one.
+var PE_MAX_EXTRA_SPACES = 3;
+async function peAddSpace(id){
+  var e = peEvById(id); if(!e) return;
+  var list = peExtraSpacesRaw(e).slice();
+  if(list.length >= PE_MAX_EXTRA_SPACES){ peToast('That is already a very long evening — '+(PE_MAX_EXTRA_SPACES+1)+' spaces is the most.', true); return; }
+  // Start the new leg where the evening currently ends, so the ordinary case
+  // (canapés finish, dinner starts) needs no typing at all.
+  var legs = peSpaceList(e), last = legs[legs.length-1];
+  list.push({ area:'', from:(last && last.to) || '', to:'', note:'' });
+  await peSaveField(id, 'spaces', list, {silent:true});
+}
+async function peSetSpace(el, id, i, field){
+  var e = peEvById(id); if(!e) return;
+  var list = peExtraSpacesRaw(e).slice();
+  if(!list[i]) return;
+  list[i] = Object.assign({}, list[i]);
+  list[i][field] = el.value;
+  await peSaveField(id, 'spaces', list);
+}
+async function peRemoveSpace(id, i){
+  var e = peEvById(id); if(!e) return;
+  var list = peExtraSpacesRaw(e).slice();
+  if(!list[i]) return;
+  list.splice(i, 1);
+  await peSaveField(id, 'spaces', list);
+}
+
+// ── #13 — a second possible date ──────────────────────────────────────────
+async function peAddAltDate(id){
+  var e = peEvById(id); if(!e) return;
+  if(!e.event_date){ peScrollToField('event_date', 'Put the first date in, then add the alternative.'); return; }
+  var list = peAltDatesRaw(e).slice();
+  if(list.length >= 3){ peToast('Three alternatives is plenty to hold at once.', true); return; }
+  list.push({ date:'', from:'', to:'' });
+  await peSaveField(id, 'alt_dates', list, {silent:true});
+}
+async function peSetAltDate(el, id, i, field){
+  var e = peEvById(id); if(!e) return;
+  var list = peAltDatesRaw(e).slice();
+  if(!list[i]) return;
+  list[i] = Object.assign({}, list[i]);
+  list[i][field] = (field==='date' && el.value) ? String(el.value).slice(0,10) : el.value;
+  await peSaveField(id, 'alt_dates', list);
+}
+async function peRemoveAltDate(id, i){
+  var e = peEvById(id); if(!e) return;
+  var list = peAltDatesRaw(e).slice();
+  if(!list[i]) return;
+  list.splice(i, 1);
+  await peSaveField(id, 'alt_dates', list);
+}
+// The guest chose one of the dates we were holding. That date becomes THE date
+// and the alternatives are released — which is the whole point: nothing is left
+// behind on the calendar for somebody to trip over later.
+async function pePickDate(id, i){
+  var e = peEvById(id); if(!e) return;
+  var alts = peAltDates(e), pick = alts[i];
+  if(!pick) return;
+  if(!(await peConfirm({
+    title:'Go with '+peDLabel(pick.date)+'?',
+    body:'This becomes the date for this booking, and the other date'+(alts.length>1?'s are':' is')+' released — so nothing is left holding a day we are not using.',
+    ok:'Yes, use this date', cancel:'Keep holding both'
+  }))) return;
+  var patch = { event_date:pick.date, alt_dates:[] };
+  if(pick.from) patch.time_from = pick.from;
+  if(pick.to)   patch.time_to   = pick.to;
+  var r = await sb.from('events_desk').update(Object.assign({updated_at:new Date().toISOString()}, patch)).eq('id', id);
+  if(r.error && !peColMissing(r.error, 'alt_dates')){ peToast('NOT saved — check connection', true); return; }
+  Object.keys(patch).forEach(function(k){ e[k] = patch[k]; });
+  await sb.from('event_log').insert({event_id:id, action:'date chosen', actor:peActor(), detail:'Guest chose '+pick.date+' — other held dates released'});
+  peToast('Date set to '+peDLabel(pick.date)+' ✓');
+  renderMain();
+}
+
+// ── #12 — three options on one enquiry ────────────────────────────────────
+async function peAddOption(id){
+  var e = peEvById(id); if(!e) return;
+  var list = peOptions(e).slice();
+  if(list.length >= PE_OPTION_KEYS.length){ peToast('Four options is more than anyone wants to choose between.', true); return; }
+  // A new option starts as a copy of what the booking says today, so option A is
+  // "what we have already quoted" rather than an empty form to retype.
+  list.push({ key:PE_OPTION_KEYS[list.length], name:'', area:e.area||'',
+              guests:(e.guests!=null?e.guests:''), price_pp:(e.food_price_pp!=null?e.food_price_pp:''),
+              min_spend:'', note:'' });
+  await peSaveField(id, 'options', list, {silent:true});
+}
+async function peSetOption(el, id, i, field){
+  var e = peEvById(id); if(!e) return;
+  var list = peOptions(e).slice();
+  if(!list[i]) return;
+  list[i] = Object.assign({}, list[i]);
+  list[i][field] = el.value;
+  await peSaveField(id, 'options', list);
+}
+async function peRemoveOption(id, i){
+  var e = peEvById(id); if(!e) return;
+  var list = peOptions(e).slice();
+  if(!list[i]) return;
+  var wasChosen = (e.option_chosen && list[i].key === e.option_chosen);
+  list.splice(i, 1);
+  // Re-letter so the guest never reads "Option A, Option C".
+  list = list.map(function(o, n){ return Object.assign({}, o, {key:PE_OPTION_KEYS[n]}); });
+  await peSaveField(id, 'options', list, {silent:true});
+  if(wasChosen) await peSaveField(id, 'option_chosen', null);
+}
+// The guest picked one. It is WRITTEN onto the booking — area, guests, price —
+// so from here on this is an ordinary enquiry with an ordinary price, and every
+// screen, total and document already knows how to handle it. The options stay
+// on the record so we can still see what was offered.
+async function peApplyOption(id, key){
+  var e = peEvById(id); if(!e) return;
+  var o = peOptions(e).filter(function(x){ return x.key === key; })[0];
+  if(!o) return;
+  var tot = peOptionTotal(e, o);
+  if(!(await peConfirm({
+    title:'Go with option '+key+'?',
+    body:'This puts option '+key+(o.name?' — '+o.name:'')+' onto the booking'+
+         (tot!=null ? ' at AED '+peMoney(tot) : '')+
+         '. The other options stay on the record so you can see what was offered, but the booking is now this one.',
+    ok:'Yes, use option '+key, cancel:'Not yet'
+  }))) return;
+  var patch = { option_chosen:key, updated_at:new Date().toISOString() };
+  if(o.area) patch.area = o.area;
+  if(o.guests !== '' && o.guests != null) patch.guests = parseInt(o.guests, 10);
+  if(o.min_spend !== '' && o.min_spend != null && Number(o.min_spend)){
+    patch.min_spend = Number(o.min_spend); patch.pricing_type = 'min_spend';
+  } else if(o.price_pp !== '' && o.price_pp != null){
+    patch.food_price_pp = Number(o.price_pp);
+  }
+  var r = await sb.from('events_desk').update(patch).eq('id', id);
+  if(r.error && !peColMissing(r.error, 'option_chosen')){ peToast('NOT saved — check connection', true); return; }
+  Object.keys(patch).forEach(function(k){ if(k!=='updated_at') e[k] = patch[k]; });
+  await sb.from('event_log').insert({event_id:id, action:'option chosen', actor:peActor(), detail:'Guest chose option '+key+(o.name?' — '+o.name:'')});
+  peToast('Option '+key+' is now the booking ✓');
+  renderMain();
 }
 // One beverage choice sets BOTH bev_package_id and bev_mode — no separate toggle,
 // no way to contradict: '' = no package · 'dry' = no alcohol (soft drinks & water,
@@ -2408,10 +2902,25 @@ function peProposalHTML(e){
   body += '<h2>'+peEsc(e.package_label || (hasFoodDoc ? 'Canapé Selection' : 'Beverage Package'))+'</h2>';
   // Guest-facing: no per-person maths or piece counts at the top — just who,
   // when, where. The one complete figure lives in "Your event" at the end.
+  // #12 — the options this proposal is offering (none, once one is chosen).
+  // Needed up here because a proposal that offers three rooms must not headline
+  // one of them as THE venue: each option names its own below.
+  var propOpts = peChosenOption(e) ? [] : peOptions(e);
   var who = [];
   if(e.client_name) who.push('Prepared for '+peEsc(e.client_name));
-  if(e.event_date) who.push(peDLabel(e.event_date));
-  if(e.area) who.push(peEsc(e.area));
+  // #13 — the guest offered us two dates, so the proposal offers both back
+  // rather than silently picking one and hoping it was the right one.
+  if(e.event_date) who.push(peHasAltDates(e)
+    ? peCandidateDates(e).map(function(d){ return peDLabel(d.date); }).join(' or ')
+    : peDLabel(e.event_date));
+  // #5 — "Canapés in the Cortile first, then dinner in Piemonte": the guest
+  // reads the evening in the order it happens, in one line.
+  // A proposal offering options names no venue up here — each option names its
+  // own. Heading it "Cortile" when option C is the whole venue would be the
+  // two-numbers-one-deal problem again, in the venue instead of the price.
+  if(propOpts.length){ /* each option carries its own venue below */ }
+  else if(peIsMultiSpace(e)) who.push(peEsc(peRunOfEvening(e)));
+  else if(e.area) who.push(peEsc(e.area));
   if(who.length) body += '<div class="sub">'+who.join(' · ')+'</div>';
   body += peProposalSetMenuHTML(e);
   groups.forEach(function(g){
@@ -2432,8 +2941,27 @@ function peProposalHTML(e){
   } else if(e.bev_mode==='dry'){
     body += '<div class="sec">Beverage</div><div class="dish">A dry event — no alcohol will be served<br><span class="d">Soft drinks and water throughout</span></div>';
   }
+  // #12 — "Send me three options and I'll pick one." ONE proposal carries them
+  // all, so the guest gets one email instead of three, and we keep one enquiry
+  // instead of three to reconcile afterwards. Each option shows its own single
+  // price; the whole-event figure below is skipped, because quoting a total AND
+  // a set of options on one page is exactly the two-numbers-one-deal problem
+  // Valentina flagged on the agreement (#9).
+  if(propOpts.length){
+    body += '<div class="rule" style="margin-top:26px"></div><div class="sec">Your options</div>';
+    propOpts.forEach(function(o){
+      var tot = peOptionTotal(e, o);
+      var g = (o.guests!=null && o.guests!=='') ? Number(o.guests) : Number(e.guests);
+      body += '<div class="dish" style="font-size:15px">Option '+peEsc(o.key)+(o.name?' — '+peEsc(o.name):'')+
+        '<br><span class="d">'+[o.area?peEsc(o.area):'', g?g+' guests':''].filter(Boolean).join(' · ')+
+        (o.note?'<br>'+peEsc(o.note):'')+'</span>'+
+        (tot!=null ? '<br>'+(o.min_spend ? 'Minimum spend AED '+peMoney(tot) : 'AED '+peMoney(tot)+' — everything included') : '')+
+        '</div>';
+    });
+    body += '<div class="d" style="margin-top:10px">Let us know which one you would like and we will hold it for you.</div>';
+  }
   // One complete, rounded figure — food and beverage together, for the party.
-  if(t.total && e.guests){
+  else if(t.total && e.guests){
     // Valentina chooses how the price reads for this guest — the whole-event total,
     // or a per-person figure (which some groups prefer). Per person reconciles with
     // the guest count: round(total ÷ guests) × guests ≈ total.
@@ -2463,7 +2991,13 @@ function peBriefBodyHTML(e){
   var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div><div class="fs-h">EVENT BRIEF</div><table>';
   body += row('Booking name', e.client_name)+row('Company', e.company)+row('Contact', (e.contact_name||'')+(e.contact_phone?' · '+e.contact_phone:'')+(e.contact_email?' · '+e.contact_email:''));
   body += row('Event date', peDLabel(e.event_date))+row('Type', e.event_type)+row('Timing', (e.time_from||'')+(e.time_to?' – '+e.time_to:''));
-  body += row('Area', e.area)+row('Guests', e.guests);
+  // #5 — a two-space evening moves rooms partway through. The floor and the
+  // kitchen have to know that before the night, not during it, so the brief
+  // spells out the whole run rather than naming one room.
+  body += peIsMultiSpace(e)
+    ? row('Areas — the run of the evening', peRunOfEvening(e))
+    : row('Area', e.area);
+  body += row('Guests', e.guests);
   body += row('Food', (e.package_label||'Bespoke selection')+(t.foodPP?' · AED '+peMoney(t.foodPP)+'/guest':'')+(t.pcs?' · '+(Math.round(t.pcs*10)/10)+' pieces/guest':''));
   var bev = e.bev_package_id ? peBevById(e.bev_package_id) : null;
   body += row('Beverage', bev ? bev.name+' · AED '+peMoney(bev.price_pp)+'/guest' : (e.bev_mode==='dry'?'DRY EVENT — no alcohol served (soft drinks & water)':'—'));
@@ -4193,6 +4727,96 @@ function peReportData(mk){
   K.decided = decided;
   return K;
 }
+// ── The monthly events target ───────────────────────────────────────────────
+// Andrea Sacchi, 17 Jul 2026: "minimum target sale expressed in number of events
+// and revenue". Until now there was no target anywhere, so every figure on this
+// report was an absolute with nothing to measure it against — it could state a
+// number, never a verdict.
+//
+// He was asked for BOTH numbers and gave exactly one: "Target for the month of
+// July and august for events is 150000 AED". So the revenue target is his, and
+// the event COUNT is deliberately left empty rather than invented — a made-up
+// count would read as his on his own report. The card says which is missing.
+//
+// This is an admin screen: it is set once a month by whoever sets budgets and
+// Valentina never touches it, exactly as he was told when he approved it.
+function peTargetOf(mk){ return (peState.targets || {})[mk] || null; }
+async function peSaveTarget(el, mk, field){
+  if(!peCanEdit()){ peToast('View only — ask Andrea or Francesco to set the target', true); return; }
+  var raw = String(el.value||'').trim();
+  var v = raw === '' ? null : Number(raw);
+  if(v != null && (isNaN(v) || v < 0)){ peInlineErr(el, 'That needs to be a number.'); return; }
+  peInlineErr(el, '');
+  var row = { month:mk, updated_by:peActor(), updated_at:new Date().toISOString() };
+  var cur = peTargetOf(mk) || {};
+  row.target_events  = (field==='target_events')  ? (v==null?null:Math.round(v)) : (cur.target_events==null?null:cur.target_events);
+  row.target_revenue = (field==='target_revenue') ? v : (cur.target_revenue==null?null:cur.target_revenue);
+  var r = await sb.from('event_targets').upsert(row, {onConflict:'month'});
+  if(r.error){
+    peToast('NOT saved — run foh-events-oneevening.sql once in Supabase, then this saves.', true);
+    return;
+  }
+  peState.targets = peState.targets || {};
+  peState.targets[mk] = row;
+  peState.targetsOk = true;
+  peToast('Target saved ✓');
+  renderMain();
+}
+// Target vs where the month actually stands. "Actual" here is the SAME figure
+// the "converted" card above shows (K.month) — booked and won business for this
+// month — so the two can never disagree.
+function peTargetCardHTML(mk, K){
+  var mLbl = new Date(+mk.slice(0,4), +mk.slice(5,7)-1, 1).toLocaleDateString('en-GB',{month:'long'});
+  var ce = peCanEdit();
+  var tg = peTargetOf(mk);
+  var tv = tg && tg.target_revenue != null ? Number(tg.target_revenue) : null;
+  var tn = tg && tg.target_events  != null ? Number(tg.target_events)  : null;
+  var h = '<div class="pe-card" style="border-color:rgba(201,168,76,0.55);background:#FDFBF6">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14px;color:#400207">Target for '+peEsc(mLbl)+'</b>'+
+    '<span style="font-size:11px;color:#8B7355">Set once a month — nothing on the events desk changes</span></div>';
+  if(peState.targetsOk === false){
+    h += '<div style="margin-top:8px;font-size:12.5px;color:#7A5500;background:#FBF0D6;border:1px solid #DFC680;border-radius:9px;padding:9px 12px">'+
+      'Targets need <b>foh-events-oneevening.sql</b> run once in Supabase before they can be saved. Everything else on this report works as normal.</div>';
+  }
+  // Revenue — his number, and the pace verdict that was the whole point of it.
+  if(tv != null){
+    var pct = tv ? Math.round(K.month.v / tv * 100) : null;
+    var gap = tv - K.month.v;
+    var onPlan = gap <= 0;
+    h += '<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Revenue target (gross)</div>'+
+        '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(tv)+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">net AED '+peMoney(peNetOf(tv))+'</div></div>'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Converted so far</div>'+
+        '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(K.month.v)+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">net AED '+peMoney(peNetOf(K.month.v))+'</div></div>'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">'+(onPlan?'Ahead by':'Still to find')+'</div>'+
+        '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:'+(onPlan?'#1C5A25':'#7E1A0C')+'">AED '+peMoney(Math.abs(gap))+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">'+(pct==null?'':pct+'% of target')+'</div></div>'+
+    '</div>'+
+    '<div style="margin-top:9px;height:7px;border-radius:4px;background:#EDE7DC;overflow:hidden">'+
+      '<i style="display:block;height:100%;width:'+Math.max(0,Math.min(100, tv? K.month.v/tv*100 : 0))+'%;background:'+(onPlan?'#4E9E56':'#C9A84C')+'"></i></div>';
+  }
+  // The count he was asked for and did not give. Named as missing rather than
+  // filled in with a guess — see the block comment above.
+  h += '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end">'+
+    '<div style="flex:1;min-width:160px"><div class="pe-lbl">Revenue target for '+peEsc(mLbl)+' (AED, gross)</div>'+
+      '<input class="pe-in" type="number" value="'+peEsc(tv==null?'':tv)+'" placeholder="not set" onchange="peSaveTarget(this,\''+mk+'\',\'target_revenue\')"'+(ce?'':' disabled')+'></div>'+
+    '<div style="flex:1;min-width:160px"><div class="pe-lbl">Number of events</div>'+
+      '<input class="pe-in" type="number" value="'+peEsc(tn==null?'':tn)+'" placeholder="not set" onchange="peSaveTarget(this,\''+mk+'\',\'target_events\')"'+(ce?'':' disabled')+'></div>'+
+    '</div>';
+  if(tn != null){
+    var gapN = tn - K.month.n;
+    h += '<div style="margin-top:9px;font-size:12.5px;color:'+(gapN<=0?'#1C5A25':'#6B4A00')+'">'+
+      '<b>'+K.month.n+' of '+tn+' events</b> converted'+(gapN>0?' — '+gapN+' more to hit the target':' — target met')+'.</div>';
+  } else if(tv != null){
+    h += '<div style="margin-top:9px;font-size:12px;color:#8B7355">The <b>number of events</b> target is not set. Andrea gave a revenue figure for July and August and did not give a count, so we have not put one here — type it above and it applies from now on.</div>';
+  } else {
+    h += '<div style="margin-top:9px;font-size:12px;color:#8B7355">No target set for '+peEsc(mLbl)+' yet, so nothing on this page can say whether the month is on plan. Type one above.</div>';
+  }
+  return h + '</div>';
+}
 function peKpiCard(lbl, b, sub, accent, note){
   return '<div class="pe-kpi" style="border-top:3px solid '+accent+'">'+
     '<div class="pe-kpi-l">'+lbl+'</div>'+
@@ -4324,6 +4948,10 @@ function peRenderReport(){
     '<div style="font-size:12px;color:#8B7355">Where the events business stands \u2014 confirmed, coming and in play.</div></div>';
   h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance &middot; '+peEsc(mLbl)+'</div>';
   h += peKpis(mk);   // follows the month navigator — it used to be pinned to today
+  // Andrea (coo-events-2 #11): the report could state a number but never a
+  // verdict, because there was nothing to measure it against. The target sits
+  // directly under the figures it judges.
+  h += peTargetCardHTML(mk, peReportData(mk));
   var fc = peState.fcRun ? peForecastData() : null;
   h += secHd('Forecast any period');
   h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.55);background:#FDFBF6">'+
