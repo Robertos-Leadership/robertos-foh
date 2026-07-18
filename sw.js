@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260718a';
+const CACHE = 'robertos-foh-v20260718b';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -24,6 +24,11 @@ const CACHE = 'robertos-foh-v20260718a';
 const ASSETS = [
   './',
   './index.html',
+  // index.html used to carry the whole app inline, so precaching it was enough.
+  // It is now a ~47KB shell: without these two the offline app is a blank page.
+  // Any future extraction out of index.html MUST be added here as well.
+  './foh-core.js',
+  './foh-styles.css',
   './common.js',
   // Read by index.html and by BOTH link-only feedback pages (the questionnaire
   // and the status page). Those pages are deliberately bypassed below — they must
@@ -32,6 +37,9 @@ const ASSETS = [
   // offline, where those pages never worked anyway (they are not cached at all).
   './foh-rounds.js',
   './foh-events.js',
+  // Pre-existing gap, unrelated to the split: the largest module (365KB) was
+  // never precached, so the events desk was already offline-broken.
+  './foh-privateevents.js',
   './foh-revenue.js',
   './foh-closing.js',
   './foh-ops.js',
