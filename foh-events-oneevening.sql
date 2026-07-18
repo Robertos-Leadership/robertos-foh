@@ -59,7 +59,11 @@ alter table events_desk add column if not exists alt_dates jsonb;
 create table if not exists event_targets (
   month          text primary key,          -- 'YYYY-MM'
   target_events  integer,                   -- how many events (null = not set)
-  target_revenue numeric,                   -- AED, gross (null = not set)
+  -- NET (Francesco, 18 Jul 2026) — what finance books, NOT the price the client
+  -- is quoted. Every booking in the events module is valued GROSS, so the report
+  -- converts the converted total to net before comparing. Comparing a net target
+  -- against a gross total would flatter every month by about 23.6%.
+  target_revenue numeric,                   -- AED, NET (null = not set)
   venue_id       text default 'robertos-difc',
   updated_by     text,
   updated_at     timestamptz default now()
@@ -79,6 +83,10 @@ create policy event_targets_all on event_targets
 -- two months, and nothing else. The event COUNT he was also asked for is left
 -- null because he did not give one, and inventing it would put a figure on his
 -- report that he never said.
+--
+-- 150,000 is NET (confirmed by Francesco, 18 Jul 2026). At menu prices that is
+-- about AED 185,377 gross. The report converts and labels both, so the figure
+-- is never read against the wrong basis.
 insert into event_targets (month, target_revenue, updated_by)
 values ('2026-07', 150000, 'Andrea Sacchi (feedback round)'),
        ('2026-08', 150000, 'Andrea Sacchi (feedback round)')

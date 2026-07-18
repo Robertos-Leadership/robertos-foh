@@ -934,6 +934,11 @@ function peNeedsDate(e){ return peIsConverted(e) && !e.event_date; }
 // service + 7% DIFC + 5% VAT (PE_GROSS). Finance books the net. Andrea asked to
 // see "both numbers", so nothing is ever shown without saying which it is.
 function peNetOf(gross){ return (gross == null) ? null : gross / PE_GROSS; }
+// The other direction — what a NET figure is worth at the price a client is
+// quoted. Needed because the events target is set in NET (Francesco, 18 Jul
+// 2026) while every booking on this module is valued GROSS, so one of the two
+// has to be converted before they can honestly be compared.
+function peGrossOf(net){ return (net == null) ? null : net * PE_GROSS; }
 // A buyout takes the whole venue — it hits every other guest and the whole
 // operation, so Andrea asked for these to stand out rather than read like a
 // normal booking. ("Buy out affect the whole operation and our guest and should
@@ -4798,28 +4803,37 @@ function peTargetCardHTML(mk, K){
       'Targets need <b>foh-events-oneevening.sql</b> run once in Supabase before they can be saved. Everything else on this report works as normal.</div>';
   }
   // Revenue — his number, and the pace verdict that was the whole point of it.
+  //
+  // The target is NET (Francesco, 18 Jul 2026). Every booking in this module is
+  // valued GROSS — the price the client is quoted, carrying 10% service, 7% DIFC
+  // and 5% VAT. So the CONVERTED figure is converted to net before it is compared,
+  // and both sides of every comparison here are net. Comparing his net target
+  // against a gross total would have flattered the month by about 23.6% — the
+  // single most likely way this card could have lied.
   if(tv != null){
-    var pct = tv ? Math.round(K.month.v / tv * 100) : null;
-    var gap = tv - K.month.v;
+    var netConv = peNetOf(K.month.v) || 0;
+    var pct = tv ? Math.round(netConv / tv * 100) : null;
+    var gap = tv - netConv;
     var onPlan = gap <= 0;
     h += '<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">'+
-      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Revenue target (gross)</div>'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Revenue target (net)</div>'+
         '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(tv)+'</div>'+
-        '<div style="font-size:11px;color:#8B7355">net AED '+peMoney(peNetOf(tv))+'</div></div>'+
-      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Converted so far</div>'+
-        '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(K.month.v)+'</div>'+
-        '<div style="font-size:11px;color:#8B7355">net AED '+peMoney(peNetOf(K.month.v))+'</div></div>'+
-      '<div style="flex:1;min-width:150px"><div class="pe-lbl">'+(onPlan?'Ahead by':'Still to find')+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">AED '+peMoney(peGrossOf(tv))+' at menu prices</div></div>'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">Converted so far (net)</div>'+
+        '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:#400207">AED '+peMoney(netConv)+'</div>'+
+        '<div style="font-size:11px;color:#8B7355">AED '+peMoney(K.month.v)+' gross</div></div>'+
+      '<div style="flex:1;min-width:150px"><div class="pe-lbl">'+(onPlan?'Ahead by (net)':'Still to find (net)')+'</div>'+
         '<div style="font-family:\'Playfair Display\',serif;font-size:19px;color:'+(onPlan?'#1C5A25':'#7E1A0C')+'">AED '+peMoney(Math.abs(gap))+'</div>'+
         '<div style="font-size:11px;color:#8B7355">'+(pct==null?'':pct+'% of target')+'</div></div>'+
     '</div>'+
     '<div style="margin-top:9px;height:7px;border-radius:4px;background:#EDE7DC;overflow:hidden">'+
-      '<i style="display:block;height:100%;width:'+Math.max(0,Math.min(100, tv? K.month.v/tv*100 : 0))+'%;background:'+(onPlan?'#4E9E56':'#C9A84C')+'"></i></div>';
+      '<i style="display:block;height:100%;width:'+Math.max(0,Math.min(100, tv? netConv/tv*100 : 0))+'%;background:'+(onPlan?'#4E9E56':'#C9A84C')+'"></i></div>'+
+    '<div style="margin-top:7px;font-size:11px;color:#8B7355">Target and progress are both <b>net</b> — what finance books. Bookings are quoted gross, so each figure shows the other underneath it.</div>';
   }
   // The count he was asked for and did not give. Named as missing rather than
   // filled in with a guess — see the block comment above.
   h += '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end">'+
-    '<div style="flex:1;min-width:160px"><div class="pe-lbl">Revenue target for '+peEsc(mLbl)+' (AED, gross)</div>'+
+    '<div style="flex:1;min-width:160px"><div class="pe-lbl">Revenue target for '+peEsc(mLbl)+' (AED, net)</div>'+
       '<input class="pe-in" type="number" value="'+peEsc(tv==null?'':tv)+'" placeholder="not set" onchange="peSaveTarget(this,\''+mk+'\',\'target_revenue\')"'+(ce?'':' disabled')+'></div>'+
     '<div style="flex:1;min-width:160px"><div class="pe-lbl">Number of events</div>'+
       '<input class="pe-in" type="number" value="'+peEsc(tn==null?'':tn)+'" placeholder="not set" onchange="peSaveTarget(this,\''+mk+'\',\'target_events\')"'+(ce?'':' disabled')+'></div>'+
