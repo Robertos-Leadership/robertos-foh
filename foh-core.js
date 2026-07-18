@@ -1403,6 +1403,14 @@ function admFbPill(a){
 // Rows arrive newest-first, so the first row we see for a person is their
 // latest: keep that, and mark the rest as superseded. Nothing is deleted —
 // the older submission stays on screen, just not counted.
+// ⚠ EXPECTS ROWS NEWEST-FIRST. It keeps the FIRST row it sees per person and
+// marks the rest as superseded, so the ordering IS the "latest" rule — there is
+// no date comparison here to fall back on. admFbLoad satisfies this with
+// .order('created_at',{ascending:false}); change that sort and every person's
+// OLDEST answer silently becomes their current one. That inverts the thing this
+// screen exists to get right: someone who asked for a fix and later said "leave
+// it" would stay on the work list forever, and someone who escalated would drop
+// off it. Verified 18 Jul 2026 — feed it oldest-first and it does exactly that.
 function admFbLatest(rows){
   var seen={}, out=[];
   rows.forEach(function(r){
