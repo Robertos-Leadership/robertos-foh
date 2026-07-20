@@ -177,10 +177,19 @@ function peSenderName(){
 // on the desk itself. Everyone else sees it fully, read-only. Chef Corner
 // (dishes) and Beverage Corner (bev packages) are NOT locked — those stay
 // editable by whoever opens them (kitchen/bar libraries, not the desk).
+// The people who can CREATE / EDIT / SEND on the events desk — everyone else sees
+// it fully, read-only. These founding editors are ON BY DEFAULT; from here on,
+// the Admin module manages the rest through the app_users.modules array, so cover
+// staff can be added or removed without ever touching this code again:
+//   'events_editor'      -> granted (anyone)
+//   'events_editor_off'  -> revoked  (overrides a founder)
 var PE_EDITORS = ['vdetoni@robertos.ae','asacchi@skelmore.com','fguarracino@robertos.ae','kvukotic@robertos.ae','onafid@robertos.ae'];
 function peCanEdit(){
+  var mods = (state.access && state.access.modules) || [];
+  if(mods.indexOf('events_editor') >= 0) return true;       // granted in Admin
+  if(mods.indexOf('events_editor_off') >= 0) return false;  // revoked in Admin
   var e = (state.userEmail||'').toLowerCase();
-  return PE_EDITORS.indexOf(e) >= 0;
+  return PE_EDITORS.indexOf(e) >= 0;                         // founding editors, on by default
 }
 // The calm one-liner a non-editor sees at the top of the events list and the
 // event editor. Everything stays readable; only changing things is theirs.

@@ -607,6 +607,32 @@ async function adminToggleNotify(email, key){
   renderMain();
   await adminSave(u);
 }
+// ── Events "create & send" capability ──────────────────────────────────────
+// Who can EDIT the events desk (not just view). The founding editors (PE_EDITORS
+// in foh-privateevents.js) are on by default; a marker in the modules array
+// overrides that either way, so cover staff are added/removed from here — no
+// code change. Kept in the modules array so it saves through the existing path
+// (no new column, no SQL).
+function admIsEventsEditor(login){
+  if(!login) return false;
+  var mods = login.modules||[];
+  if(mods.indexOf('events_editor') >= 0) return true;
+  if(mods.indexOf('events_editor_off') >= 0) return false;
+  return (typeof PE_EDITORS!=='undefined') && PE_EDITORS.indexOf((login.email||'').toLowerCase()) >= 0;
+}
+async function adminToggleEventsEdit(email){
+  var u=adminFind(email); if(!u) return;
+  var isCore = (typeof PE_EDITORS!=='undefined') && PE_EDITORS.indexOf((email||'').toLowerCase()) >= 0;
+  var want = !admIsEventsEditor(u);
+  // Clear both markers first so the row can never hold a contradictory pair,
+  // then set only the one the desired state actually needs.
+  u.modules = (u.modules||[]).filter(function(x){ return x!=='events_editor' && x!=='events_editor_off'; });
+  if(isCore){ if(!want) u.modules.push('events_editor_off'); }   // founder switched off
+  else if(want){ u.modules.push('events_editor'); }             // non-founder switched on
+  renderMain();
+  await adminSave(u);
+  if(email===(state.userEmail||'').toLowerCase()) loadFohAccess();
+}
 async function adminAddUser(){
   var em=(document.getElementById('adm-new-email').value||'').trim().toLowerCase();
   var nm=(document.getElementById('adm-new-name').value||'').trim();
@@ -2150,9 +2176,12 @@ function admDetailHTML(p){
   if(p.login){
     var email=p.login.email;
     var mods=ADMIN_MODULES.map(function(m){ var on=(p.login.modules||[]).indexOf(m.k)!==-1; return '<label class="adm-tick"><input type="checkbox" '+(on?'checked':'')+' onchange="adminToggle(\''+admEsc(email)+'\',\''+m.k+'\')"> '+m.n+'</label>'; }).join('');
+    var canEditEv=admIsEventsEditor(p.login);
+    var hasEventsMod=(p.login.modules||[]).indexOf('privateevents')!==-1;
+    var editTick='<label class="adm-tick adm-editcap" title="Create events and send guest emails — not just view"><input type="checkbox" '+(canEditEv?'checked':'')+' onchange="adminToggleEventsEdit(\''+admEsc(email)+'\')"> Events: create &amp; send</label>'+((canEditEv&&!hasEventsMod)?'<span class="px-dhint" style="margin-left:2px">(also tick “Events” so they can open it)</span>':'');
     var adm='<label class="adm-tick adm-admin"><input type="checkbox" '+(p.login.is_admin?'checked':'')+' onchange="adminToggleAdmin(\''+admEsc(email)+'\')"> Admin</label>';
     var notif=ADMIN_NOTIFY.map(function(nt){ var on=(p.login.notify||[]).indexOf(nt.k)!==-1; return '<label class="adm-tick adm-notif"><input type="checkbox" '+(on?'checked':'')+' onchange="adminToggleNotify(\''+admEsc(email)+'\',\''+nt.k+'\')"> '+nt.n+'</label>'; }).join('');
-    parts.push('<div class="px-dsec"><div class="px-dlbl">App access — '+admEsc(email)+'</div><div class="adm-ticks">'+mods+adm+'</div><div class="adm-ticks" style="margin-top:7px;"><span class="adm-emails-lbl">Emails:</span>'+notif+'</div><div style="margin-top:9px;"><button class="px-mini px-mini-red" onclick="adminDeleteUser(\''+admEsc(email)+'\')">Remove login</button></div></div>');
+    parts.push('<div class="px-dsec"><div class="px-dlbl">App access — '+admEsc(email)+'</div><div class="adm-ticks">'+mods+editTick+adm+'</div><div class="adm-ticks" style="margin-top:7px;"><span class="adm-emails-lbl">Emails:</span>'+notif+'</div><div style="margin-top:9px;"><button class="px-mini px-mini-red" onclick="adminDeleteUser(\''+admEsc(email)+'\')">Remove login</button></div></div>');
   }
   if(p.src==='foh'){
     var sg=state.adminSigners||{}; var ACTS=[['closing_report','Closing report'],['roster','Roster to HR']];
