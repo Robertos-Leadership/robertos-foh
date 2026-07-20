@@ -28,7 +28,7 @@ var peState = {
   editSetMenuId:null, smDraft:null, smName:'', smText:'', smBusy:false
 };
 
-var PE_TEAM_CC = ['fguarracino@robertos.ae','vdetoni@robertos.ae','dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','ahtwe@robertos.ae','asacchi@skelmore.com'];
+var PE_TEAM_CC = ['fguarracino@robertos.ae','vdetoni@robertos.ae','dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','ahtwe@robertos.ae','asacchi@skelmore.com','amahmoud@skelmore.com'];
 var PE_TARGETS = {
   cells: {'Vegetarian|Cold':7,'Fish|Cold':7,'Beef|Cold':6,'Vegetarian|Hot':7,'Fish|Hot':6,'Beef|Hot':7,'Dessert|Dessert':5},
   serve: {Cold:20, Hot:20, Dessert:5},
@@ -3267,7 +3267,7 @@ var PE_PEOPLE = {
   'astellacci@robertos.ae':'Antonio Stellacci','afalcone@robertos.ae':'Andrea Falcone',
   'reservations@robertos.ae':'Reservations','asacchi@skelmore.com':'Andrea Sacchi',
   'kvukotic@robertos.ae':'Katarina Vukotic','rmazouz@robertos.ae':'R. Mazouz','aviscardi@robertos.ae':'A. Viscardi',
-  'ahtwe@robertos.ae':'Aung Htwe'
+  'ahtwe@robertos.ae':'Aung Htwe','amahmoud@skelmore.com':'A. Mahmoud (Design)'
 };
 // A branded, tap-to-include recipient picker — replaces the raw prompt() box.
 function pePickRecipients(opts){
