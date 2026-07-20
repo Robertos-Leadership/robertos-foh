@@ -168,7 +168,7 @@ function peActor(){ return (state.access && state.access.name) || state.userEmai
 // on the desk itself. Everyone else sees it fully, read-only. Chef Corner
 // (dishes) and Beverage Corner (bev packages) are NOT locked — those stay
 // editable by whoever opens them (kitchen/bar libraries, not the desk).
-var PE_EDITORS = ['vdetoni@robertos.ae','asacchi@skelmore.com','fguarracino@robertos.ae'];
+var PE_EDITORS = ['vdetoni@robertos.ae','asacchi@skelmore.com','fguarracino@robertos.ae','kvukotic@robertos.ae','onafid@robertos.ae'];
 function peCanEdit(){
   var e = (state.userEmail||'').toLowerCase();
   return PE_EDITORS.indexOf(e) >= 0;
