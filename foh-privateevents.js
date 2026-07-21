@@ -420,7 +420,8 @@ async function peLoadAll(force){
       peFetchAllPaged(function(){ return sb.from('event_set_menus').select('*').order('name').order('id'); }),
       sb.from('event_menu_choices').select('token,created_at').eq('applied', false).order('created_at',{ascending:false}),
       sb.from('event_log').select('event_id,created_at').eq('action','email').like('detail','event brief%').order('created_at',{ascending:true}),
-      sb.from('event_targets').select('month,target_events,target_revenue')
+      sb.from('event_targets').select('month,target_events,target_revenue'),
+      sb.from('event_log').select('event_id,actor,created_at').eq('action','email').like('detail','proposal%').order('created_at',{ascending:true})
     ]);
     // event_set_menus (res[5]) is loaded non-fatally: if the table isn't there
     // yet (SQL not run), the module still works on the built-in PE_SET_MENUS.
@@ -454,6 +455,12 @@ async function peLoadAll(force){
     peState.targets = {};
     peState.targetsOk = !!(res[8] && !res[8].error);
     if(peState.targetsOk) (res[8].data||[]).forEach(function(r){ peState.targets[r.month] = r; });
+    // res[9] (non-fatal): who sent the proposal, per event — the fallback "lead" when
+    // no one is set in Handled by. Ascending order → the last send per event wins.
+    peState.proposalBy = {};
+    if(res[9] && !res[9].error) (res[9].data||[]).forEach(function(l){
+      if(l.actor) peState.proposalBy[l.event_id] = l.actor;
+    });
     // Which of the new columns actually EXIST. select('*') returns a missing
     // column as an absent key and a set-but-empty one as null, so `in` tells the
     // two apart — which matters, because otherwise the only way to find out is
@@ -813,7 +820,12 @@ function peListRow(e){
   if(e.area) parts.push(peEsc(e.area));
   else if(['draft','sent'].indexOf(e.status)>=0) parts.push('<span style="color:#B00020">no area yet</span>');
   if(e.guests) parts.push(e.guests+' pax');
-  var nameHtml = peEsc(e.client_name||e.company||'Unnamed')+(e.company&&e.client_name?' <span style="font-weight:400;color:#8B7355">· '+peEsc(e.company)+'</span>':'');
+  // Who took the lead — shown in brackets after the name so the desk reads at a
+  // glance whose booking each one is. Prefer "Handled by"; when that's blank, fall
+  // back to whoever actually sent the proposal (from the log). Name without domain.
+  var leadRaw = e.handled_by || (peState.proposalBy && peState.proposalBy[e.id]) || '';
+  var lead = leadRaw ? peLeadLabel(leadRaw) : '';
+  var nameHtml = peEsc(e.client_name||e.company||'Unnamed')+(e.company&&e.client_name?' <span style="font-weight:400;color:#8B7355">· '+peEsc(e.company)+'</span>':'')+(lead?' <span style="font-weight:400;color:#8B7355">('+peEsc(lead)+')</span>':'');
   return '<div class="pe-lrow" onclick="peGo(\'event\',\''+e.id+'\')">'+
     '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#2C1810">'+nameHtml+'</div>'+
     '<div style="font-size:11.5px;color:#8B7355">'+(parts.join(' · ')||'—')+'</div></div>'+
