@@ -6,8 +6,8 @@
 // safe fields ONLY — event name, date, time, area, guests, dietary, and the menu
 // with quantities. NEVER prices, contact, or payment.
 //
-// Handles BOTH canapé menus (event_items) AND plated set menus (event.set_menu,
-// courses mirrored from the FOH PE_SET_MENUS). Beverage-only events are flagged.
+// Handles BOTH canapé menus (event_items) AND plated set menus, resolved from the
+// data-driven event_set_menus library by key. Beverage-only events are flagged.
 //
 // GET (header x-proxy-secret: Kitchen), optional ?days=N caps the horizon.
 // Deploy with verify_jwt=false. Secrets: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (auto).
@@ -18,10 +18,10 @@ const cors = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 const SERVE_ORDER: Record<string, number> = { Cold: 0, Hot: 1, Dessert: 2 };
-// NOTE: this function stays ASCII-only in its OUTPUT literals — a non-ASCII
+// NOTE: this function stays ASCII-only in its SOURCE literals — a non-ASCII
 // literal (·, accents, curly quotes) gets double-encoded by the deploy upload.
-// So all display formatting + the plated set-menu course names live in the
-// KITCHEN APP; set-menu events just pass through ev.set_menu {key, choices}.
+// Dish/course names below come from the DB at runtime (not source literals), so
+// accents survive fine; only hardcoded literals here must stay ASCII.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -90,6 +90,25 @@ Deno.serve(async (req) => {
       for (const d of await dR.json()) dishById[d.id] = d;
     }
 
+    // Plated set menus are DATA-DRIVEN (event_set_menus, edited in the FOH
+    // Chef Corner). Resolve each event's chosen menu FROM THAT TABLE here, so
+    // the kitchen always cooks the current library — never a hardcoded mirror
+    // that silently drifts. Course/dish names are DB data (not source literals),
+    // so they survive the deploy upload just like the canapE dish names above.
+    // deno-lint-ignore no-explicit-any
+    const smByKey: Record<string, any> = {};
+    const smKeys = Array.from(new Set(
+      // deno-lint-ignore no-explicit-any
+      evs.map((e: any) => (e.set_menu && e.set_menu.key) ? String(e.set_menu.key) : null).filter(Boolean),
+    ));
+    if (smKeys.length) {
+      const smR = await sb(
+        "event_set_menus?key=in.(" + smKeys.map((k) => '"' + k + '"').join(",") + ")&select=key,name,courses",
+      );
+      const smRows = await smR.json();
+      if (Array.isArray(smRows)) for (const m of smRows) smByKey[m.key] = m;
+    }
+
     // deno-lint-ignore no-explicit-any
     const events = evs.map((ev: any) => {
       const g = Number(ev.guests) || 0;
@@ -98,9 +117,26 @@ Deno.serve(async (req) => {
       let total_pcs = 0, pcs_per_guest = 0, kind = "none";
 
       if (ev.set_menu && ev.set_menu.key) {
-        // Plated set menu — pass the choice data through; the app owns the course
-        // names + portion display (kept out of here to stay ASCII-safe).
+        // Plated set menu — build the prep rows from the resolved library menu.
+        // Fixed courses cook one portion per guest; a "choose" course (options)
+        // uses the recorded per-option headcount split, else falls back to guests.
         kind = "set";
+        const sm = smByKey[ev.set_menu.key];
+        const choices = (ev.set_menu.choices) || {};
+        // deno-lint-ignore no-explicit-any
+        if (sm && Array.isArray(sm.courses)) for (const c of sm.courses as any[]) {
+          const cname = c.name || "";
+          if (Array.isArray(c.options) && c.choose) {
+            for (const o of c.options) {
+              const n = Number((choices[cname] || {})[o]) || 0;
+              menu.push({ name: o, group: cname, qty: (n || null), unit: "portions", per_guest: null, sub: "guests choice", allergens: [], comp: false, unconfirmed: !n, min_flag: null });
+            }
+          } else if (Array.isArray(c.items)) {
+            for (const it of c.items) {
+              menu.push({ name: it, group: cname, qty: (g || null), unit: "portions", per_guest: null, sub: "", allergens: [], comp: false, unconfirmed: false, min_flag: null });
+            }
+          }
+        }
       } else {
         // Canapé selection (event_items). Dish names come from the DB (safe);
         // no non-ASCII literals are emitted here.
@@ -131,7 +167,10 @@ Deno.serve(async (req) => {
         time_from: ev.time_from, time_to: ev.time_to, area: ev.area,
         guests: ev.guests, dietary: ev.dietary || null,
         kind, menu, total_pcs, pcs_per_guest: Math.round(pcs_per_guest * 10) / 10,
-        set_menu: kind === "set" ? ev.set_menu : null, bev_only,
+        set_menu: kind === "set"
+          ? { key: ev.set_menu.key, name: (smByKey[ev.set_menu.key] && smByKey[ev.set_menu.key].name) || null }
+          : null,
+        bev_only,
       };
     });
 
