@@ -845,8 +845,13 @@ function peRenderList(){
       '<span style="color:#400207;text-decoration:underline;cursor:pointer;white-space:nowrap" onclick="peState.focus=null;renderMain()">Show all events</span></div>';
   }
   h += '<div class="pe-card">';
+  // A count on each status chip — how many bookings are Done, Lost, Deposit paid…
+  // Respects the active search + lead filter so each number matches what a click shows.
+  var _fq = (peState.q||'').toLowerCase();
+  var _fbase = peState.events.filter(function(e){ return peEventMatchesQuery(e,_fq) && peMatchesLead(e); });
+  var _fcount = {}; filters.forEach(function(f){ _fcount[f[0]] = _fbase.filter(function(e){ return pePassesStatus(e,f[0]); }).length; });
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(107,31,42,0.1);padding-bottom:10px;margin-bottom:4px">'+filters.map(function(f){
-    return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';peState.focus=null;renderMain()">'+f[1]+'</span>';
+    return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';peState.focus=null;renderMain()">'+f[1]+' <span style="opacity:.55;font-weight:400">'+_fcount[f[0]]+'</span></span>';
   }).join('')+
   '<input class="pe-in" style="width:210px;margin-left:auto" placeholder="Search name, company, date or area\u2026" value="'+peEsc(peState.q||'')+'" oninput="peState.q=this.value;renderMain();var el=document.querySelectorAll(\'input[placeholder^=Search]\')[0];if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}">'+
   '</div>';
