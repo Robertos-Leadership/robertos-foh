@@ -340,8 +340,28 @@ function toggleOverviewEvent(id){
   state.overviewExpanded[id] = !state.overviewExpanded[id];
   renderMain();
 }
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Distinct calendar months (YYYY-MM) that have results, most recent first.
+function overviewMonths(){
+  const set = new Set();
+  state.events.filter(e=>(e.status||'active')!=='paused')
+    .forEach(ev=>activationResultWeeks(ev).forEach(x=>{
+      const ym = String(x.w.week_date||'').slice(0,7);
+      if(ym.length===7) set.add(ym);
+    }));
+  return [...set].sort().reverse();
+}
+function monthChipLabel(ym, multiYear){
+  const [y,m] = ym.split('-');
+  const name = MONTH_NAMES[Number(m)-1] || ym;
+  return multiYear ? name+" '"+y.slice(2) : name;   // "Jul '26" only when data spans >1 year
+}
 function renderActivationsOverview(){
-  const period = state.overviewPeriod || 4;           // 4 | 8 | 12 | 'all'
+  const months = overviewMonths();
+  // Scope is a calendar month (YYYY-MM) or 'all'. Old numeric values (the former
+  // rolling week-count chips) migrate to the most recent month with data.
+  let period = state.overviewPeriod;
+  if(period===undefined || typeof period==='number') period = months[0] || 'all';
   const money = n => Math.round(n).toLocaleString();
   const expanded = state.overviewExpanded || {};
   const acts = state.events.filter(e=>(e.status||'active')!=='paused');
@@ -350,7 +370,7 @@ function renderActivationsOverview(){
   let nightCount = 0, totCovers = 0, coversNights = 0, revWithCovers = 0;   // for averages
   const rows = acts.map(ev=>{
     const all = activationResultWeeks(ev);
-    const wks = period==='all' ? all : all.slice(-period);
+    const wks = period==='all' ? all : all.filter(x=>String(x.w.week_date||'').slice(0,7)===period);
     if(!wks.length){
       return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--vino-dark)">${ev.name}</div>
@@ -412,7 +432,7 @@ function renderActivationsOverview(){
       <div style="display:flex;align-items:center;gap:14px">
         <div style="flex:1;min-width:0">
           <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--vino-dark)">${ev.name}</div>
-          <div style="font-size:12px;color:${attention?'var(--red)':'var(--vino)'}">latest ${money(latest.rev)} · ${period==='all'?'total':wks.length+'-wk total'} ${money(total)}${attention?' · needs attention':''}</div>
+          <div style="font-size:12px;color:${attention?'var(--red)':'var(--vino)'}">latest ${money(latest.rev)} · total ${money(total)}${attention?' · needs attention':''}</div>
         </div>
         ${barsHtml}
         ${arrow}
@@ -422,8 +442,9 @@ function renderActivationsOverview(){
     </div>`;
   }).join('');
 
-  const periodChip = (val,label)=>`<span onclick="setOverviewPeriod(${typeof val==='string'?`'${val}'`:val})" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:999px;${(state.overviewPeriod||4)===val?'background:var(--vino);color:#fff':'background:var(--surface);border:1px solid var(--border-strong);color:var(--vino)'}">${label}</span>`;
-  const periodWord = period==='all' ? 'all time' : period+' wks';
+  const multiYear = new Set(months.map(m=>m.slice(0,4))).size>1;
+  const periodChip = (val,label)=>`<span onclick="setOverviewPeriod(${typeof val==='string'?`'${val}'`:val})" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:999px;${period===val?'background:var(--vino);color:#fff':'background:var(--surface);border:1px solid var(--border-strong);color:var(--vino)'}">${label}</span>`;
+  const periodWord = period==='all' ? 'all time' : monthChipLabel(period, multiYear);
   const avgRev = nightCount ? grandTotal/nightCount : 0;
   const avgCovers = coversNights ? totCovers/coversNights : null;
   const avgSpend = totCovers ? revWithCovers/totCovers : null;
@@ -449,7 +470,7 @@ function renderActivationsOverview(){
 
   return `
     <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:14px">
-      ${periodChip(4,'4 weeks')}${periodChip(8,'8 weeks')}${periodChip(12,'12 weeks')}${periodChip('all','All')}
+      ${months.map(m=>periodChip(m, monthChipLabel(m, multiYear))).join('')}${periodChip('all','All')}
     </div>
     ${tiles}
     <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:8px">All activations · tap one to open its weeks</div>
