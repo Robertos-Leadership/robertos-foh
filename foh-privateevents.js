@@ -688,6 +688,23 @@ function peFocusMatch(e){
 // created it). These let the desk be read one person at a time without changing
 // the record: it's a view, not an edit. ──
 function peLeadLabel(h){ h = String(h||''); return h.indexOf('@')>=0 ? h.split('@')[0] : h; }
+// The effective lead credited with a booking: the person set in "Handled by", or —
+// when that's blank — whoever actually sent the proposal. One definition, so the
+// name shown in brackets on the list and the person the report is scoped to agree.
+function peEffLead(e){ return (e && (e.handled_by || (peState.proposalBy && peState.proposalBy[e.id]))) || ''; }
+// Distinct effective leads present in the book (drives the monthly-report person
+// filter), most-common name first.
+function peReportLeadKeys(){
+  var counts = {};
+  (peState.events||[]).forEach(function(e){ var L = peEffLead(e); if(L) counts[L] = (counts[L]||0)+1; });
+  return Object.keys(counts).sort(function(a,b){ return peLeadLabel(a).localeCompare(peLeadLabel(b)); });
+}
+// Does this event belong to the person the report is scoped to? 'all' = everyone.
+function peReportLeadMatch(e){
+  var L = peState.reportLead || 'all';
+  if(L==='all') return true;
+  return peEffLead(e) === L;
+}
 // The signed-in person, as they appear in handled_by (name if we have it, else email).
 function peMyLeadVals(){
   var v = [];
@@ -713,6 +730,8 @@ function peLeadKeys(){
   return Object.keys(counts).sort(function(a,b){ return peLeadLabel(a).localeCompare(peLeadLabel(b)); });
 }
 function peSetLead(i){ var d = (peState._leadDefs||[])[i]; peState.lead = d ? d.k : 'all'; renderMain(); }
+// The monthly report's own person scope (kept separate from the list's lead filter).
+function peSetReportLead(i){ var d = (peState._reportLeadDefs||[])[i]; peState.reportLead = d ? d.k : 'all'; renderMain(); }
 function peFilteredEvents(){
   var f = peState.filter, q = (peState.q||'').toLowerCase();
   return peState.events.filter(function(e){
@@ -823,7 +842,7 @@ function peListRow(e){
   // Who took the lead — shown in brackets after the name so the desk reads at a
   // glance whose booking each one is. Prefer "Handled by"; when that's blank, fall
   // back to whoever actually sent the proposal (from the log). Name without domain.
-  var leadRaw = e.handled_by || (peState.proposalBy && peState.proposalBy[e.id]) || '';
+  var leadRaw = peEffLead(e);
   var lead = leadRaw ? peLeadLabel(leadRaw) : '';
   var nameHtml = peEsc(e.client_name||e.company||'Unnamed')+(e.company&&e.client_name?' <span style="font-weight:400;color:#8B7355">· '+peEsc(e.company)+'</span>':'')+(lead?' <span style="font-weight:400;color:#8B7355">('+peEsc(lead)+')</span>':'');
   return '<div class="pe-lrow" onclick="peGo(\'event\',\''+e.id+'\')">'+
@@ -4856,6 +4875,9 @@ function peReportData(mk){
             ytd:{n:0,v:0}, convPipe:{n:0,v:0},
             lost:{n:0,v:0}, wonYr:{n:0,v:0} };
   peState.events.forEach(function(e){
+    // Scope every figure to the person the report is viewed as (e.g. Valentina's
+    // budget excludes Ouafaa's direct bookings). 'all' = the whole book.
+    if(!peReportLeadMatch(e)) return;
     var v = peEventValue(e) || 0;
     var d = e.event_date ? String(e.event_date).slice(0,10) : null;
     var s = peStage(e);
@@ -4928,6 +4950,9 @@ function peTargetCardHTML(mk, K){
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
     '<b style="font-size:14px;color:#400207">Target for '+peEsc(mLbl)+'</b>'+
     '<span style="font-size:11px;color:#8B7355">Set once a month — nothing on the events desk changes</span></div>';
+  if(peState.reportLead && peState.reportLead!=='all'){
+    h += '<div style="margin-top:6px;font-size:11.5px;color:#6B4A33">Progress below is <b>'+peEsc(peLeadLabel(peState.reportLead))+'</b>’s bookings only, measured against this month’s budget.</div>';
+  }
   if(peState.targetsOk === false){
     h += '<div style="margin-top:8px;font-size:12.5px;color:#7A5500;background:#FBF0D6;border:1px solid #DFC680;border-radius:9px;padding:9px 12px">'+
       'Targets need <b>foh-events-oneevening.sql</b> run once in Supabase before they can be saved. Everything else on this report works as normal.</div>';
@@ -5102,13 +5127,28 @@ function peRenderReport(){
     {n:'Prospect — dated, not quoted yet', st:['draft']},
     {n:'Lost', st:['lost']}
   ];
-  var monthEvents = peState.events.filter(function(e){ return e.event_date && peMonthKey(e.event_date)===mk; })
+  var monthEvents = peState.events.filter(function(e){ return e.event_date && peMonthKey(e.event_date)===mk && peReportLeadMatch(e); })
     .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
   var secHd = function(t){ return '<div style="font-family:\'Playfair Display\',serif;font-size:16px;color:#400207;margin:24px 2px 11px">'+t+'</div>'; };
   var h = peHeader('report');
   h += '<div style="margin-bottom:14px"><div class="pe-title">Monthly report</div>'+
     '<div style="font-size:12px;color:#8B7355">Where the events business stands \u2014 confirmed, coming and in play.</div></div>';
-  h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance &middot; '+peEsc(mLbl)+'</div>';
+  // Person scope \u2014 the target/budget is set per person (e.g. Valentina), so the whole
+  // report can be read one lead at a time, excluding everyone else's bookings. Only
+  // appears once more than one person has events on the book.
+  var rlKeys = peReportLeadKeys();
+  var curRL = peState.reportLead || 'all';
+  if(curRL!=='all' && rlKeys.indexOf(curRL)<0){ peState.reportLead = 'all'; curRL = 'all'; }  // person left the book \u2014 reset
+  if(rlKeys.length >= 2){
+    var rlDefs = [{k:'all',n:'Everyone'}].concat(rlKeys.map(function(k){ return {k:k, n:peLeadLabel(k)}; }));
+    peState._reportLeadDefs = rlDefs;
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 2px 12px"><span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#A88930;margin-right:2px">Whose events</span>'+
+      rlDefs.map(function(d,i){
+        return '<span class="pe-tab'+(curRL===d.k?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peSetReportLead('+i+')">'+peEsc(d.n)+'</span>';
+      }).join('')+'</div>';
+  }
+  var rlNote = curRL!=='all' ? ' \u00b7 <span style="color:#400207">'+peEsc(peLeadLabel(curRL))+' only</span>' : '';
+  h += '<div class="pe-lbl" style="margin:0 2px 9px">At a glance &middot; '+peEsc(mLbl)+rlNote+'</div>';
   h += peKpis(mk);   // follows the month navigator — it used to be pinned to today
   // Andrea (coo-events-2 #11): the report could state a number but never a
   // verdict, because there was nothing to measure it against. The target sits
