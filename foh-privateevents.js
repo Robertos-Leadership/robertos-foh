@@ -4871,11 +4871,19 @@ function peReportData(mk){
   var today = peToday();
   var plus30 = localISO(new Date(Date.now()+30*86400000));
   var yr = mk.slice(0,4);
-  var K = { month:{n:0,v:0}, n30:{n:0,v:0},
+  // Reporting year starts in JULY (Francesco, 21 Jul 2026: "Year to date clearly
+  // labeled as from July"). So YTD runs from 1 July of the current reporting year
+  // through today and does NOT reset in January. July is taken relative to TODAY,
+  // not the month being viewed — "to date" always means up to the real today,
+  // whatever month the navigator is parked on.
+  var tM = +today.slice(5,7), tY = +today.slice(0,4);
+  var fyYear = (tM >= 7) ? tY : tY - 1;
+  var fyStart = fyYear + '-07-01';
+  var K = { month:{n:0,v:0}, mtd:{n:0,v:0}, n30:{n:0,v:0},
             prospect:{n:0,v:0}, tentative:{n:0,v:0}, pipeline:{n:0,v:0},
             leads:{n:0,v:0}, needDate:{n:0,v:0},
             ytd:{n:0,v:0}, convPipe:{n:0,v:0},
-            lost:{n:0,v:0}, wonYr:{n:0,v:0} };
+            lost:{n:0,v:0}, wonYr:{n:0,v:0}, fyYear:fyYear, fyStart:fyStart };
   peState.events.forEach(function(e){
     // Scope every figure to the person the report is viewed as (e.g. Valentina's
     // budget excludes Ouafaa's direct bookings). 'all' = the whole book.
@@ -4885,15 +4893,19 @@ function peReportData(mk){
     var s = peStage(e);
     var add = function(b){ b.n++; b.v += v; };
     if(s === 'converted' && d && peMonthKey(d) === mk) add(K.month);
+    if(s === 'converted' && d && peMonthKey(d) === mk && d <= today) add(K.mtd);  // month to date
     if(s === 'converted' && d && d >= today && d < plus30) add(K.n30);
     if(s === 'prospect')  { add(K.prospect);  add(K.pipeline); }
     if(s === 'tentative') { add(K.tentative); add(K.pipeline); }
     if(s === 'lead') add(K.leads);
     if(peNeedsDate(e)) add(K.needDate);
-    // Year figures follow the year being VIEWED, not whatever today happens to be.
+    // Year to date runs from 1 June of the reporting year to today (see above),
+    // independent of the month being viewed.
+    if(s === 'converted' && d && d >= fyStart && d <= today) add(K.ytd);
+    // Won and converted-pipeline still follow the year being VIEWED.
     if(s === 'converted' && d && d.slice(0,4) === yr){
       add(K.wonYr);
-      if(d <= today) add(K.ytd); else add(K.convPipe);   // to date vs converted pipeline
+      if(d > today) add(K.convPipe);   // confirmed, still to come
     }
     if(s === 'lost' && d && d.slice(0,4) === yr) add(K.lost);
   });
@@ -5026,15 +5038,15 @@ function peKpis(mk){
   var mLbl = new Date(+mk.slice(0,4), +mk.slice(5,7)-1, 1).toLocaleDateString('en-GB',{month:'long'});
   var yr = mk.slice(0,4);
   var h = '<div class="pe-kpis">'+
-    peKpiCard(mLbl+' — converted', K.month, 'events', '#6B1F2A', 'net AED '+peMoney(peNetOf(K.month.v)))+
+    peKpiCard(mLbl+' — confirmed', K.month, 'events', '#6B1F2A', 'net AED '+peMoney(peNetOf(K.month.v)))+
     peKpiCard('Next 30 days', K.n30, 'events coming', '#C9A84C')+
     peKpiCard('Pipeline', K.pipeline, 'in play', '#3E7FBB',
       K.prospect.n+' prospect &middot; '+K.tentative.n+' tentative')+
     peKpiCard('Leads', K.leads, 'to action', '#8A6A4F', 'no date yet &mdash; not pipeline')+
   '</div>';
   h += '<div class="pe-kpis" style="margin-top:10px">'+
-    peKpiCard(yr+' to date', K.ytd, 'delivered', '#4E9E56', 'net AED '+peMoney(peNetOf(K.ytd.v)))+
-    peKpiCard('Converted pipeline', K.convPipe, 'still to come', '#4E9E56', 'confirmed, later this year')+
+    peKpiCard('Year to date', K.ytd, 'since Jul '+K.fyYear, '#4E9E56', 'net AED '+peMoney(peNetOf(K.ytd.v)))+
+    peKpiCard('Confirmed pipeline', K.convPipe, 'still to come', '#4E9E56', 'confirmed, later this year')+
     peKpiCard(yr+' lost', K.lost, 'walked away', '#BB3A28')+
     '<div class="pe-kpi" style="border-top:3px solid #3E7FBB">'+
       '<div class="pe-kpi-l">Conversion</div>'+
@@ -5248,11 +5260,12 @@ function peRenderReport(){
       '<br><span style="font-family:Arial,sans-serif;font-size:11px;font-weight:normal;color:#8B7355">net '+peMoney(peNetOf(gross))+'</span></b></div>';
   }
   h += '<div style="max-width:460px;margin-top:22px;background:#F7EEE2;border:1px solid rgba(201,168,76,0.45);border-radius:12px;padding:14px 16px">'+
-    totRow(mLbl+' converted', mtot,
+    totRow(mLbl+' confirmed', mtot,
       (chg==null ? 'no '+prevLbl+' to compare with'
                  : prevLbl+' AED '+peMoney(prev.v)+' &middot; <b style="color:'+(chg>=0?'#2E6B34':'#8A2A1A')+'">'+(chg>=0?'+':'')+chg+'%</b>'), false)+
-    totRow(mk.slice(0,4)+' to date', ytd, 'delivered on or before today only', true)+
-    totRow('Converted pipeline', RK.convPipe.v, 'confirmed, still to come this year', true)+
+    totRow('Month to date', RK.mtd.v, mLbl+' — delivered on or before today', true)+
+    totRow('Year to date', ytd, 'since 1 July '+RK.fyYear+' — delivered on or before today', true)+
+    totRow('Confirmed pipeline', RK.convPipe.v, 'confirmed, still to come', true)+
     '<div style="border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:8px;font-size:11px;color:#8B7355;line-height:1.5">'+
       'Values are <b>gross</b> — they include 10% service charge, 7% DIFC fee and 5% VAT. '+
       'Net is what finance books. A minimum-spend booking is valued at its minimum: the balance between that and what the guest consumes is billed as venue rental.</div>'+
