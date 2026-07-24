@@ -2816,7 +2816,7 @@ function peFoodSetMenuHTML(e){
     if(!ce) return '';
     h += '<div class="pe-lbl">Or use a plated set menu…</div>'+
       '<span style="display:flex;gap:6px;align-items:center"><select class="pe-in" style="flex:1" id="pe-sm-sel"><option value="">Choose a plated set menu…</option>'+
-      peSetMenusPick().map(function(m){ return '<option value="'+m.key+'">'+peEsc(m.name)+' — AED '+m.price+'/guest</option>'; }).join('')+
+      peSetMenusPickInc().map(function(m){ return '<option value="'+m.key+'">'+peEsc(m.name)+(m.price!=null?' — AED '+m.price+'/guest':' — price on the proposal')+'</option>'; }).join('')+
       '</select><button class="pe-btn sec sm" onclick="peApplySetMenu(\''+e.id+'\')">Use</button></span>';
     return h+'</div>';
   }
@@ -2968,14 +2968,18 @@ async function peApplySetMenu(eventId){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var sel = document.getElementById('pe-sm-sel'); if(!sel || !sel.value) return;
   var m = peSetMenuByKey(sel.value); if(!m) return;
-  if(m.price==null){ peToast('“'+m.name+'” has no price yet — Valentina prices it in Chef Corner first', true); return; }
+  // An unpriced menu is allowed: on a minimum-spend booking the food carries no
+  // per-guest price — the menu supplies the dishes, the minimum spend the money.
   var e = peEvById(eventId); if(!e) return;
   var cur = peState.items[eventId]||[];
   var hadPrice = e.food_price_pp!=null && e.food_price_pp!=='';
   if(cur.length || hadPrice){
+    var priceChange = m.price!=null
+      ? ' the AED '+peMoney(e.food_price_pp)+'/guest food price becomes AED '+peMoney(m.price)+'/guest'
+      : ' the AED '+peMoney(e.food_price_pp)+'/guest food price is removed — the minimum spend applies';
     var body = 'Using “'+m.name+'” replaces the food on this event'+
       (cur.length ? ' — the '+cur.length+' dish'+(cur.length>1?'es':'')+' on it now will be removed' : '')+
-      (hadPrice ? (cur.length?' and':' —')+' the AED '+peMoney(e.food_price_pp)+'/guest food price becomes AED '+peMoney(m.price)+'/guest' : '')+
+      (hadPrice ? (cur.length?' and':' —')+priceChange : '')+
       '. The proposal and the kitchen brief will show only the set menu.';
     if(!(await peConfirm({title:'Switch to “'+m.name+'”?', body:body, ok:'Use “'+m.name+'”', cancel:'Keep the current menu'}))){ renderMain(); return; }
   }
@@ -3144,8 +3148,10 @@ function peProposalHTML(e){
     });
     body += '<div class="d" style="margin-top:10px">Let us know which one you would like and we will hold it for you.</div>';
   }
-  // One complete, rounded figure — food and beverage together, for the party.
-  else if(t.total && e.guests){
+  // A minimum-spend booking is quoted on the minimum alone — never a per-person or
+  // sub-total figure, even once a priced beverage gives it a running total. The
+  // menu is shown for what it is; the money lives on the "Minimum spend" line below.
+  else if(t.total && e.guests && e.pricing_type!=='min_spend'){
     // Valentina chooses how the price reads for this guest — the whole-event total,
     // or a per-person figure (which some groups prefer). Per person reconciles with
     // the guest count: round(total ÷ guests) × guests ≈ total.
