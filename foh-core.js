@@ -2945,6 +2945,14 @@ async function fohLoadSchedData(){
     sb.from('foh_roster').select('*').gte('work_date', weekFrom).lte('work_date', weekEnd).limit(5000),
     sb.from('foh_events').select('*').gte('event_date', weekFrom).lte('event_date', weekEnd).limit(2000)
   ]);
+  // Staff/roster are required reads — a failed fetch must not render as a silent
+  // empty schedule (indistinguishable from "nobody's scheduled"). Surface it, and
+  // keep whatever was already on screen rather than wiping it to blank.
+  if(res[0].error || res[1].error){
+    console.error('Schedule load error:', res[0].error || res[1].error);
+    toast('Could not load the schedule — showing the last loaded data.', true);
+    return;
+  }
   fohSchedStaff = (res[0].data || []).filter(function(s){ return s.in_schedule!==false; });   // Admin "show in schedule" toggle (foh_staff.in_schedule); null/absent = shown
   fohSchedRoster = {};
   (res[1].data || []).forEach(function(r){

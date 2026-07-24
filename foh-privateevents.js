@@ -130,9 +130,12 @@ function peSetMenusAll(){ return peSetMenusRaw().map(peNormSM); }
 // Only active, priced menus can be picked into a quote.
 function peSetMenusSel(){ return peSetMenusAll().filter(function(m){ return m.active!==false && m.price!=null; }); }
 function peSetMenuByKey(k){
+  // peSetMenusAll() already falls back to PE_SET_MENUS via peSetMenusRaw() when
+  // the DB table hasn't loaded yet — no separate fallback needed here. Adding
+  // one back would let a menu deleted/renamed in event_set_menus silently
+  // resurrect its old hardcoded copy instead of correctly returning "not found".
   var all = peSetMenusAll();
   for(var i=0;i<all.length;i++) if(all[i].key===k) return all[i];
-  for(var j=0;j<PE_SET_MENUS.length;j++) if(PE_SET_MENUS[j].key===k) return peNormSM(PE_SET_MENUS[j]);
   return null;
 }
 // Serving-style variants: a menu whose key is '<base>-sharing' is the shared
