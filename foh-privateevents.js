@@ -257,6 +257,22 @@ function peIsEmail(v){
   var at = v.indexOf('@');
   return at>0 && v.indexOf('.', at+2) >= 0 && !/\s/.test(v);
 }
+// One recipient field can hold several people — "a@x.com, b@y.com". Split on
+// commas, semicolons or spaces; peEmailsValid requires at least one, all valid.
+function peEmailList(v){
+  return String(v==null?'':v).split(/[,;\s]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+}
+function peEmailsValid(v){
+  var l = peEmailList(v);
+  return l.length>0 && l.every(peIsEmail);
+}
+// Recipients for a send: every address in the field, plus the sender's copy,
+// with no duplicates (the guest never gets the mail twice).
+function peSendTo(field, sender){
+  var l = peEmailList(field);
+  if(sender && l.indexOf(sender)<0) l.push(sender);
+  return l;
+}
 // Show / clear a small red message right under a facts-card input (el). Passing an
 // empty message removes it. Used so a bad email is flagged inline, not just a toast.
 function peInlineErr(el, msg){
@@ -1630,7 +1646,8 @@ function peRenderEvent(){
       '<div class="pe-grid3">'+
       peIn('Company','company',e)+peSel('Type of event','event_type',e,PE_TYPES)+peIn('Minimum spend (AED)','min_spend',e,'number')+
       peTimeField('Start time','time_from',e,'peTimeFromChange(this,\''+e.id+'\')')+peTimeField('End time','time_to',e,'peFact(this,\'time_to\',\''+e.id+'\')')+peIn('Contact name','contact_name',e)+
-      peIn('Contact phone','contact_phone',e)+peIn('Contact email','contact_email',e)+
+      peIn('Contact phone','contact_phone',e)+
+      '<div><div class="pe-lbl">Contact email</div><input class="pe-in" id="pe-f-contact_email" type="text" value="'+peEsc(e.contact_email==null?'':e.contact_email)+'" placeholder="guest@email.com, planner@email.com" onchange="peFact(this,\'contact_email\',\''+e.id+'\')"'+(peCanEdit()?'':' disabled')+'><div style="font-size:11px;color:#8B7355;margin-top:3px">Sending to more than one person? Separate the emails with a comma — everyone on it gets the proposal, contract and payment link.</div></div>'+
     '</div><div class="pe-grid3" style="margin-top:10px">'+
       // #3 + Andrea's "lead from and handler": where it came from and whose it is.
       // The handler defaults to whoever created the event, so old habits cost nothing.
@@ -2080,7 +2097,7 @@ async function peFact(el, field, id){
   var raw = el.value;
   // A typed client email must look like one — flag it inline and don't save the mistake.
   if(field==='contact_email'){
-    if(raw.trim() && !peIsEmail(raw)){ peInlineErr(el, 'That doesn’t look like an email — check for a missing “@”.'); return; }
+    if(raw.trim() && !peEmailsValid(raw)){ peInlineErr(el, 'One of these isn’t a valid email — add more people with a comma between them.'); return; }
     peInlineErr(el, '');
   }
   var v;
@@ -3473,7 +3490,7 @@ async function peEmailProposal(id){
   var sender = state.userEmail || 'vdetoni@robertos.ae';
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
-      to:[e.contact_email, sender],
+      to: peSendTo(e.contact_email, sender),
       from_name: peSenderName(),
       reply_to: sender,
       subject: 'Your canap\u00e9 proposal \u2014 Roberto\u2019s'+(e.event_date?' \u00b7 '+peDLabel(e.event_date):''),
@@ -3540,7 +3557,7 @@ async function peEmailAgreement(id){
   var intro = 'Thank you for choosing Roberto’s'+(e.event_date?' for '+peDLabel(e.event_date):'')+'. Your proposal and event agreement are ready — the button below opens everything on one page, where you can review and sign electronically.';
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
-      to:[e.contact_email, sender], reply_to:sender, from_name:peSenderName(),
+      to: peSendTo(e.contact_email, sender), reply_to:sender, from_name:peSenderName(),
       subject: 'Your event proposal & agreement — Roberto’s'+(e.event_date?' · '+peDLabel(e.event_date):''),
       html: peGuestEmailHTML('Your Event Agreement', intro, e.contact_name||e.client_name, null, inner)
     }});
@@ -3573,7 +3590,7 @@ async function peSendPaymentLink(id){
     '<p style="font-size:12px;color:#8B7355;text-align:center">This opens Roberto’s secure card payment page. Your balance is settled on the day of the event.</p>';
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
-      to:[e.contact_email, sender], reply_to:sender, from_name:peSenderName(),
+      to: peSendTo(e.contact_email, sender), reply_to:sender, from_name:peSenderName(),
       subject:'Your deposit payment link — Roberto’s'+(e.event_date?' · '+peDLabel(e.event_date):''),
       html: peGuestEmailHTML('Your Deposit Payment', intro, e.contact_name||e.client_name, null, inner)
     }});
@@ -3676,7 +3693,7 @@ function peMenuPackEmailForm(){
   return '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Send to the guest</b>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">Tick above once, then choose how it travels. <b>Email</b> — ONE branded email with everything ticked, you are copied and their reply comes to you. <b>WhatsApp</b> — ONE message with ONE link to a page holding everything ticked, food and beverage together.</div>'+
     '<div class="pe-grid2"><div><div class="pe-lbl">Guest name</div><input class="pe-in" id="pe-mp-name" placeholder="e.g. Sara"></div>'+
-    '<div><div class="pe-lbl">Guest email (for email)</div><input class="pe-in" id="pe-mp-email" type="email" placeholder="guest@email.com"></div></div>'+
+    '<div><div class="pe-lbl">Guest email (for email)</div><input class="pe-in" id="pe-mp-email" type="text" placeholder="guest@email.com, planner@email.com"></div></div>'+
     '<div style="margin-top:8px"><div class="pe-lbl">Guest mobile (for WhatsApp)</div><input class="pe-in" id="pe-mp-phone" type="tel" placeholder="e.g. 050 123 4567 — a UAE number needs no +971"></div>'+
     '<div style="margin-top:8px"><div class="pe-lbl">Personal note (optional — appears in the email and the WhatsApp message)</div>'+
     '<input class="pe-in" id="pe-mp-note" placeholder="e.g. It was lovely speaking with you today — as promised…"></div>'+
@@ -3808,7 +3825,7 @@ async function peSendMenuPack(){
   var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
   var email = g('pe-mp-email'), name = g('pe-mp-name'), note = g('pe-mp-note');
   if(!email){ peToast('Type the guest’s email first', true); peInlineErr(document.getElementById('pe-mp-email'),'Type the guest’s email first.'); return; }
-  if(!peIsEmail(email)){ peToast('That email looks off — check for a missing “@”', true); peInlineErr(document.getElementById('pe-mp-email'),'That doesn’t look like an email — check for a missing “@”.'); return; }
+  if(!peEmailsValid(email)){ peToast('An email looks off — check each one, separate several with a comma', true); peInlineErr(document.getElementById('pe-mp-email'),'One of these isn’t a valid email — separate several with a comma.'); return; }
   peInlineErr(document.getElementById('pe-mp-email'),'');
   var noPriceEl = document.getElementById('pe-mp-noprice');
   var noPrice = !!(noPriceEl && noPriceEl.checked);
@@ -3823,7 +3840,7 @@ async function peSendMenuPack(){
   var btn = document.getElementById('pe-mp-send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
-      to:[email, sender], reply_to:sender, from_name:peSenderName(), subject:subject,
+      to: peSendTo(email, sender), reply_to:sender, from_name:peSenderName(), subject:subject,
       html: peMenuPackEmailHTML(food, bev, name, note, noPrice)
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
@@ -4801,7 +4818,7 @@ function peGuideNext(){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var g = peGuide;
   if(g.step===0 && !(g.name && g.name.trim())){ peToast('Add a name to continue', true); return; }
-  if(g.step===0 && g.email && g.email.trim() && !peIsEmail(g.email)){ g.emailErr=true; peToast('That email looks off — check for a missing “@”', true); renderMain(); return; }
+  if(g.step===0 && g.email && g.email.trim() && !peEmailsValid(g.email)){ g.emailErr=true; peToast('An email looks off — separate several with a comma', true); renderMain(); return; }
   if(g.step===0) g.emailErr=false;
   if(g.step===1){
     if(!g.date){ peToast('Add the date to continue', true); return; }
@@ -4915,7 +4932,7 @@ async function peGuideFinish(action){
   var g = peGuide; if(!g || g.busy) return;
   var buildMode = !((g.foodMode==='package' && g.packId) || (g.foodMode==='setmenu' && g.setKey));
   if(action==='send' && !g.email){ peToast('Add the client email in step 1 to send', true); g.step=0; renderMain(); return; }
-  if(action==='send' && !peIsEmail(g.email)){ g.emailErr=true; peToast('That email looks off — check for a missing “@”', true); g.step=0; renderMain(); return; }
+  if(action==='send' && !peEmailsValid(g.email)){ g.emailErr=true; peToast('An email looks off — separate several with a comma', true); g.step=0; renderMain(); return; }
   g.busy = true; renderMain();
   try{
     var gBev = (g.bevId && g.bevId!=='dry') ? peBevById(g.bevId) : null;
