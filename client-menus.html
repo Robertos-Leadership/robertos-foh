@@ -113,7 +113,7 @@ function render(menus, bevs){
     h += '<div class="sect">'+(both ? '<div class="sect-t">Beverage packages</div>' : '')+
       bevs.map(function(b){
         return '<div class="item"><div class="nm">'+esc(b.name)+'</div>'+
-          (noPrice
+          ((noPrice || b.price_pp==null)
             ? (b.duration_hours ? '<div class="pr">'+b.duration_hours+' hours</div>' : '')
             : '<div class="pr">'+(b.duration_hours ? b.duration_hours+' hours · ' : '')+'AED '+money(b.price_pp)+' per guest</div>')+
           (b.includes ? '<span class="ds">'+esc(b.includes)+'</span>' : '')+

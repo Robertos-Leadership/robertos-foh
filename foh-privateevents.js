@@ -1716,7 +1716,7 @@ function peRenderEvent(){
     '<div style="margin-top:8px"><select class="pe-in" id="pe-f-bev_package_id" onchange="peSetBeverage(\''+e.id+'\',this.value)"'+(ce?'':' disabled')+'>'+
       '<option value=""'+(!e.bev_package_id && !bevIsDry?' selected':'')+'>No beverage package</option>'+
       '<option value="dry"'+(bevIsDry?' selected':'')+'>No alcohol — soft drinks &amp; water</option>'+
-      bevOpts.map(function(b){ return '<option value="'+b.id+'"'+(e.bev_package_id===b.id?' selected':'')+'>'+peEsc(b.name)+' — '+(b.duration_hours?b.duration_hours+'h — ':'')+'AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+(b.active===false?' (retired)':'')+'</option>'; }).join('')+
+      bevOpts.map(function(b){ return '<option value="'+b.id+'"'+(e.bev_package_id===b.id?' selected':'')+'>'+peEsc(b.name)+' — '+(b.duration_hours?b.duration_hours+'h — ':'')+(b.price_pp!=null?'AED '+peMoney(b.price_pp)+'/guest':'price on the proposal')+(b.non_alcoholic?' · alcohol-free':'')+(b.active===false?' (retired)':'')+'</option>'; }).join('')+
     '</select>'+
     (bevIsDry
       ? '<div style="font-size:12px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:8px 10px;margin-top:8px">No alcohol will be served — this is stated on every document and the beverage charge is AED 0.</div>'
@@ -3190,7 +3190,7 @@ function peBriefBodyHTML(e){
   body += row('Guests', e.guests);
   body += row('Food', (e.package_label||'Bespoke selection')+(t.foodPP?' · AED '+peMoney(t.foodPP)+'/guest':'')+(t.pcs?' · '+(Math.round(t.pcs*10)/10)+' pieces/guest':''));
   var bev = e.bev_package_id ? peBevById(e.bev_package_id) : null;
-  body += row('Beverage', bev ? bev.name+' · AED '+peMoney(bev.price_pp)+'/guest' : (e.bev_mode==='dry'?'DRY EVENT — no alcohol served (soft drinks & water)':'—'));
+  body += row('Beverage', bev ? bev.name+(bev.price_pp!=null?' · AED '+peMoney(bev.price_pp)+'/guest':' · price on the proposal') : (e.bev_mode==='dry'?'DRY EVENT — no alcohol served (soft drinks & water)':'—'));
   body += row('Estimated total', t.total ? 'AED '+peMoney(t.total) : '—')+row('Minimum spend', e.min_spend?'AED '+peMoney(e.min_spend):'—');
   body += row('Dietary', e.dietary)+row('Payment', e.payment_terms);
   body += row('Status', peStatusMeta(e.status).n)+row('Last update', new Date().toLocaleDateString('en-GB')+' · '+peActor());
@@ -3636,7 +3636,7 @@ function peRenderPacksView(){
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner.</div>'+
     (bevs.length?bevs.map(function(b){
       return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="bev" data-key="'+b.id+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
-        '<b>'+peEsc(b.name)+'</b>'+(b.duration_hours?' · '+b.duration_hours+'h':'')+' · AED '+peMoney(b.price_pp)+' / guest</label><br>'+
+        '<b>'+peEsc(b.name)+'</b>'+(b.duration_hours?' · '+b.duration_hours+'h':'')+(b.price_pp!=null?' · AED '+peMoney(b.price_pp)+' / guest':' · price on the proposal')+'</label><br>'+
         '<span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span></span>'+
         (b.pdf?'<span style="display:flex;gap:6px;flex-shrink:0"><button class="pe-btn sec sm" onclick="window.open(\''+b.pdf+'\',\'_blank\')">Open PDF</button></span>':'')+'</div>';
     }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
@@ -3790,7 +3790,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice){
   if(bevs.length){
     if(both) inner += peMailSection('The beverages — packages');
     inner += bevs.map(function(b){
-      var priceTag = noPrice ? '' : ' · AED '+peMoney(b.price_pp)+' / person';
+      var priceTag = (noPrice || b.price_pp==null) ? '' : ' · AED '+peMoney(b.price_pp)+' / person';
       var extra = b.pdf
         ? '<div style="text-align:center;margin:10px 0 20px"><a href="'+(/^https?:/i.test(b.pdf)?b.pdf:peBaseUrl()+b.pdf)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the beverage package</a></div>'
         : '';
@@ -4322,7 +4322,7 @@ function peRenderBevLib(){
   }
   h += '<div class="pe-card">'+(peState.bevs.length?peState.bevs.map(function(b){
     var pour = (b.cost_pp!=null && Number(b.price_pp)>0) ? Math.round(Number(b.cost_pp)/Number(b.price_pp)*100) : null;
-    return '<div class="pe-dishrow" style="opacity:'+(b.active===false?.45:1)+'"><span><b>'+peEsc(b.name)+'</b> · '+(b.duration_hours?b.duration_hours+'h · ':'')+'AED '+peMoney(b.price_pp)+'/guest'+
+    return '<div class="pe-dishrow" style="opacity:'+(b.active===false?.45:1)+'"><span><b>'+peEsc(b.name)+'</b> · '+(b.duration_hours?b.duration_hours+'h · ':'')+(b.price_pp!=null?'AED '+peMoney(b.price_pp)+'/guest':'price on the proposal')+
       (pour!=null?' · <span style="color:'+(pour>=30?'#B00020':'#2E6B34')+'">cost AED '+peMoney(b.cost_pp)+' → '+pour+'%</span>':' · <span style="color:#B08D3E">no cost yet</span>')+
       '<br><span style="font-size:11px;color:#8B7355">'+peEsc(b.includes||'')+'</span>'+(b.pdf?' <span style="font-size:11px;color:#2E6B34">· PDF ✓</span>':'')+'</span>'+
       '<button class="pe-btn sec sm" onclick="peState.editBevId=\''+b.id+'\';peState.bevPdf=null;renderMain()">Edit</button></div>';
@@ -4367,12 +4367,13 @@ async function peBevPdfUpload(input){
 async function peSaveBev(id){
   var g = function(f){ var el=document.getElementById('pe-b-'+f); return el?el.value.trim():''; };
   if(!g('name')){ peToast('Package name is required', true); return; }
-  if(!g('price_pp')){ peToast('Price per guest is required', true); return; }
+  // Price per guest is optional: a minimum-spend / confidential package carries no
+  // per-guest price — the money lives on the proposal's minimum spend.
   var naEl = document.getElementById('pe-b-non_alcoholic');
   var existing = id ? peBevById(id) : null;
   var pdfUrl = peState.bevPdf || (existing && existing.pdf) || null;
   var row = { name:g('name'), duration_hours:g('duration_hours')?Number(g('duration_hours')):null,
-              price_pp:Number(g('price_pp')), cost_pp:g('cost_pp')?Number(g('cost_pp')):null,
+              price_pp:g('price_pp')?Number(g('price_pp')):null, cost_pp:g('cost_pp')?Number(g('cost_pp')):null,
               includes:g('includes')||null, non_alcoholic: naEl?!!naEl.checked:false, pdf:pdfUrl, created_by:peActor() };
   async function saveRow(rr){
     return id ? await sb.from('event_bev_packages').update(rr).eq('id', id).select().single()
@@ -4387,6 +4388,10 @@ async function peSaveBev(id){
   if(r.error && /\bpdf\b/.test(String(r.error.message||''))){
     delete row.pdf; r = await saveRow(row);
     if(!r.error) peToast('Saved without the PDF — the pdf field needs foh-events-bev-pdf.sql run first.', true);
+  }
+  // A price-free package needs price_pp to be nullable — name the SQL if it isn't yet.
+  if(r.error && row.price_pp==null && /price_pp|not-null|null value/i.test(String(r.error.message||''))){
+    peToast('To save without a price, run foh-events-bev-price-optional.sql first (makes price optional).', true); return;
   }
   if(r.error || !r.data){ peToast('NOT saved — '+String(r.error&&r.error.message||'').slice(0,100), true); return; }
   if(id){ peState.bevs = peState.bevs.map(function(b){ return b.id===id ? r.data : b; }); } else peState.bevs.push(r.data);
@@ -4614,7 +4619,7 @@ function peRenderWizard(){
     '<select class="pe-in" onchange="peWizSet(\'bev\',this.value)"><option value="" '+(peWiz.bev===''?'selected':'')+'>Choose…</option>'+
     '<option value="none"'+(peWiz.bev==='none'?' selected':'')+'>No beverage package — whole budget on food</option>'+
     '<option value="dry"'+(peWiz.bev==='dry'?' selected':'')+'>No alcohol — soft drinks &amp; water (beverage charge AED 0)</option>'+
-    bevs.map(function(b){ return '<option value="'+b.id+'"'+(peWiz.bev===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+
+    bevs.map(function(b){ return '<option value="'+b.id+'"'+(peWiz.bev===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+(b.price_pp!=null?' — AED '+peMoney(b.price_pp)+'/guest':' — price on the proposal')+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+
     '</select></div>'+
     '<div style="margin-top:8px"><div class="pe-lbl">The guest doesn’t want… (tap to exclude)</div>'+
     PE_WIZ_EXCL.map(function(x){
@@ -4856,7 +4861,7 @@ function peRenderGuided(){
       '<select class="pe-in" onchange="peGuideSet(\'bevId\',this.value)">'+
       '<option value=""'+(g.bevId===''?' selected':'')+'>No beverage package</option>'+
       '<option value="dry"'+(g.bevId==='dry'?' selected':'')+'>No alcohol — soft drinks &amp; water</option>'+
-      bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+' — AED '+peMoney(b.price_pp)+'/guest'+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select></div>';
+      bevs.map(function(b){ return '<option value="'+b.id+'"'+(g.bevId===b.id?' selected':'')+'>'+peEsc(b.name)+(b.duration_hours?' — '+b.duration_hours+'h':'')+(b.price_pp!=null?' — AED '+peMoney(b.price_pp)+'/guest':' — price on the proposal')+(b.non_alcoholic?' · alcohol-free':'')+'</option>'; }).join('')+'</select></div>';
   } else {
     // Food is only "ready" if a package or set menu was actually chosen. If she
     // picked "build myself" (or nothing), there is NO menu yet — she must build it
