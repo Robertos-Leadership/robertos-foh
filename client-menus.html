@@ -9,7 +9,8 @@
   body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
   .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
-  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .brand{text-align:center;padding:26px 20px 20px}
+  .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .sub{font-size:14px;color:#8A6A4F;text-align:center}
   .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
   .sect{border-top:1px solid #E3D5C2;margin:18px 22px 0;padding-top:14px}
@@ -48,7 +49,7 @@ var noPrice  = q.get('np')==='1';
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function el(id){ return document.getElementById(id); }
 function money(n){ return (n==null||isNaN(n)) ? '' : Number(n).toLocaleString('en-US'); }
-function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+function fail(msg){ el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="msg">'+esc(msg)+'</div>'; }
 function inList(a){ return 'in.(' + a.map(function(x){ return '"'+x+'"'; }).join(',') + ')'; }
 
 async function get(path){
@@ -91,7 +92,7 @@ function render(menus, bevs){
   bevs.sort(function(a,b){ return bevIds.indexOf(a.id) - bevIds.indexOf(b.id); });
 
   var both = menus.length && bevs.length;
-  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+(both ? 'Menus &amp; beverage packages' : (menus.length ? 'Our set menus' : 'Beverage packages'))+'</div>'+
     '<div class="sub2">'+(who ? 'For '+esc(who)+' · ' : '')+'DIFC, Dubai — private dining &amp; events</div>';
 

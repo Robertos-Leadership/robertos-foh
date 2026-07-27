@@ -3080,10 +3080,24 @@ async function peSetMenuNote(eventId, val){
 }
 
 // ── documents ────────────────────────────────────────────────────────────────
+// The official wordmark — burgundy #410207 with the orange #fa4700 apostrophe.
+// Emails get the PNG, not the SVG: Gmail and Outlook strip inline SVG. The src
+// has to be absolute (peBaseUrl) so it still resolves once the mail has left us.
+// 11.923 is the artwork's true aspect, so the height is never guessed.
+// Outlook and Gmail often block remote images until the guest clicks "show
+// images". The alt text is styled so that, blocked, it still falls back to a
+// spaced burgundy wordmark rather than a broken-image icon.
+function peLogoImg(w){
+  var px = w || 300;
+  return '<img src="'+peBaseUrl()+'robertos-logo-email.png" width="'+px+'" height="'+Math.round(px/11.923)+
+         '" alt="R O B E R T O ’ S" style="display:block;margin:0 auto;border:0;'+
+         'font-family:Georgia,serif;font-size:22px;letter-spacing:7px;color:#410207;text-align:center">';
+}
 function peDocShell(title, inner){
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+peEsc(title)+'</title>'+
   '<style>@page{margin:18mm}body{font-family:Georgia,\'Times New Roman\',serif;color:#2C1810;margin:0;padding:24px;max-width:720px;margin:0 auto}'+
-  '.brand{font-size:22px;letter-spacing:7px;color:#400207;text-align:center;margin:6px 0 2px}'+
+  /* bottom margin keeps the designer's clear space (~0.9x the logo height) */
+  '.brand{text-align:center;margin:10px 0 24px}'+
   '.rule{width:70px;height:1px;background:#C9A84C;margin:10px auto}'+
   'h2{font-size:16px;letter-spacing:2px;color:#7A8B4A;text-align:center;font-weight:normal;text-transform:uppercase}'+
   '.sub{text-align:center;font-size:12px;color:#8B7355}'+
@@ -3105,7 +3119,7 @@ function pePrintHTML(html){
 function peProposalHTML(e){
   var t = peCalcTotals(e);
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
-  var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div>';
+  var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>';
   // Title falls back to the food theme, but a beverage-only booking has no canapés —
   // don't head the guest's proposal "Canapé Selection" when there's no food on it.
   var hasFoodDoc = t.items.length>0 || !!e.set_menu || (e.food_price_pp!=null && e.food_price_pp!=='');
@@ -3203,7 +3217,7 @@ function pePrintProposal(id){ var e = peEvById(id); if(e) pePrintHTML(peProposal
 function peBriefBodyHTML(e){
   var t = peCalcTotals(e);
   function row(l,v){ return '<tr><td class="l">'+l+'</td><td>'+peEsc(v==null||v===''?'—':v)+'</td></tr>'; }
-  var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div><div class="fs-h">EVENT BRIEF</div><table>';
+  var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div><div class="fs-h">EVENT BRIEF</div><table>';
   body += row('Booking name', e.client_name)+row('Company', e.company)+row('Contact', (e.contact_name||'')+(e.contact_phone?' · '+e.contact_phone:'')+(e.contact_email?' · '+e.contact_email:''));
   body += row('Event date', peDLabel(e.event_date))+row('Type', e.event_type)+row('Timing', (e.time_from||'')+(e.time_to?' – '+e.time_to:''));
   // #5 — a two-space evening moves rooms partway through. The floor and the
@@ -3769,7 +3783,7 @@ function peSendMenuPackWa(){
 }
 function peBaseUrl(){ return location.origin + location.pathname.replace(/[^\/]*$/, ''); }
 function peGuestEmailHTML(title, intro, name, note, inner, noPrice){
-  var body = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div>'+
+  var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
     '<h2>'+peEsc(title)+'</h2>'+
     '<div class="sub">DIFC, Dubai · private dining &amp; events</div>'+
     '<p style="font-size:13.5px;margin-top:24px">Dear '+peEsc(name||'guest')+',</p>'+
@@ -5206,7 +5220,7 @@ function peForecastHTML(fc){
       '<td>'+peEsc(e.area||'')+'</td><td>'+(e.guests||'')+'</td><td>'+peEsc(peStatusMeta(e.status).n)+'</td>'+
       '<td style="text-align:right">'+peMoney(peEventValue(e))+'</td></tr>';
   }).join('');
-  return '<div class="brand">R O B E R T O \u2019 S</div><div class="fs-h">EVENTS FORECAST \u2014 '+peEsc(fc.from)+' to '+peEsc(fc.to)+'</div>'+
+  return '<div class="brand">'+peLogoImg()+'</div><div class="fs-h">EVENTS FORECAST \u2014 '+peEsc(fc.from)+' to '+peEsc(fc.to)+'</div>'+
     '<p style="font-family:Arial,sans-serif;font-size:13px">Confirmed &amp; definite: <b>AED '+peMoney(fc.conf.v)+'</b> ('+fc.conf.n+' events) \u00b7 '+
     'Pipeline: <b>AED '+peMoney(fc.pipe.v)+'</b> ('+fc.pipe.n+' enquiries) \u00b7 '+
     'Lost: <b>AED '+peMoney(fc.lost.v)+'</b> ('+fc.lost.n+')</p>'+
@@ -5392,7 +5406,7 @@ function peRenderReport(){
 function pePrintReport(){
   var el = document.getElementById('main-content');
   if(!el) return;
-  pePrintHTML(peDocShell('Group report', '<div class="brand">R O B E R T O ’ S</div><div class="fs-h">GROUP REPORT — '+peEsc(peState.month)+'</div>'+
+  pePrintHTML(peDocShell('Group report', '<div class="brand">'+peLogoImg()+'</div><div class="fs-h">GROUP REPORT — '+peEsc(peState.month)+'</div>'+
     el.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'').replace(/onclick="[^"]*"/g,'')));
 }
 
@@ -5487,7 +5501,7 @@ function peQuickPrint(){
   if(!dishes.length) return;
   var tt = peQuickTotals();
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
-  var body = '<div class="brand">R O B E R T O \u2019 S</div><div class="rule"></div>'+
+  var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
     '<h2>'+peEsc(peQuick.title)+'</h2>';
   var sub = [];
   if(tt.perGuest!=null && tt.guests) sub.push('AED '+peMoney(tt.perGuest)+' / person');

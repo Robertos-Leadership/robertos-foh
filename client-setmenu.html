@@ -9,7 +9,8 @@
   body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
   .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
-  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .brand{text-align:center;padding:26px 20px 20px}
+  .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .sub{font-size:14px;color:#8A6A4F;text-align:center}
   .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
   .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
@@ -58,7 +59,7 @@ function flash(msg){
   if(flashTimer) clearTimeout(flashTimer);
   flashTimer = setTimeout(function(){ f.style.display='none'; }, 4200);
 }
-function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+function fail(msg){ el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="msg">'+esc(msg)+'</div>'; }
 
 // With a token the page collects the guest's numbers; without one it is a
 // beautiful read-only menu — the link Valentina shares on WhatsApp.
@@ -78,7 +79,7 @@ async function load(){
 function chooseCourses(){ return (menu.courses||[]).filter(function(c){ return c.choose; }); }
 
 function render(){
-  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+esc(menu.name)+'</div>'+
     '<div class="sub2">'+(!viewOnly&&guests?guests+' guests · ':'')+(isFinite(agreedPP)?'AED '+agreedPP+' per guest':(menu.price_pp!=null?'AED '+menu.price_pp+' per guest':''))+'</div>';
   if(viewOnly){
@@ -167,7 +168,7 @@ async function send(){
       headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' },
       body: JSON.stringify(payload) });
     if(!r.ok){ var t = await r.text(); throw new Error(t.slice(0,120)); }
-    el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div>'+
+    el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
       '<div class="msg">Grazie! Your choices have been sent.<br><br>Valentina will confirm everything back to you shortly.</div>';
   }catch(e){
     btn.disabled = false; btn.textContent = 'Send my choices to Roberto’s';

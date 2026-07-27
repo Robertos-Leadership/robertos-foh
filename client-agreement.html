@@ -9,7 +9,8 @@
   body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
   .wrap{max-width:640px;margin:0 auto;padding:18px 14px 40px}
   .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden;padding-bottom:26px}
-  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .brand{text-align:center;padding:26px 20px 20px}
+  .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .rule{width:70px;height:1px;background:#C9A84C;margin:10px auto}
   .h2{font-size:15px;letter-spacing:2px;color:#7A8B4A;text-align:center;font-weight:normal;text-transform:uppercase}
   .sub{font-size:13px;color:#8A6A4F;text-align:center;margin-top:4px}
@@ -49,7 +50,7 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 function money(n){ var v=Number(n); return isNaN(v)?'—':Math.round(v).toLocaleString('en-US'); }
 function dLabel(ds){ if(!ds) return '—'; var d=new Date(String(ds).slice(0,10)+'T12:00:00'); return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
 function el(id){ return document.getElementById(id); }
-function fail(msg){ el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>'; }
+function fail(msg){ el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="msg">'+esc(msg)+'</div>'; }
 
 async function load(){
   if(!token) return fail('This link is not valid.');
@@ -64,7 +65,7 @@ async function load(){
 
 function render(data){
   var ev = data.event || {};
-  var h = '<div class="brand">R O B E R T O ’ S</div><div class="rule"></div>'+
+  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="rule"></div>'+
     '<div class="h2">Your Event Proposal &amp; Agreement</div>'+
     '<div class="sub">'+(ev.client_name?'Prepared for '+esc(ev.client_name)+' · ':'')+esc(dLabel(ev.event_date))+(ev.area?' · '+esc(ev.area):'')+'</div>';
 

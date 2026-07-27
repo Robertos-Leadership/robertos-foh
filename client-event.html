@@ -9,7 +9,8 @@
   body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
   .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
-  .brand{font-size:20px;letter-spacing:6px;color:#400207;text-align:center;padding:26px 20px 4px}
+  .brand{text-align:center;padding:26px 20px 20px}
+  .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .sub{font-size:14px;color:#8A6A4F;text-align:center}
   .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
   .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
@@ -73,7 +74,7 @@ function flash(msg){
 function focusGuests(){ var g = el('cl-gcount'); if(g){ g.focus(); g.scrollIntoView({behavior:'smooth', block:'center'}); } }
 
 function fail(msg){
-  el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div><div class="msg">'+esc(msg)+'</div>';
+  el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="msg">'+esc(msg)+'</div>';
 }
 
 async function load(){
@@ -93,7 +94,7 @@ function render(data){
   var groups = [['Cold','Cold canapés'],['Hot','Hot canapés'],['Dessert','Dolci']];
   var dt = ev.event_date ? new Date(ev.event_date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) : '';
   var open = data.mode==='open';
-  var h = '<div class="brand">R O B E R T O ’ S</div>'+
+  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+(open?'Our canapé selection — pick your favourites':'Canapé selection for your event')+'</div>'+
     (open ? '<div class="sub2">Tick what you like and send it to us — Valentina will take care of the rest.</div>'
           : '<div class="sub2">'+esc([ev.client_name||ev.company, dt, ev.area].filter(Boolean).join(' · '))+(ev.guests?' · '+ev.guests+' guests':'')+'</div>');
@@ -252,7 +253,7 @@ async function send(){
       body: JSON.stringify(payload) });
     var data = await r.json();
     if(!r.ok || data.error) throw new Error(data.error||'failed');
-    el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div>'+
+    el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
       '<div class="msg">Grazie! Your selection has been sent.<br><br>Valentina will be in touch shortly to confirm everything for your evening.</div>';
   }catch(e){
     btn.disabled = false; btn.textContent = 'Send selection to Roberto’s';

@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260723a';
+const CACHE = 'robertos-foh-v20260727a';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -51,7 +51,12 @@ const ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './robertos-logo-burgundy.svg',
-  './robertos-logo-white.svg'
+  './robertos-logo-white.svg',
+  // The official wordmark used on every guest + team document. The SVG is what
+  // the client-*.html pages render; the PNG is what the emails point at, because
+  // Gmail and Outlook strip inline SVG.
+  './robertos-logo-wordmark.svg',
+  './robertos-logo-email.png'
 ];
 
 // Install: precache assets, then activate immediately (don't wait for old tabs).
