@@ -300,10 +300,13 @@ function revReview(p){
   // real sample for that weekday; otherwise fall back to the recent ~10-week run-rate
   // (same source the Forecast tab uses). Without this, weekdays this month hasn't
   // logged yet project as 0 — collapsing the full-month forecast early in every month.
-  var fcAvg=revFcWeekdayAvgs(p).avg;
+  var fcW=revFcWeekdayAvgs(p), fcAvg=fcW.avg;
   function projRate(wd){ return (cAvg[wd]!=null)?cAvg[wd]:(fcAvg[wd]||0); }
-  var dim=revDaysInMonth(p), proj=0, remaining=0;
-  for(var d=W+1; d<=dim; d++){ var wd=revWeekday(p+'-'+String(d).padStart(2,'0')); if(wd==='Sunday') continue; proj+=projRate(wd); remaining++; }
+  // usedWindow: at least one remaining night is priced off the pre-period window rather than
+  // this month's own trading. That is what the basis line under the forecast must say out loud —
+  // a forecast built from May–July nights must never read as if this month produced it.
+  var dim=revDaysInMonth(p), proj=0, remaining=0, usedWindow=false;
+  for(var d=W+1; d<=dim; d++){ var wd=revWeekday(p+'-'+String(d).padStart(2,'0')); if(wd==='Sunday') continue; if(cAvg[wd]==null) usedWindow=true; proj+=projRate(wd); remaining++; }
   var forecast=cur.mtdNet+proj;
   function ac(o){ return o.tdays?o.net/o.tdays:0; }
   return {
@@ -317,8 +320,27 @@ function revReview(p){
     venueLoun:{cur:cW.lounCov?cW.lounNet/cW.lounCov:0,prev:pW.lounCov?pW.lounNet/pW.lounCov:0,chg:revChg(cW.lounCov?cW.lounNet/cW.lounCov:0,pW.lounCov?pW.lounNet/pW.lounCov:0)},
     weekdays:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(function(wd){ return {wd:wd,cur:cAvg[wd]||0,prev:pAvg[wd]||0,chg:revChg(cAvg[wd]||0,pAvg[wd]||0),proj:projRate(wd)}; }),
     mtd:cur.mtdNet, projected:proj, remaining:remaining, forecast:forecast,
+    window:fcW, usedWindow:usedWindow,
     budgetTotal:cur.budgetTotal, vsBudget:forecast-cur.budgetTotal, vsBudgetPct:cur.budgetTotal?(forecast-cur.budgetTotal)/cur.budgetTotal:''
   };
+}
+// ── Where the forecast comes from, in plain words ──
+// The forecast is mostly PAST trading until a month is well under way, and a number whose
+// source isn't stated gets read as fact. These two helpers are the single wording for it —
+// the month card, the projection block, the printed report and the AI briefing all call them,
+// so the figure can never be described one way on screen and another way in an email.
+function revShortDate(ds){ return new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+function revFcWindowSpan(rv){ var w=(rv&&rv.window)||{}; return (w.from&&w.to)?revShortDate(w.from)+' – '+revShortDate(w.to):''; }
+function revForecastBasis(rv){
+  var span=revFcWindowSpan(rv), filed=(rv.tradingDays&&rv.tradingDays.cur)||0;
+  if(!rv.remaining) return filed?('Final — all '+filed+' night'+(filed>1?'s':'')+' filed'):'';   // month complete: nothing is projected
+  if(!filed) return span?('Based on trading '+span):'';                                          // no actuals yet: 100% past trading
+  return filed+' night'+(filed>1?'s':'')+' so far + '
+       + (rv.usedWindow&&span ? 'trading '+span : rv.remaining+' projected from this month');
+}
+function revProjRateLabel(rv){
+  var span=revFcWindowSpan(rv);
+  return (rv.usedWindow&&span)?('weekday run-rate from trading '+span):'this month\'s weekday run-rate';
 }
 
 // ══════════════════════════════════════════════
@@ -573,7 +595,8 @@ function revBriefing(){
   L.push('  MTD net '+Math.round(rv.mtd)+' over '+rv.tradingDays.cur+' trading days; budget-to-date '+Math.round(m.budgetToDate)+'.');
   L.push('  Vs '+revMonthLabel(rv.prevPeriod)+' matched window: net '+revPct(rv.net.chg)+', covers '+revPct(rv.covers.chg)+', avg spend/cover '+revPct(rv.spendCover.chg)+'.');
   L.push('  Weekday avg net: '+rv.weekdays.map(function(w){return w.wd.slice(0,3)+' '+Math.round(w.cur);}).join(', ')+'.');
-  L.push('  Full-month forecast '+Math.round(rv.forecast)+' vs budget '+Math.round(rv.budgetTotal)+' ('+revPct(rv.vsBudgetPct)+').');
+  var fcB=revForecastBasis(rv);
+  L.push('  Full-month forecast '+Math.round(rv.forecast)+' vs budget '+Math.round(rv.budgetTotal)+' ('+revPct(rv.vsBudgetPct)+').'+(fcB?' Forecast basis: '+fcB+'.':''));
   var T=(R.targets&&R.targets[p])||0;
   if(T>0){ var reqRem=T-rv.mtd, upl=rv.projected?(reqRem/rv.projected-1):null;
     L.push('  Target '+Math.round(T)+'. Forecast vs target: '+Math.round(rv.forecast-T)+' ('+revPct(T?(rv.forecast-T)/T:0)+'). To hit target, the remaining days must deliver '+Math.round(reqRem)+' vs projected '+Math.round(rv.projected)+(upl!=null?' = a '+(upl>=0?'+':'')+(upl*100).toFixed(1)+'% uplift on the current run-rate':'')+'.'); }
@@ -1003,7 +1026,8 @@ function revExportMonth(){
   var p=revInit().period, m=revMonthData(p), rv=revReview(p), a=revAreaMTD(p);
   var toB=m.budgetToDate?Math.round(m.mtdNet/m.budgetToDate*100):0;
   function kpi(k,v,s){ return '<div class="rep-kpi"><div class="rep-k">'+k+'</div><div class="rep-v">'+v+'</div><div class="rep-s">'+s+'</div></div>'; }
-  var kpis='<div class="rep-kpis">'+kpi('MTD net sales',revMoney(m.mtdNet),m.tradingDays+' trading days')+kpi('Budget to date',revMoney(m.budgetToDate),toB+'% achieved')+kpi('Full-month forecast',revMoney(rv.forecast),revPct(rv.vsBudgetPct)+' vs budget')+kpi('Avg spend / cover',revMoney(rv.spendCover.cur),revPct(rv.spendCover.chg)+' vs last month')+'</div>';
+  var fcBasis=revForecastBasis(rv);
+  var kpis='<div class="rep-kpis">'+kpi('MTD net sales',revMoney(m.mtdNet),m.tradingDays+' trading days')+kpi('Budget to date',revMoney(m.budgetToDate),toB+'% achieved')+kpi('Full-month forecast',revMoney(rv.forecast),revPct(rv.vsBudgetPct)+' vs budget'+(fcBasis?' &middot; '+fcBasis:''))+kpi('Avg spend / cover',revMoney(rv.spendCover.cur),revPct(rv.spendCover.chg)+' vs last month')+'</div>';
   var anyDP=(a.rlNet+a.rdNet+a.llNet+a.ldNet)>0;
   var charts='<div class="rep-charts">'+revChartNetBudget(p)+revChartCumulative(p)+revChartVenue(p)+revChartWeekday(p)+(anyDP?revChartDaypart(p):'')+'</div>';
   var rPct=a.totNet?Math.round(a.restNet/a.totNet*100):0;
@@ -1011,7 +1035,7 @@ function revExportMonth(){
     +'<tr><td>Restaurant</td><td>'+revMoney(a.restNet)+'</td><td>'+rPct+'%</td><td>'+a.restCov+'</td><td>'+(a.restCov?revMoney(a.restNet/a.restCov).replace('AED ',''):'—')+'</td></tr>'
     +'<tr><td>Scala Lounge &amp; Bar</td><td>'+revMoney(a.lounNet)+'</td><td>'+(100-rPct)+'%</td><td>'+a.lounCov+'</td><td>'+(a.lounCov?revMoney(a.lounNet/a.lounCov).replace('AED ',''):'—')+'</td></tr>'
     +'<tr><td><b>Total</b></td><td><b>'+revMoney(a.totNet)+'</b></td><td>100%</td><td>'+a.totCov+'</td><td>'+(a.totCov?revMoney(a.totNet/a.totCov).replace('AED ',''):'—')+'</td></tr></tbody></table>';
-  var proj='<h2>Full-month projection</h2><table><tbody><tr><td>Actual MTD</td><td>'+revMoney(rv.mtd)+'</td></tr><tr><td>Projected ('+rv.remaining+' remaining days)</td><td>'+revMoney(rv.projected)+'</td></tr><tr><td><b>Forecast — full month</b></td><td><b>'+revMoney(rv.forecast)+'</b></td></tr><tr><td>vs Budget ('+revMoney(rv.budgetTotal)+')</td><td>'+revMoney(rv.vsBudget)+' · '+revPct(rv.vsBudgetPct)+'</td></tr></tbody></table>';
+  var proj='<h2>Full-month projection</h2><table><tbody><tr><td>Actual MTD</td><td>'+revMoney(rv.mtd)+'</td></tr><tr><td>Projected ('+rv.remaining+' remaining days &mdash; '+revProjRateLabel(rv)+')</td><td>'+revMoney(rv.projected)+'</td></tr><tr><td><b>Forecast — full month</b></td><td><b>'+revMoney(rv.forecast)+'</b></td></tr><tr><td>vs Budget ('+revMoney(rv.budgetTotal)+')</td><td>'+revMoney(rv.vsBudget)+' · '+revPct(rv.vsBudgetPct)+'</td></tr></tbody></table>';
   revPrintReport(revMonthLabel(p),'<h2>'+revMonthLabel(p)+' — overview</h2>'+revUnfiledBanner(p)+kpis+charts+areaTbl+proj);
 }
 function revChatLastAssistant(){ var c=revChatInit(); for(var i=c.thread.length-1;i>=0;i--){ if(c.thread[i].role==='assistant') return c.thread[i]; } return null; }
@@ -1119,7 +1143,8 @@ function revRenderMonth(){
   h.push('<div class="rev-cards">');
   h.push('<div class="rev-card"><div class="rev-k">MTD net sales</div><div class="rev-v">'+revMoney(m.mtdNet)+'</div><div class="rev-sub">'+m.tradingDays+' trading days</div></div>');
   h.push('<div class="rev-card"><div class="rev-k">Budget to date</div><div class="rev-v">'+revMoney(m.budgetToDate)+'</div>'+revBar(toBudget)+'<div class="rev-sub '+(m.mtdNet>=m.budgetToDate?'rev-pos':'rev-neg')+'">'+toBudget+'% of budget</div></div>');
-  h.push('<div class="rev-card"><div class="rev-k">Full-month forecast</div><div class="rev-v">'+revMoney(rv.forecast)+'</div><div class="rev-sub '+revPctClass(rv.vsBudgetPct)+'">'+revPct(rv.vsBudgetPct)+' vs budget</div></div>');
+  var fcBasis=revForecastBasis(rv);
+  h.push('<div class="rev-card"><div class="rev-k">Full-month forecast</div><div class="rev-v">'+revMoney(rv.forecast)+'</div><div class="rev-sub '+revPctClass(rv.vsBudgetPct)+'">'+revPct(rv.vsBudgetPct)+' vs budget</div>'+(fcBasis?'<div class="rev-sub" style="margin-top:2px">'+fcBasis+'</div>':'')+'</div>');
   h.push('<div class="rev-card"><div class="rev-k">Avg spend / cover</div><div class="rev-v">'+revMoney(rv.spendCover.cur)+'</div><div class="rev-sub '+revPctClass(rv.spendCover.chg)+'">'+revPct(rv.spendCover.chg)+' vs '+revMonthLabel(rv.prevPeriod).split(' ')[0]+'</div></div>');
   h.push('</div>');
   // visual dashboard (charts) — collapsible
@@ -1188,7 +1213,7 @@ function revRenderMonth(){
   h.push('<div class="rev-section-h">Full-month projection</div>');
   h.push('<div class="rev-proj">'
     +'<div class="rev-proj-row"><span>Actual MTD</span><b>'+revMoney(rv.mtd)+'</b></div>'
-    +'<div class="rev-proj-row"><span>Projected — '+rv.remaining+' remaining days (this month\'s weekday run-rate)</span><b>'+revMoney(rv.projected)+'</b></div>'
+    +'<div class="rev-proj-row"><span>Projected — '+rv.remaining+' remaining days ('+revProjRateLabel(rv)+')</span><b>'+revMoney(rv.projected)+'</b></div>'
     +'<div class="rev-proj-row rev-proj-fore"><span>Forecast — full month</span><b>'+revMoney(rv.forecast)+'</b></div>'
     +'<div class="rev-proj-row"><span>vs Budget ('+revMoney(rv.budgetTotal)+')</span><b class="'+revPctClass(rv.vsBudgetPct)+'">'+revMoney(rv.vsBudget)+' · '+revPct(rv.vsBudgetPct)+'</b></div>');
   // Monthly target — the internal stretch. The BUDGET is the benchmark the board judges the
