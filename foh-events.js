@@ -74,9 +74,16 @@ async function loadAll(){
       sb.from('tasks').select('*').in('week_id', wIds).order('sort_order'),
       sb.from('finance').select('*').in('week_id', wIds).order('created_at')
     ]);
-    for(const w of activeWeeks){
-      state.tasks[w.id] = (tRes.data||[]).filter(t=>t.week_id===w.id);
-      state.finance[w.id] = (fRes.data||[]).filter(f=>f.week_id===w.id);
+    if(tRes.error || fRes.error){
+      // Leave state.tasks/finance untouched (undefined = "not loaded") rather than
+      // writing a false zero — ensureWeekLoaded/ensureWeeksLoaded will retry it.
+      console.warn('[loadAll] tasks/finance load failed', tRes.error||fRes.error);
+      toast('Could not load tasks/finance — showing what’s already loaded.', true);
+    } else {
+      for(const w of activeWeeks){
+        state.tasks[w.id] = (tRes.data||[]).filter(t=>t.week_id===w.id);
+        state.finance[w.id] = (fRes.data||[]).filter(f=>f.week_id===w.id);
+      }
     }
   }
   // First paint BEFORE the auto-roll writes below \u2014 login lands on data
@@ -121,9 +128,14 @@ async function ensureWeekLoaded(weekId){
       sb.from('tasks').select('*').eq('week_id', weekId).order('sort_order'),
       sb.from('finance').select('*').eq('week_id', weekId).order('created_at')
     ]);
-    if(!tRes.error) state.tasks[weekId] = tRes.data||[];
-    if(!fRes.error) state.finance[weekId] = fRes.data||[];
-  }catch(e){ console.warn('[ensureWeekLoaded]', e); }
+    if(tRes.error || fRes.error){
+      console.warn('[ensureWeekLoaded]', tRes.error||fRes.error);
+      toast('Could not load that week — try again.', true);
+    } else {
+      state.tasks[weekId] = tRes.data||[];
+      state.finance[weekId] = fRes.data||[];
+    }
+  }catch(e){ console.warn('[ensureWeekLoaded]', e); toast('Could not load that week — try again.', true); }
   _weekLoading[weekId] = false;
   renderMain();
 }
@@ -2208,7 +2220,7 @@ async function openActivity(){
   document.getElementById('modal-footer').innerHTML = `<button class="btn btn-gold" onclick="closeModal()">Close</button>`;
   document.getElementById('modal').classList.add('wide');
   document.getElementById('modal-overlay').classList.add('open');
-  const { data, error } = await sb.from('activity').select('*').order('created_at', { ascending: false }).limit(120);
+  const { data, error } = await sb.from('activity').select('*').order('created_at', { ascending: false }).limit(500);
   if(error){ document.getElementById('modal-body').innerHTML = '<div class="empty-state">Could not load activity.</div>'; return; }
   if(!data || !data.length){ document.getElementById('modal-body').innerHTML = '<div class="empty-state">No activity recorded yet.</div>'; return; }
   let lastDay = '';

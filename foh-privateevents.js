@@ -197,7 +197,12 @@ function peSenderName(){
 //   'events_editor_off'  -> revoked  (overrides a founder)
 var PE_EDITORS = ['vdetoni@robertos.ae','asacchi@skelmore.com','fguarracino@robertos.ae','kvukotic@robertos.ae','onafid@robertos.ae'];
 function peCanEdit(){
-  var mods = (state.access && state.access.modules) || [];
+  // Access not loaded yet (state.access is null while loadFohAccess is running,
+  // or before it has ever run) — deny until we actually know, rather than falling
+  // through to the founding-editor list, which would ignore a live revocation
+  // that just hasn't loaded.
+  if(!state.access) return false;
+  var mods = state.access.modules || [];
   if(mods.indexOf('events_editor') >= 0) return true;       // granted in Admin
   if(mods.indexOf('events_editor_off') >= 0) return false;  // revoked in Admin
   var e = (state.userEmail||'').toLowerCase();

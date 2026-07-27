@@ -592,6 +592,10 @@ function loadAdminUsers(){
     state.adminKitchen = res[2].error ? [] : (res[2].data||[]);
     state.adminSigners = (res[3] && res[3].data && res[3].data[0]) ? (res[3].data[0].value||{}) : {};
     state.adminLoaded  = true;
+    if(res[0].error || res[1].error || res[2].error){
+      console.error('Admin data load error:', res[0].error||res[1].error||res[2].error);
+      toast('Could not load some admin lists — showing what loaded.', true);
+    }
     if(state.currentTab==='admin'){ renderMain(); if((state.adminView||'people')==='people') setTimeout(function(){ try{admApplyFilter();}catch(e){} },0); }
   });
 }
@@ -1180,11 +1184,27 @@ function admFbCopy(){
     .then(function(){ toast('Link for '+p.name+' copied — paste it wherever you like'); admFbLogSent(p, 'link'); })
     .catch(function(){ window.prompt('Copy this link:', p.url); admFbLogSent(p, 'link'); });
 }
+// Pages a .range() fetch past the 1000-row PostgREST cap — same shape as
+// revFetchAllDaily / evFetchAllPaged elsewhere in the app. Without this, the
+// admin feedback list (and the topic/who filters built from it) silently lost
+// older survey rounds once total feedback passed a flat row cap.
+async function admFbFetchAll(){
+  var all=[], from=0, PAGE=1000;
+  for(;;){
+    var r=await sb.from('app_feedback').select('id,topic,who,answers,extra,created_at').order('created_at',{ascending:false}).range(from, from+PAGE-1);
+    if(r.error) return { data:null, error:r.error };
+    var rows=r.data||[];
+    all=all.concat(rows);
+    if(rows.length<PAGE) break;
+    from+=PAGE;
+  }
+  return { data:all, error:null };
+}
 async function admFbLoad(){
   state.fbRows=null; state.fbErr=null;
   if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
   try{
-    var r=await sb.from('app_feedback').select('id,topic,who,answers,extra,created_at').order('created_at',{ascending:false}).limit(200);
+    var r=await admFbFetchAll();
     if(r.error) throw r.error;
     state.fbRows=r.data||[];
   }catch(err){ state.fbErr=(err&&err.message)||'Could not load the feedback.'; }
@@ -2844,6 +2864,10 @@ function fohPickPerson(actionLabel, actionKey, opts){
       sb.from('foh_staff').select('id,name,emp_id,role,section').eq('active',true),
       actionKey ? sb.from('app_config').select('value').eq('key','signers').limit(1) : Promise.resolve({data:null})
     ]).then(function(res){
+      if(res[0] && res[0].error){
+        console.error('Staff picker load error:', res[0].error);
+        toast('Could not load the staff list — try again.', true);
+      }
       var all=(res[0]&&res[0].error)?[]:((res[0]&&res[0].data)||[]);
       var cfg=(res[1]&&res[1].data&&res[1].data[0])?(res[1].data[0].value||{}):{};
       var ids=(actionKey && cfg[actionKey] && cfg[actionKey].length)?cfg[actionKey]:null;
@@ -4656,6 +4680,13 @@ async function fohKrtLoadRange(numWeeks){
     sb.from('foh_roster').select('*').gte('work_date',from).lte('work_date',to).limit(8000),
     sb.from('foh_events').select('*').gte('event_date',from).lte('event_date',to).limit(3000)
   ]);
+  // Same required-read guard as fohLoadSchedData — a failed fetch must not render
+  // as a silent empty multi-week schedule (indistinguishable from "nobody's scheduled").
+  if(res[0].error || res[1].error){
+    console.error('Schedule range load error:', res[0].error || res[1].error);
+    toast('Could not load the schedule — showing the last loaded data.', true);
+    return;
+  }
   fohSchedStaff = (res[0].data||[]).filter(function(s){ return s.in_schedule!==false; });
   fohSchedRoster = {}; (res[1].data||[]).forEach(function(r){ fohSchedRoster[fohSchedRosterKey(r.staff_id, String(r.work_date).slice(0,10))]=r; });
   fohSchedEvents = {}; if(res[2] && !res[2].error){ (res[2].data||[]).forEach(function(e){ var d=String(e.event_date).slice(0,10); (fohSchedEvents[d]=fohSchedEvents[d]||[]).push({slot:e.slot||1,name:e.name}); }); }

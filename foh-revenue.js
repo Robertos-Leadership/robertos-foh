@@ -25,6 +25,20 @@ async function revFetchAllDaily(){
   }
   return { data:all, error:null };
 }
+// A missing table (module never set up) surfaces a distinct Postgres code —
+// any other error (network, RLS, timeout) is a real fetch failure and must not
+// be shown as "setup needed", or staff go looking for a setup problem that
+// doesn't exist.
+function revIsMissingTableError(e){ return !!e && (e.code==='42P01' || /does not exist/i.test(e.message||'')); }
+// Schedules a retry like loadFohAccess does (timer kept on R.retryT, same way
+// loadFohAccess keeps its own on state.accessRetryT). R.loading is left TRUE
+// across the wait — renderRevenue()'s "if(!R.loading) loadRevenue()" guard
+// would otherwise re-enter loadRevenue() on every render in the meantime,
+// spamming both the network and the toast instead of waiting out the backoff.
+function revScheduleRetry(R){
+  clearTimeout(R.retryT);
+  R.retryT=setTimeout(function(){ R.loading=false; loadRevenue(); }, 10000);
+}
 async function loadRevenue(){
   var R=revInit(); if(R.loading) return; R.loading=true;
   try{
@@ -36,7 +50,17 @@ async function loadRevenue(){
       // cannot silently truncate the way an unpaged daily read can.
       sb.from('rev_monthly').select('*')
     ]);
-    R.tablesMissing = !!(res[0].error||res[1].error||res[2].error);
+    var errs=[res[0].error,res[1].error,res[2].error].filter(Boolean);
+    if(errs.length && !errs.every(revIsMissingTableError)){
+      // Real failure, not a missing table — retry instead of parking on a
+      // misleading "setup needed" screen.
+      console.error('Revenue load error:', errs[0]);
+      toast('Could not load Revenue data — retrying…', true);
+      revScheduleRetry(R);
+      if(state.currentTab==='revenue') renderMain();
+      return;
+    }
+    R.tablesMissing = errs.length>0;
     R.rates={}; (res[0].data||[]).forEach(function(r){ R.rates[r.weekday]=r; });
     R.daily=res[1].data||[];
     R.targets={}; R.budgets={}; (res[2].data||[]).forEach(function(t){ R.targets[t.period]=Number(t.monthly_target)||0; if(t.monthly_budget!=null) R.budgets[t.period]=Number(t.monthly_budget); });
@@ -46,8 +70,15 @@ async function loadRevenue(){
     R.monthly={}; if(!res[3].error) (res[3].data||[]).forEach(function(m){ R.monthly[String(m.period).slice(0,7)]=m; });
     if(!R.period) R.period=revLatestPeriod();
     R.loaded=true;
-  }catch(e){ R.tablesMissing=true; R.loaded=true; }
-  R.loading=false;
+    clearTimeout(R.retryT);
+    R.loading=false;
+  }catch(e){
+    console.error('Revenue load error:', e);
+    toast('Could not load Revenue data — retrying…', true);
+    revScheduleRetry(R);
+    if(state.currentTab==='revenue') renderMain();
+    return;
+  }
   if(state.currentTab==='revenue') renderMain();
 }
 // helpers
