@@ -65,11 +65,26 @@ function resMoney0(n){ return Number(n||0).toLocaleString('en-US',{maximumFracti
 // app build is running against an edge function that predates the split -- a tip
 // on top is a far smaller error than showing nothing at all.
 function resGrossOf(r){ return Number(r && (r.gross != null ? r.gross : r.spend)) || 0; }
-// How many people to divide by. SevenRooms gives both the booked size and the
-// number that actually turned up; the average per person means the people who
-// actually ate, so arrived wins when the hosts have entered it. A 6-top where 4
-// came would otherwise read a third light.
-function resHeads(r){ return Number(r && r.arrived) > 0 ? Number(r.arrived) : (Number(r && r.pax) || 0); }
+// How many people to divide by: the BOOKED party size, which is what SevenRooms
+// calls covers and what the Covers column beside it shows.
+//
+// This used to prefer `arrived` and fall back to booked, on the reasoning that
+// the people who actually ate are the truer denominator. Checked against the
+// live book 28 Jul and that reasoning fails on the data: SevenRooms only carries
+// `arrived` on about 20% of bookings (9 of 39 on 23 Jul, 14 of 66 on 24 Jul, 11
+// of 56 on 25 Jul). So "arrived else booked" was never the arrived basis -- it
+// was a HYBRID, four fifths booked and one fifth arrived, which is neither thing
+// and reconciles to nothing.
+//
+// It also moved the answer: net per guest read 509.92 on 23 Jul against 487.08
+// on the booked basis, and 349.74 vs 330.19 on 25 Jul -- up to 5.9% out, on the
+// headline number Nicole reports. And it contradicted the screen, where the
+// Covers column, the area headers and the night tile all count booked covers
+// exactly as SevenRooms does.
+//
+// One basis, matching SevenRooms. The export still carries an Arrived column, so
+// anyone who wants the arrived view can work it out from the file.
+function resHeads(r){ return Number(r && r.pax) || 0; }
 // The night's money, counted the SAME way the rows are.
 //
 // WHY THIS IS COMPUTED HERE and not read off totals.covers_with_money: the edge
@@ -394,7 +409,9 @@ function resGuestHtml(){
 // are ever requested. A guest whose record can't be read is remembered as
 // failed so the app doesn't retry them on a loop -- their row simply shows no
 // history, which is honest.
-var RESH = { loading: false, err: null, got: {}, failed: {} };
+// `pending` holds the in-flight fetch so a second caller can AWAIT it instead of
+// being turned away. See resEnsureHistory for why that matters.
+var RESH = { loading: false, err: null, got: {}, failed: {}, pending: null };
 
 function resHistVenue(){
   var list = (RES.data && RES.data.reservations) || [];
@@ -402,8 +419,34 @@ function resHistVenue(){
   return '';
 }
 
+// Callers that need the history BEFORE they produce something (the print brief,
+// the Excel export) must await this and actually get the data.
+//
+// THE BUG THIS FIXES (Nicole, 28 Jul): her exported file had Gross filled in but
+// Visits, Lifetime net per cover and Last visit all blank -- and those three are
+// the only columns that come from this second fetch. It was reported as "she's on
+// a Mac"; the Mac had nothing to do with it. The screen kicks this off in the
+// background as soon as the book lands, and the old first line was
+// `if (RESH.loading) return;` -- so a caller arriving while that background fetch
+// was still running was turned away IMMEDIATELY and carried on with an empty
+// cache. Press Excel within the few seconds the profiles take (76 guests go out
+// in chunks of 8, so ~10 round trips) and you got a file with those columns
+// blank. Wait a moment first and it was fine, which is exactly why it looked like
+// someone's machine rather than a race.
+//
+// Now the in-flight promise is handed back so a second caller waits for it, then
+// re-checks in case the date changed under it and there are new ids to fetch.
+// The Print brief button was never hit by this because it disables itself while
+// RESH.loading; the Excel button had no such guard, which is on me.
 async function resEnsureHistory(){
-  if (RESH.loading) return;
+  if (RESH.pending){
+    try{ await RESH.pending; }catch(e){}
+    // A second pass only if genuinely new ids appeared while we waited.
+    var still = ((RES.data && RES.data.reservations) || []).some(function(r){
+      return r.client && !RESH.got[r.client] && !RESH.failed[r.client];
+    });
+    if (!still) return;
+  }
   var list = (RES.data && RES.data.reservations) || [];
   var want = [];
   for (var i = 0; i < list.length; i++){
@@ -413,26 +456,31 @@ async function resEnsureHistory(){
   if (!want.length) return;
   RESH.loading = true; RESH.err = null;
   if (typeof renderMain === 'function' && state.currentTab === 'reservations') renderMain();
-  try {
-    var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guests=' + encodeURIComponent(want.join(','))
-        + '&venue=' + encodeURIComponent(resHistVenue()), {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
-    });
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    var j = await r.json();
-    if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
-    var map = j.guests || {};
-    want.forEach(function(id){
-      if (map[id]) RESH.got[id] = map[id];
-      else RESH.failed[id] = 1;      // don't ask again for this one
-    });
-  } catch(e) {
-    console.warn('[reservations] guest history failed', e);
-    RESH.err = 'Guest history could not be read just now.';
-    // NOT marked failed: a network blip shouldn't permanently blank the column,
-    // so the next load of this screen tries again.
-  }
+  // The work is wrapped in a promise parked on RESH.pending, so anyone who calls
+  // while it runs can await THIS rather than being sent away empty-handed.
+  RESH.pending = (async function(){
+    try {
+      var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guests=' + encodeURIComponent(want.join(','))
+          + '&venue=' + encodeURIComponent(resHistVenue()), {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      var j = await r.json();
+      if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
+      var map = j.guests || {};
+      want.forEach(function(id){
+        if (map[id]) RESH.got[id] = map[id];
+        else RESH.failed[id] = 1;      // don't ask again for this one
+      });
+    } catch(e) {
+      console.warn('[reservations] guest history failed', e);
+      RESH.err = 'Guest history could not be read just now.';
+      // NOT marked failed: a network blip shouldn't permanently blank the column,
+      // so the next load of this screen tries again.
+    }
+  })();
+  try{ await RESH.pending; } finally { RESH.pending = null; }
   RESH.loading = false;
   if (typeof renderMain === 'function' && state.currentTab === 'reservations') renderMain();
 }
@@ -776,6 +824,21 @@ async function resExportExcel(){
     // Same as the brief: never hand over a file with the history columns
     // silently empty just because the profiles hadn't arrived yet.
     await resEnsureHistory();
+    // Belt as well as braces. The await above fixes the race that blanked
+    // Nicole's Visits / Last visit columns, but SevenRooms can still simply fail
+    // to answer for the profiles. If that happens the file is still useful --
+    // every money column is fine -- but she must be TOLD before she downloads it,
+    // not left to notice three blank columns later and doubt the whole report.
+    var wantHist = rows.filter(function(r){ return r.client; });
+    var gotHist = wantHist.filter(function(r){ return RESH.got[r.client]; });
+    if(wantHist.length && gotHist.length < wantHist.length * 0.5){
+      var go = confirm('Guest history has not loaded for '
+        + (wantHist.length - gotHist.length) + ' of ' + wantHist.length + ' bookings, so Visits, '
+        + 'Lifetime net per cover and Last visit will be blank for them.\n\n'
+        + 'Everything else — covers, gross, net and the per-guest averages — is complete.\n\n'
+        + 'Download anyway?');
+      if(!go) return;
+    }
     await resLoadExcelJS();
     var money = !fohBlocked('revenue');
     var aoa = resExportSheets(rows, money);
