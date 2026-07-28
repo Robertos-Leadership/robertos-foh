@@ -18,9 +18,15 @@ name: Deploy to GitHub Pages
 # does not recover on its own; it needs a re-run from the Actions tab.
 #
 # Both repos are now set to `build_type: workflow`, so this file is the single
-# deployer and that race cannot happen. If a deploy ever silently strands
-# again, check that setting FIRST (Settings -> Pages -> Source = GitHub
-# Actions), before looking at the code.
+# deployer. That removed one of the two ways a deploy could strand; the other
+# one -- and the one that actually bit -- is the concurrency setting below.
+#
+# IF A DEPLOY EVER SILENTLY STRANDS AGAIN, in this order:
+#   1. Actions tab -> is the latest run red with "in progress deployment"?
+#      Re-run it. The site does NOT recover on its own.
+#   2. Settings -> Pages -> Source must be "GitHub Actions", not a branch.
+#   3. Only then look at the code.
+# A push is not a deploy. Always check the served bytes, not git.
 
 on:
   push:
@@ -32,10 +38,25 @@ permissions:
   pages: write
   id-token: write
 
-# Never run two deploys at once; if a newer push comes in, drop the older one.
+# QUEUE deploys, never cancel one. This line is the actual cause of the 28 Jul
+# incident and it is counter-intuitive, so do not "tidy" it back.
+#
+# With cancel-in-progress: true, a second push cancels the first WORKFLOW RUN --
+# but the Pages DEPLOYMENT that run already created keeps going on GitHub's
+# side. The new run then asks for a deployment slot and is refused:
+#   "Deployment request failed ... due to in progress deployment.
+#    Please cancel <previous sha> first or wait for it to complete."
+# The run goes red, the push looks perfect from the command line, and the SITE
+# silently keeps serving the previous build until somebody re-runs it by hand.
+# Verified on 28 Jul: it happened on the live repo AND then, with only this
+# workflow deploying, on dev too -- so it is this setting, not the old
+# legacy-Jekyll-versus-workflow race.
+#
+# false = the second run waits for the first deployment to finish, then goes.
+# Slightly slower, and it always arrives.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
