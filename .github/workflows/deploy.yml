@@ -1,10 +1,26 @@
-name: Deploy DEV to GitHub Pages
+name: Deploy to GitHub Pages
 
-# Faster, more reliable deploy for the FOH DEV site.
+# The ONLY deployer for this site. Used by BOTH FOH repos (robertos-foh-dev and
+# robertos-foh) -- the header used to say "DEV REPO ONLY", which was wrong and
+# cost a live deploy on 28 Jul 2026. See the warning below.
 # - Skips the legacy Jekyll build (this is a plain static site, no build step).
 # - Publishes the whole repo as-is.
 # - The green check on this run = the site is actually live on the CDN.
-# DEV REPO ONLY (robertos-foh-dev). The LIVE repo still uses its own normal deploy.
+#
+# WHY THIS MUST BE THE ONLY DEPLOYER. Pages will run the legacy Jekyll builder
+# AND this workflow if the repo's Pages setting is `build_type: legacy`, and the
+# two race for the same deployment slot. On 28 Jul the live repo was in exactly
+# that state: two pushes 8 minutes apart, and the second one died with
+#   "Deployment request failed ... due to in progress deployment.
+#    Please cancel <previous sha> first or wait for it to complete."
+# The push succeeded, the commit was on main, raw.githubusercontent.com served
+# the new file -- and the live SITE served the previous build indefinitely. It
+# does not recover on its own; it needs a re-run from the Actions tab.
+#
+# Both repos are now set to `build_type: workflow`, so this file is the single
+# deployer and that race cannot happen. If a deploy ever silently strands
+# again, check that setting FIRST (Settings -> Pages -> Source = GitHub
+# Actions), before looking at the code.
 
 on:
   push:
