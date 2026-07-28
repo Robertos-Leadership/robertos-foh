@@ -727,7 +727,17 @@ function resExportSheets(rows, money){
   // column headed "AED" invites someone to ask why their file is broken.
   var head = ['Time','Covers','Arrived','Guest','Phone (last 4)','Table','Seating area','Shift',
               'Status','Note','Booked by','Booked on','Visits'];
-  if(money) head.push('Lifetime net per cover (AED)');
+  // Lifetime TOTAL as well as per-cover. Both are SevenRooms' own figures for
+  // this guest AT THIS VENUE, passed through untouched so they reconcile to the
+  // SevenRooms profile page exactly -- which is the whole point of them.
+  //
+  // Deliberately NOT exporting SevenRooms' `gross` lifetime field. It is not the
+  // same thing as the Gross column on a booking: ours is the menu-price check
+  // total and divides by 1.225 to net, whereas SevenRooms' lifetime gross/net
+  // ratio runs anywhere from 1.0000 to 1.2764 across the 71 profiles on 24 Jul,
+  // so it is some other basis. Two columns both called "gross" meaning two
+  // different things in one file is how a report gets quietly misread.
+  if(money) head.push('Lifetime spend (AED)', 'Lifetime net per cover (AED)');
   head.push('Last visit');
   if(money) head = head.concat(['Gross (AED)','Net (AED)','Gross per guest (AED)','Net per guest (AED)']);
   var body = rows.map(function(r){
@@ -741,7 +751,10 @@ function resExportSheets(rows, money){
       r.notes || '', r.booked_by || '', String(r.created || '').slice(0, 10),
       hist ? (Number(hist.visits) || 0) : null
     ];
-    if(money) line.push((hist && Number(hist.per_cover) > 0) ? Math.round(hist.per_cover * 100) / 100 : null);
+    if(money){
+      line.push((hist && Number(hist.spend) > 0) ? Math.round(hist.spend * 100) / 100 : null);
+      line.push((hist && Number(hist.per_cover) > 0) ? Math.round(hist.per_cover * 100) / 100 : null);
+    }
     line.push(hist && hist.last_visit ? String(hist.last_visit).slice(0, 10) : '');
     if(money){
       // Blank, not zero, when no check is linked -- a 0 here would drag her
@@ -792,7 +805,11 @@ function resExportSummary(rows, money){
       ['', 'The average PER GUEST is reliable (within about 2% of Simphony); the TOTAL is not.'],
       [],
       ['How net is worked out', 'Net = gross ÷ ' + resGrossToNet() + '  (10% service + 7% municipality on net, then 5% VAT)'],
-      ['What gross means', 'The menu-price total on the guest’s check - what they actually paid.']
+      ['What gross means', 'The menu-price total on the guest’s check - what they actually paid.'],
+      [],
+      ['The Lifetime columns', 'Visits, Lifetime spend and Lifetime net per cover are SevenRooms’ own figures for that guest AT THIS VENUE across their whole history - not this night.'],
+      ['', 'They belong to the GUEST, not the booking, so they must never be added up down the sheet: anyone who booked twice tonight appears twice. That is why the TOTAL row leaves them blank.'],
+      ['', 'They come from SevenRooms untouched and match the guest’s SevenRooms profile page. SevenRooms works out per-cover on its own basis, so it will not always equal Lifetime spend divided by covers.']
     ]);
   } else if(money){
     s = s.concat([
@@ -811,7 +828,7 @@ function resExportSummary(rows, money){
 var RES_XL_W = {
   'Time':8, 'Covers':8, 'Arrived':9, 'Guest':26, 'Phone (last 4)':13, 'Table':14,
   'Seating area':17, 'Shift':13, 'Status':15, 'Note':46, 'Booked by':18, 'Booked on':12,
-  'Visits':8, 'Lifetime net per cover (AED)':16, 'Last visit':12,
+  'Visits':8, 'Lifetime spend (AED)':16, 'Lifetime net per cover (AED)':16, 'Last visit':12,
   'Gross (AED)':13, 'Net (AED)':13, 'Gross per guest (AED)':15, 'Net per guest (AED)':15
 };
 
@@ -921,8 +938,18 @@ async function resExportExcel(){
     // column always matches the rows she is looking at.
     ws.autoFilter = { from:{row:headerRowNo, column:1}, to:{row:headerRowNo + body.length, column:n} };
     if(body.length){
+      // ONLY the night's own two money columns are summable. Everything else that
+      // happens to carry (AED) must stay blank:
+      //   * per-guest columns are averages -- adding them up means nothing
+      //   * the lifetime columns belong to the GUEST, not the booking. Summing
+      //     lifetime spend down a night double-counts anyone who booked twice and
+      //     produces a number that looks like revenue and is nothing of the sort.
+      // This was previously driven off "does the header say (AED)", which totalled
+      // the lifetime per-cover column -- a meaningless figure sitting in a bold
+      // TOTAL row, which is exactly where a wrong number gets believed.
+      var SUMMABLE = { 'Gross (AED)':1, 'Net (AED)':1 };
       var totals = head.map(function(h, ci){
-        if(!isMoney[ci] || /per guest/.test(h)) return null;   // averages don't sum
+        if(!SUMMABLE[h]) return null;
         var col = ws.getColumn(ci+1).letter;
         return { formula:'SUBTOTAL(109,' + col + (headerRowNo+1) + ':' + col + (headerRowNo+body.length) + ')' };
       });
