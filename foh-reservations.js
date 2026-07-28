@@ -646,15 +646,29 @@ function resShifts(){
 // total is 12% short of Simphony. So the Summary sheet carries the coverage, the
 // filter that was applied, and the gross-to-net rule alongside the numbers.
 // Don't tidy it away.
-function resLoadXLSX(){
-  if(window.XLSX) return Promise.resolve();
+// ExcelJS, not SheetJS. The stock take uses SheetJS, which is fine for a plain
+// grid, but its community build cannot style a cell at all -- that is a paid
+// feature -- so every file it makes is naked Calibri on white. The roster
+// download already solves this with ExcelJS (foh-core.js), so this uses the same
+// library, the same CDN pattern and the SAME brand palette, and the two exports
+// look like they came from one company.
+function resLoadExcelJS(){
+  if(window.ExcelJS) return Promise.resolve();
   return new Promise(function(res, rej){
     var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
     s.onload = res;
     s.onerror = function(){ rej(new Error('the spreadsheet library could not be reached')); };
     document.body.appendChild(s);
   });
+}
+
+// Same values the roster export uses. Don't re-pick these per module -- that is
+// how two "branded" files end up two different shades of red.
+var RES_XL = { VINO:'6B1F2A', SABBIA:'F5F0E8', GOLD:'C9A84C', DARK:'3D0F15', LIGHT:'F0EBE2' };
+function resXlBorder(colour, weight){
+  var c = {style: weight || 'thin', color:{argb:'FF'+colour}};
+  return {top:c, bottom:c, left:c, right:c};
 }
 
 // Money goes in as NUMBERS, never as "AED 1,234" strings -- the whole point of
@@ -743,6 +757,16 @@ function resExportSummary(rows, money){
   return s;
 }
 
+// Column widths, in the header order resExportSheets() builds. Keyed by header
+// text rather than by index so adding a column can't silently shift every width
+// one to the left.
+var RES_XL_W = {
+  'Time':8, 'Covers':8, 'Arrived':9, 'Guest':26, 'Phone (last 4)':13, 'Table':14,
+  'Seating area':17, 'Shift':13, 'Status':15, 'Note':46, 'Booked by':18, 'Booked on':12,
+  'Visits':8, 'Lifetime net per cover (AED)':16, 'Last visit':12,
+  'Gross (AED)':13, 'Net (AED)':13, 'Gross per guest (AED)':15, 'Net per guest (AED)':15
+};
+
 async function resExportExcel(){
   var btn = document.getElementById('res-xls-btn');
   try{
@@ -752,17 +776,155 @@ async function resExportExcel(){
     // Same as the brief: never hand over a file with the history columns
     // silently empty just because the profiles hadn't arrived yet.
     await resEnsureHistory();
-    await resLoadXLSX();
+    await resLoadExcelJS();
     var money = !fohBlocked('revenue');
-    var wb = XLSX.utils.book_new();
-    var ws = XLSX.utils.aoa_to_sheet(resExportSheets(rows, money));
-    ws['!cols'] = [{wch:7},{wch:7},{wch:8},{wch:26},{wch:12},{wch:12},{wch:18},{wch:12},{wch:16},
-                   {wch:40},{wch:16},{wch:12},{wch:7},{wch:22},{wch:12},{wch:13},{wch:13},{wch:17},{wch:17}];
-    XLSX.utils.book_append_sheet(wb, ws, 'Reservations');
-    var sum = XLSX.utils.aoa_to_sheet(resExportSummary(rows, money));
-    sum['!cols'] = [{wch:32},{wch:96}];
-    XLSX.utils.book_append_sheet(wb, sum, 'Summary');
-    XLSX.writeFile(wb, "Robertos Reservations " + RES.date + ".xlsx");
+    var aoa = resExportSheets(rows, money);
+    var head = aoa[0], body = aoa.slice(1);
+    var C = RES_XL;
+
+    var wb = new ExcelJS.Workbook();
+    wb.creator = "Roberto's DIFC"; wb.created = new Date();
+
+    var ws = wb.addWorksheet('Reservations', {
+      views: [{ state:'frozen', ySplit:4 }],          // title+sub+spacer+header stay put
+      pageSetup: { orientation:'landscape', fitToPage:true, fitToWidth:1 }
+    });
+    ws.columns = head.map(function(h){ return { width: RES_XL_W[h] || 14 }; });
+    var n = head.length;
+
+    var title = ws.addRow(["ROBERTO'S DIFC  —  Reservations"]);
+    title.height = 34;
+    ws.mergeCells(title.number, 1, title.number, n);
+    title.getCell(1).style = {
+      font:{bold:true, size:16, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+      alignment:{horizontal:'center', vertical:'middle'}
+    };
+    var filter = [];
+    if(RES.shift !== 'all') filter.push('shift: ' + RES.shift);
+    if(RES.q) filter.push('search: "' + RES.q + '"');
+    var sub = ws.addRow([resDateLabel(RES.date) + '   |   ' + rows.length + ' booking' + (rows.length===1?'':'s')
+      + (filter.length ? '   |   filtered by ' + filter.join(', ') : '')
+      + '   |   exported ' + new Date().toLocaleString('en-GB')]);
+    sub.height = 18;
+    ws.mergeCells(sub.number, 1, sub.number, n);
+    sub.getCell(1).style = {
+      font:{size:9, italic:true, color:{argb:'FF'+C.VINO}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.SABBIA}},
+      alignment:{horizontal:'center', vertical:'middle'}
+    };
+    ws.addRow([]);
+
+    var hdr = ws.addRow(head);
+    hdr.height = 30;
+    hdr.eachCell(function(cell){
+      cell.style = {
+        font:{bold:true, size:9, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+        alignment:{horizontal:'center', vertical:'middle', wrapText:true},
+        border: resXlBorder(C.GOLD)
+      };
+    });
+    var headerRowNo = hdr.number;
+
+    // Which columns are money / whole numbers, worked out from the header text so
+    // this survives a column being added or the money block being dropped for a
+    // user without Revenue access.
+    var isMoney = head.map(function(h){ return /\(AED\)/.test(h); });
+    var isCount = head.map(function(h){ return h==='Covers' || h==='Arrived' || h==='Visits'; });
+
+    body.forEach(function(r, i){
+      var row = ws.addRow(r);
+      row.height = 15;
+      row.eachCell({includeEmpty:true}, function(cell, ci){
+        var z = i % 2 === 1;
+        cell.style = {
+          font:{size:9, name:'Calibri', color:{argb:'FF'+C.DARK}},
+          fill: z ? {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.LIGHT}} : undefined,
+          border: resXlBorder('E2D9C9', 'hair'),
+          alignment:{ vertical:'top',
+            horizontal: isMoney[ci-1] ? 'right' : (isCount[ci-1] ? 'center' : 'left'),
+            wrapText: head[ci-1] === 'Note' }
+        };
+        // Two decimals on money, none on counts. Without this Excel shows
+        // 127.35000000000001 on some rows and 78 on others, in the same column.
+        if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
+        else if(isCount[ci-1]) cell.numFmt = '0';
+      });
+    });
+
+    // Filter + total row: she is going to slice this by area and by shift, and a
+    // SUBTOTAL (not SUM) re-totals itself as she filters, so the number under the
+    // column always matches the rows she is looking at.
+    ws.autoFilter = { from:{row:headerRowNo, column:1}, to:{row:headerRowNo + body.length, column:n} };
+    if(body.length){
+      var totals = head.map(function(h, ci){
+        if(!isMoney[ci] || /per guest/.test(h)) return null;   // averages don't sum
+        var col = ws.getColumn(ci+1).letter;
+        return { formula:'SUBTOTAL(109,' + col + (headerRowNo+1) + ':' + col + (headerRowNo+body.length) + ')' };
+      });
+      totals[0] = 'TOTAL';
+      var tr = ws.addRow(totals);
+      tr.height = 20;
+      tr.eachCell({includeEmpty:true}, function(cell, ci){
+        cell.style = {
+          font:{bold:true, size:9.5, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+          fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+          border: resXlBorder(C.GOLD),
+          alignment:{horizontal: isMoney[ci-1] ? 'right' : 'left', vertical:'middle'}
+        };
+        if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
+      });
+    }
+
+    // ── Summary ──
+    var sws = wb.addWorksheet('Summary', { pageSetup:{orientation:'portrait', fitToPage:true, fitToWidth:1} });
+    sws.columns = [{width:34},{width:88}];
+    var srows = resExportSummary(rows, money);
+    var stitle = sws.addRow(["ROBERTO'S DIFC  —  Reservations summary"]);
+    stitle.height = 30; sws.mergeCells(stitle.number,1,stitle.number,2);
+    stitle.getCell(1).style = {
+      font:{bold:true, size:14, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+      alignment:{horizontal:'center', vertical:'middle'}
+    };
+    sws.addRow([]);
+    var warned = false;
+    srows.slice(1).forEach(function(r){
+      var label = r[0] == null ? '' : String(r[0]);
+      var row = sws.addRow([r[0] == null ? '' : r[0], r.length > 1 && r[1] != null ? r[1] : '']);
+      if(/^READ THIS|^No spend/.test(label)){
+        warned = true;
+        row.height = 22;
+        sws.mergeCells(row.number, 1, row.number, 2);
+        row.getCell(1).style = {
+          font:{bold:true, size:10, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+          fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF8C2F1E'}},   // amber-red: a caution, not a heading
+          alignment:{horizontal:'left', vertical:'middle', indent:1}
+        };
+        return;
+      }
+      // Everything after the warning banner is the warning body -- keep it
+      // visually attached to the banner instead of looking like more data.
+      row.getCell(1).style = { font:{bold:true, size:9.5, color:{argb:'FF'+C.VINO}, name:'Calibri'}, alignment:{vertical:'top'} };
+      row.getCell(2).style = {
+        font:{size:9.5, name:'Calibri', color:{argb:'FF'+C.DARK}, italic:warned},
+        alignment:{vertical:'top', wrapText:true}
+      };
+      if(typeof r[1] === 'number'){
+        row.getCell(2).numFmt = /AED/.test(label) ? '#,##0.00' : '0';
+        row.getCell(2).alignment = {horizontal:'left', vertical:'top'};
+      }
+      if(warned) row.height = 15;
+    });
+
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = "Roberto's Reservations " + RES.date + ".xlsx";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
   }catch(e){
     console.warn('[reservations] excel export failed', e);
     alert('Could not build the Excel file: ' + (e && e.message ? e.message : e) + '\n\nNothing was lost - the book is still on screen.');
