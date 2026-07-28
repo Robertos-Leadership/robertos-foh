@@ -275,7 +275,7 @@ function resGuestHtml(){
       stats.forEach(function(s){ h.push('<div class="rg-stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'); });
       h.push('</div>');
       if(g.last_visit){
-        h.push('<div class="rg-last">Last in on '+resEsc(resDateLabel(String(g.last_visit).slice(0,10)))+'</div>');
+        h.push('<div class="rg-last">Last visit '+resEsc(resDateLabel(String(g.last_visit).slice(0,10)))+'</div>');
       }
     }
     if(g.note) h.push('<div class="rg-note"><span>Note on file</span>'+resEsc(g.note)+'</div>');
