@@ -108,6 +108,10 @@ async function resLoad(force){
     RES.data = j;
     RES.loadedAt = new Date();
     RES.err = null;
+    // Fetch the guests' history alongside, but never block the book on it: the
+    // night has to be on screen whether or not SevenRooms answers for the
+    // profiles. Only ids not already cached are requested.
+    setTimeout(function(){ resEnsureHistory(); }, 0);
   }catch(e){
     console.warn('[reservations] load failed', e);
     RES.err = (String(e && e.message).indexOf('not deployed') > -1)
@@ -312,6 +316,199 @@ function resGuestHtml(){
   return h.join('');
 }
 
+// ── GUEST HISTORY FOR THE WHOLE BOOK ──────────────────────────────────────
+// Asked for by Francesco 28 Jul: last visit and average spend per person on the
+// book itself, and a printable version to brief the team before service.
+//
+// ONE call for the night, not one per booking. A busy Sunday carries 47
+// bookings and firing 47 requests off a phone on the floor is exactly the kind
+// of thing that makes an app feel broken. The edge function's ?guests= mode
+// takes every id at once and answers with a map.
+//
+// The cache is keyed by GUEST, never by date: a lifetime total doesn't change
+// because you looked at a different night, and the 90-second auto-refresh must
+// not re-fetch 47 profiles every minute and a half. Only ids we've never seen
+// are ever requested. A guest whose record can't be read is remembered as
+// failed so the app doesn't retry them on a loop -- their row simply shows no
+// history, which is honest.
+var RESH = { loading: false, err: null, got: {}, failed: {} };
+
+function resHistVenue(){
+  var list = (RES.data && RES.data.reservations) || [];
+  for (var i = 0; i < list.length; i++) if (list[i].venue) return list[i].venue;
+  return '';
+}
+
+async function resEnsureHistory(){
+  if (RESH.loading) return;
+  var list = (RES.data && RES.data.reservations) || [];
+  var want = [];
+  for (var i = 0; i < list.length; i++){
+    var id = list[i].client;
+    if (id && !RESH.got[id] && !RESH.failed[id] && want.indexOf(id) === -1) want.push(id);
+  }
+  if (!want.length) return;
+  RESH.loading = true; RESH.err = null;
+  if (typeof renderMain === 'function' && state.currentTab === 'reservations') renderMain();
+  try {
+    var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guests=' + encodeURIComponent(want.join(','))
+        + '&venue=' + encodeURIComponent(resHistVenue()), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var j = await r.json();
+    if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
+    var map = j.guests || {};
+    want.forEach(function(id){
+      if (map[id]) RESH.got[id] = map[id];
+      else RESH.failed[id] = 1;      // don't ask again for this one
+    });
+  } catch(e) {
+    console.warn('[reservations] guest history failed', e);
+    RESH.err = 'Guest history could not be read just now.';
+    // NOT marked failed: a network blip shouldn't permanently blank the column,
+    // so the next load of this screen tries again.
+  }
+  RESH.loading = false;
+  if (typeof renderMain === 'function' && state.currentTab === 'reservations') renderMain();
+}
+
+// Compact date for a table cell. Same year-trap as the panel: never print a day
+// and month alone for a visit in another year.
+function resVisitShort(iso){
+  var s = String(iso||'').slice(0,10);
+  if(!s) return '';
+  try{
+    var d = new Date(s+'T12:00:00');
+    if(isNaN(d.getTime())) return s;
+    var thisYear = (typeof chkToday==='function' ? chkToday().iso : new Date().toISOString().slice(0,10)).slice(0,4);
+    return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})
+      + (s.slice(0,4) === thisYear ? '' : ' ' + s.slice(0,4));
+  }catch(e){ return s; }
+}
+
+// The one-line history that sits under a guest's name on the book.
+function resHistLine(r, money){
+  var g = r && r.client ? RESH.got[r.client] : null;
+  if(!g || g.scope !== 'venue') return '';
+  var visits = Number(g.visits) || 0;
+  if(visits <= 1 && !(Number(g.spend) > 0)) return '<i class="res-hist">first visit</i>';
+  var bits = [visits + (visits === 1 ? ' visit' : ' visits')];
+  if(money && Number(g.per_cover) > 0) bits.push('AED ' + resNum(Math.round(g.per_cover)) + '/cover');
+  if(g.last_visit) bits.push('last ' + resVisitShort(g.last_visit));
+  return '<i class="res-hist">' + resEsc(bits.join(' · ')) + '</i>';
+}
+
+// ── PRINT BRIEF ───────────────────────────────────────────────────────────
+// A pre-service sheet for the team: the night in order, with who each guest is.
+// Follows the roster print pattern already in the app -- a self-contained
+// document in a new window -- so nothing about the live screen has to be hidden
+// or restyled for print.
+//
+// SevenRooms' automatic tags are left off the sheet. "Upcoming Reservation in
+// 30 Days", "Group All Guests" and the marketing segments are true but tell a
+// section waiter nothing, and on a 16-booking night they bury the three tags
+// that matter. What a brief needs is the standing preferences and the VIP
+// markers. The footer says they were left off, so nobody thinks the guest has
+// no tags.
+var RES_AUTO_TAG = /^(upcoming reservation|reservation within|group |visits=|custom |copycustomautotag|activation re-engagement|first timer|repeat guest|cancellation|no show)/i;
+
+function resBriefTags(g){
+  if(!g || !g.tags) return [];
+  return g.tags.filter(function(t){ return !RES_AUTO_TAG.test(String(t).trim()); });
+}
+
+async function resPrintBrief(){
+  // Never print a sheet with the history column silently empty.
+  await resEnsureHistory();
+  var money = !fohBlocked('revenue');
+  var rows = resRows();
+  if(!rows.length){ alert('Nothing to brief — there are no bookings on this night.'); return; }
+
+  var byArea = {}, order = [];
+  rows.forEach(function(r){
+    var k = r.area || 'Any Seating Area';
+    if(!byArea[k]){ byArea[k] = []; order.push(k); }
+    byArea[k].push(r);
+  });
+  order.sort(function(a,b){
+    var ca = byArea[a].reduce(function(s,r){ return s+(r.pax||0); },0);
+    var cb = byArea[b].reduce(function(s,r){ return s+(r.pax||0); },0);
+    return cb-ca;
+  });
+
+  var t = RES.data.totals || {};
+  var h = '<div class="hd"><div class="ttl">Service brief</div>'
+    + '<div class="dt">' + resEsc(resDateLabel(RES.date)) + '</div>'
+    + '<div class="tot">' + resNum(t.reservations) + ' reservations &middot; ' + resNum(t.covers) + ' covers</div></div>';
+
+  order.forEach(function(k){
+    var list = byArea[k];
+    var cov = list.reduce(function(s,r){ return s+(r.pax||0); },0);
+    h += '<div class="area">' + resEsc(k) + ' &mdash; ' + list.length + ' reservation' + (list.length===1?'':'s') + ', ' + cov + ' covers</div>';
+    h += '<table><thead><tr>'
+      + '<th class="w1">Time</th><th class="w2">Pax</th><th class="w3">Guest</th><th class="w4">Table</th>'
+      + '<th class="w5">Last visit</th><th class="w6">Visits</th>'
+      + (money ? '<th class="w7">Avg/cover</th>' : '')
+      + '<th>Worth knowing</th></tr></thead><tbody>';
+    list.forEach(function(r){
+      var g = r.client ? RESH.got[r.client] : null;
+      var venueScoped = g && g.scope === 'venue';
+      var firstTime = venueScoped && (Number(g.visits)||0) <= 1 && !(Number(g.spend) > 0);
+      var know = [];
+      if(r.notes) know.push('<b>' + resEsc(r.notes) + '</b>');
+      if(g && g.note) know.push(resEsc(g.note));
+      var tg = resBriefTags(g);
+      if(tg.length) know.push('<span class="tg">' + tg.map(resEsc).join(' &middot; ') + '</span>');
+      h += '<tr>'
+        + '<td class="w1">' + resEsc(r.time||'') + '</td>'
+        + '<td class="w2">' + resNum(r.pax) + '</td>'
+        + '<td class="w3">' + (r.vip ? '<span class="vip">VIP</span> ' : '') + resEsc(r.name||'') + '</td>'
+        + '<td class="w4">' + ((r.tables&&r.tables.length) ? resEsc(r.tables.join(', ')) : '') + '</td>'
+        + '<td class="w5">' + (firstTime ? '<i>first visit</i>' : (venueScoped && g.last_visit ? resEsc(resVisitShort(g.last_visit)) : '')) + '</td>'
+        + '<td class="w6">' + (venueScoped ? resNum(g.visits) : '') + '</td>'
+        + (money ? '<td class="w7">' + (venueScoped && Number(g.per_cover)>0 ? resNum(Math.round(g.per_cover)) : '') + '</td>' : '')
+        + '<td>' + know.join('<br>') + '</td>'
+        + '</tr>';
+    });
+    h += '</tbody></table>';
+  });
+
+  h += '<div class="ft">Read-only from SevenRooms &middot; printed '
+    + resEsc(new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))
+    + (money ? '' : ' &middot; spend hidden on this login')
+    + '.<br>SevenRooms’ automatic tags (upcoming and recent reservations, group segments, marketing) are left off this sheet. '
+    + 'To change a booking, the hosts do it in SevenRooms.</div>';
+
+  var css = '@page{size:A4 landscape;margin:8mm}'
+    + 'html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#1c1c1c}'
+    + '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    + '.hd{border-bottom:2px solid #6B1F2A;padding-bottom:6px;margin-bottom:10px}'
+    + '.ttl{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
+    + '.dt{font-size:19px;margin-top:2px}.tot{font-size:11px;color:#555;margin-top:2px}'
+    + '.area{margin:11px 0 3px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
+    + 'table{width:100%;border-collapse:collapse}'
+    + 'th{background:#6B1F2A;color:#fff;font-size:8px;letter-spacing:1px;text-transform:uppercase;text-align:left;padding:4px 5px}'
+    + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3}'
+    + 'tr{page-break-inside:avoid}'
+    + '.w1{width:38px}.w2{width:30px;text-align:center}.w3{width:150px;font-weight:700}.w4{width:52px}'
+    + '.w5{width:70px}.w6{width:40px;text-align:center}.w7{width:60px;text-align:right}'
+    + 'th.w2,th.w6{text-align:center}th.w7{text-align:right}'
+    + '.vip{background:#6B1F2A;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px;vertical-align:1px}'
+    + '.tg{color:#6B1F2A}'
+    + '.ft{margin-top:12px;padding-top:6px;border-top:1px solid #ccc;font-size:8px;color:#666;line-height:1.5}';
+
+  var doc = '<!doctype html><html><head><meta charset="utf-8"><title>Service brief — '
+    + resEsc(resDateLabel(RES.date)) + '</title><style>' + css + '</style></head><body>' + h + '</body></html>';
+
+  var w = window.open('', '_blank');
+  if(!w){ alert('Pop-up blocked — allow pop-ups for this site and press Print brief again.'); return; }
+  w.document.open(); w.document.write(doc); w.document.close();
+  w.focus();
+  setTimeout(function(){ try{ w.print(); }catch(e){} }, 300);
+}
+
 // ── FILTERING ─────────────────────────────────────────────────────────────
 function resRows(){
   var rows = (RES.data && RES.data.reservations) ? RES.data.reservations : [];
@@ -355,6 +552,11 @@ function renderReservations(){
   h.push('<input class="res-date" type="date" value="'+resEsc(RES.date)+'" onchange="resSetDate(this.value)">');
   h.push('<button class="res-nav" onclick="resGo(1)" title="Next day">&#8250;</button>');
   if(!isTonight) h.push('<button class="res-btn" onclick="resToTonight()">Tonight</button>');
+  // Disabled while the history is still arriving, and it says why — a brief
+  // printed with an empty history column is worse than waiting three seconds.
+  h.push('<button class="res-btn res-btn-go" onclick="resPrintBrief()"'
+    + (RESH.loading?' disabled title="Reading guest history…"':' title="Print a pre-service brief for the team"')
+    + '>'+(RESH.loading?'Reading guests…':'Print brief')+'</button>');
   h.push('<button class="res-btn" onclick="resRefresh()"'+(RES.loading?' disabled':'')+'>'+(RES.loading?'Refreshing…':'Refresh')+'</button>');
   h.push('</div></div>');
 
@@ -439,7 +641,11 @@ function renderReservations(){
               + (r.client
                   ? '<button class="res-guest-btn" onclick="resOpenGuest(\''+String(r.client).replace(/[^A-Za-z0-9_-]/g,'')+'\',\''+resEsc(r.time||'')+'\')" title="See this guest’s history">'+resEsc(r.name)+'</button>'
                   : resEsc(r.name))
-              + (r.phone_last4?'<i class="res-phone">••• '+resEsc(r.phone_last4)+'</i>':'')+'</div>'
+              + (r.phone_last4?'<i class="res-phone">••• '+resEsc(r.phone_last4)+'</i>':'')
+              // Last visit and average spend per person sit under the name
+              // rather than in two more columns: it is the same guest's
+              // information, and the grid is already eight columns wide.
+              + resHistLine(r, money)+'</div>'
           // Blank, not "not assigned": verified 23 Jul that SevenRooms' API only
           // returns a table once the hosts LOCK it (10 of 13 bookings that night
           // came back empty while the SevenRooms screen showed an auto-suggested
