@@ -48,6 +48,25 @@ function resDateLabel(iso){
   try{ return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}); }
   catch(e){ return iso; }
 }
+// A past visit date, said so nobody can misread it. resDateLabel prints weekday
+// + day + month with NO year, which is right for tonight but a lie for an old
+// visit: "Friday 8 February" for a guest last in on 2024-02-08 reads as this
+// year and is two and a half years out. Verified 28 Jul that tonight's own book
+// holds last-visit dates in 2024, 2025 and 2026, so this is real, not theory.
+// Same year -> weekday is useful ("Tuesday 3 February"). Any other year -> drop
+// the weekday, which means nothing at that distance, and state the year.
+function resVisitLabel(iso){
+  var s = String(iso||'').slice(0,10);
+  if(!s) return '';
+  try{
+    var d = new Date(s+'T12:00:00');
+    if(isNaN(d.getTime())) return s;
+    var thisYear = (typeof chkToday==='function' ? chkToday().iso : new Date().toISOString().slice(0,10)).slice(0,4);
+    return (s.slice(0,4) === thisYear)
+      ? d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})
+      : d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  }catch(e){ return s; }
+}
 function resShiftDate(iso, days){
   var d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
@@ -275,7 +294,7 @@ function resGuestHtml(){
       stats.forEach(function(s){ h.push('<div class="rg-stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'); });
       h.push('</div>');
       if(g.last_visit){
-        h.push('<div class="rg-last">Last visit '+resEsc(resDateLabel(String(g.last_visit).slice(0,10)))+'</div>');
+        h.push('<div class="rg-last">Last visit '+resEsc(resVisitLabel(g.last_visit))+'</div>');
       }
     }
     if(g.note) h.push('<div class="rg-note"><span>Note on file</span>'+resEsc(g.note)+'</div>');
