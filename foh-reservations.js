@@ -627,6 +627,150 @@ function resShifts(){
   return out;
 }
 
+// ── EXCEL EXPORT ──────────────────────────────────────────────────────────
+// Asked for by Nicole 28 Jul: she needs to take the night's data away, not just
+// read it on screen.
+//
+// Exports exactly what is on screen -- the same resRows() the print brief uses,
+// so a shift chip or a search narrows the file the same way it narrows the page.
+// Anything else would be a trap: you filter to one shift, export, and silently
+// get the whole night.
+//
+// SheetJS is fetched on demand from the same CDN and the same version the stock
+// take already pulls, so the app carries one spreadsheet library rather than
+// two, and nothing is downloaded until somebody presses the button.
+//
+// TWO SHEETS, DELIBERATELY. The warning that the money only covers bookings with
+// a linked check is on the screen -- but a file travels. It gets mailed, pasted
+// into a deck, and read by someone who never saw the screen and has no idea the
+// total is 12% short of Simphony. So the Summary sheet carries the coverage, the
+// filter that was applied, and the gross-to-net rule alongside the numbers.
+// Don't tidy it away.
+function resLoadXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  return new Promise(function(res, rej){
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = res;
+    s.onerror = function(){ rej(new Error('the spreadsheet library could not be reached')); };
+    document.body.appendChild(s);
+  });
+}
+
+// Money goes in as NUMBERS, never as "AED 1,234" strings -- the whole point of
+// an export is that she can sum and pivot it. The AED lives in the column name.
+function resExportSheets(rows, money){
+  // The money columns are DROPPED, not blanked, for a user without Revenue
+  // access -- same rule as the Spend column and the history line. An empty
+  // column headed "AED" invites someone to ask why their file is broken.
+  var head = ['Time','Covers','Arrived','Guest','Phone (last 4)','Table','Seating area','Shift',
+              'Status','Note','Booked by','Booked on','Visits'];
+  if(money) head.push('Lifetime net per cover (AED)');
+  head.push('Last visit');
+  if(money) head = head.concat(['Gross (AED)','Net (AED)','Gross per guest (AED)','Net per guest (AED)']);
+  var body = rows.map(function(r){
+    var g = money ? resGrossOf(r) : 0;
+    var heads = resHeads(r);
+    var hist = (r.client && RESH.got[r.client] && RESH.got[r.client].scope === 'venue') ? RESH.got[r.client] : null;
+    var line = [
+      r.time || '', Number(r.pax) || 0, r.arrived != null ? Number(r.arrived) : null,
+      r.name || '', r.phone_last4 || '', (r.tables || []).join(', '),
+      r.area || '', r.shift || '', r.status_display || r.status || '',
+      r.notes || '', r.booked_by || '', String(r.created || '').slice(0, 10),
+      hist ? (Number(hist.visits) || 0) : null
+    ];
+    if(money) line.push((hist && Number(hist.per_cover) > 0) ? Math.round(hist.per_cover * 100) / 100 : null);
+    line.push(hist && hist.last_visit ? String(hist.last_visit).slice(0, 10) : '');
+    if(money){
+      // Blank, not zero, when no check is linked -- a 0 here would drag her
+      // averages down and read as "this table spent nothing".
+      line = line.concat(g ? [
+        Math.round(g * 100) / 100,
+        Math.round(resNet(g) * 100) / 100,
+        heads ? Math.round(g / heads * 100) / 100 : null,
+        heads ? Math.round(resNet(g) / heads * 100) / 100 : null
+      ] : [null, null, null, null]);
+    }
+    return line;
+  });
+  return [head].concat(body);
+}
+
+function resExportSummary(rows, money){
+  var nm = resNightMoney();
+  var t = (RES.data && RES.data.totals) || {};
+  var filter = [];
+  if(RES.shift !== 'all') filter.push('shift: ' + RES.shift);
+  if(RES.q) filter.push('search: "' + RES.q + '"');
+  var s = [
+    ["Roberto's DIFC - Reservations"],
+    ['Night', resDateLabel(RES.date)],
+    ['Date', RES.date],
+    ['Exported', new Date().toLocaleString('en-GB')],
+    ['Rows in this file', rows.length],
+    ['Filter applied', filter.length ? filter.join(' | ') : 'none - the whole night'],
+    [],
+    ['Bookings in the book', Number(t.reservations) || rows.length],
+    ['Covers', Number(t.covers) || 0]
+  ];
+  if(money && nm.gross){
+    s = s.concat([
+      [],
+      ['Bookings with a linked check', nm.bookings],
+      ['Guests on those bookings', nm.heads],
+      ['Gross (AED)', Math.round(nm.gross * 100) / 100],
+      ['Net (AED)', Math.round(nm.net * 100) / 100],
+      ['Net per guest (AED)', nm.heads ? Math.round(nm.net / nm.heads * 100) / 100 : null],
+      [],
+      ['READ THIS BEFORE USING THE TOTALS'],
+      ['', 'These figures cover only the ' + nm.bookings + ' booking(s) with a check linked in SevenRooms.'],
+      ['', 'A walk-in served without a booking has nothing to attach a check to, so this is NOT the night’s takings.'],
+      ['', 'Measured against Simphony it runs roughly 83-98% of the real net, and the gap moves night to night.'],
+      ['', 'For what the venue actually took, use the Revenue module or the closing report.'],
+      ['', 'The average PER GUEST is reliable (within about 2% of Simphony); the TOTAL is not.'],
+      [],
+      ['How net is worked out', 'Net = gross ÷ ' + resGrossToNet() + '  (10% service + 7% municipality on net, then 5% VAT)'],
+      ['What gross means', 'The menu-price total on the guest’s check - what they actually paid.']
+    ]);
+  } else if(money){
+    s = s.concat([
+      [],
+      ['No spend in this file'],
+      ['', 'SevenRooms has no checks linked to this night yet. It posts them on a delay, so the newest night usually fills in later.'],
+      ['', 'Blank means not posted yet - not that nobody spent anything.']
+    ]);
+  }
+  return s;
+}
+
+async function resExportExcel(){
+  var btn = document.getElementById('res-xls-btn');
+  try{
+    var rows = resRows();
+    if(!rows.length){ alert('Nothing to export - there are no bookings on this night.'); return; }
+    if(btn){ btn.disabled = true; btn.textContent = 'Building…'; }
+    // Same as the brief: never hand over a file with the history columns
+    // silently empty just because the profiles hadn't arrived yet.
+    await resEnsureHistory();
+    await resLoadXLSX();
+    var money = !fohBlocked('revenue');
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(resExportSheets(rows, money));
+    ws['!cols'] = [{wch:7},{wch:7},{wch:8},{wch:26},{wch:12},{wch:12},{wch:18},{wch:12},{wch:16},
+                   {wch:40},{wch:16},{wch:12},{wch:7},{wch:22},{wch:12},{wch:13},{wch:13},{wch:17},{wch:17}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Reservations');
+    var sum = XLSX.utils.aoa_to_sheet(resExportSummary(rows, money));
+    sum['!cols'] = [{wch:32},{wch:96}];
+    XLSX.utils.book_append_sheet(wb, sum, 'Summary');
+    XLSX.writeFile(wb, "Robertos Reservations " + RES.date + ".xlsx");
+  }catch(e){
+    console.warn('[reservations] excel export failed', e);
+    alert('Could not build the Excel file: ' + (e && e.message ? e.message : e) + '\n\nNothing was lost - the book is still on screen.');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Excel'; }
+  }
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────────
 function renderReservations(){
   if(!RES.date) RES.date = resToday();
@@ -654,6 +798,7 @@ function renderReservations(){
   h.push('<button class="res-btn res-btn-go" onclick="resPrintBrief()"'
     + (RESH.loading?' disabled title="Reading guest history…"':' title="Print a pre-service brief for the team"')
     + '>'+(RESH.loading?'Reading guests…':'Print brief')+'</button>');
+  h.push('<button class="res-btn" id="res-xls-btn" onclick="resExportExcel()" title="Download this night as an Excel file">Excel</button>');
   h.push('<button class="res-btn" onclick="resRefresh()"'+(RES.loading?' disabled':'')+'>'+(RES.loading?'Refreshing…':'Refresh')+'</button>');
   h.push('</div></div>');
 
