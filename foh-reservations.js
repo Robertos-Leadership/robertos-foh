@@ -419,6 +419,20 @@ function resBriefTags(g){
   return g.tags.filter(function(t){ return !RES_AUTO_TAG.test(String(t).trim()); });
 }
 
+// The booking note as a brief should carry it. Two bits of pure noise come off:
+//   "Selected: "  — every row says it, so it is a label, not information
+//   "DINNER"      — the default service. "JAZZ NIGHT", "APERITIVO · SCALA" and
+//                   "Roberto's Restaurant Week" all survive, because those DO
+//                   tell the team something about the night.
+// What is left is the actual request ("Table away from the Entrance", "Female
+// birthday"). Long notes are cut at a sentence-ish length: the sheet has to fit
+// an A4 page, and the untrimmed version is one tap away on the screen.
+function resBriefNote(s){
+  var n = String(s||'').replace(/^\s*Selected:\s*/i, '').replace(/^DINNER\b[\s·-]*/i, '').trim();
+  if(n.length > 150) n = n.slice(0, 148).replace(/[\s·,;-]+\S*$/, '') + '…';
+  return n;
+}
+
 async function resPrintBrief(){
   // Never print a sheet with the history column silently empty.
   await resEnsureHistory();
@@ -457,10 +471,17 @@ async function resPrintBrief(){
       var venueScoped = g && g.scope === 'venue';
       var firstTime = venueScoped && (Number(g.visits)||0) <= 1 && !(Number(g.spend) > 0);
       var know = [];
-      if(r.notes) know.push('<b>' + resEsc(r.notes) + '</b>');
-      if(g && g.note) know.push(resEsc(g.note));
+      var bn = resBriefNote(r.notes);
+      if(bn) know.push('<b>' + resEsc(bn) + '</b>');
+      if(g && g.note) know.push(resEsc(resBriefNote(g.note)));
+      // Tags capped so one heavily-tagged regular can't push the row over a
+      // page. The count says what was left off rather than hiding it.
       var tg = resBriefTags(g);
-      if(tg.length) know.push('<span class="tg">' + tg.map(resEsc).join(' &middot; ') + '</span>');
+      if(tg.length){
+        var show = tg.slice(0, 6);
+        know.push('<span class="tg">' + show.map(resEsc).join(' &middot; ')
+          + (tg.length > show.length ? ' <span class="more">+' + (tg.length - show.length) + ' more</span>' : '') + '</span>');
+      }
       h += '<tr>'
         + '<td class="w1">' + resEsc(r.time||'') + '</td>'
         + '<td class="w2">' + resNum(r.pax) + '</td>'
@@ -488,15 +509,22 @@ async function resPrintBrief(){
     + '.ttl{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
     + '.dt{font-size:19px;margin-top:2px}.tot{font-size:11px;color:#555;margin-top:2px}'
     + '.area{margin:11px 0 3px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
-    + 'table{width:100%;border-collapse:collapse}'
+    // table-layout:fixed is the whole fix for the sheet running off the page.
+    // Without it the browser widens the table to fit the longest note on the
+    // night -- one guest's "Custom question response: We are celebrating 2
+    // different people..." pushed the last column past the paper edge and the
+    // page would not print. Fixed layout holds every column to its declared
+    // width and wraps the text instead.
+    + 'table{width:100%;table-layout:fixed;border-collapse:collapse}'
     + 'th{background:#6B1F2A;color:#fff;font-size:8px;letter-spacing:1px;text-transform:uppercase;text-align:left;padding:4px 5px}'
-    + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3}'
+    + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3;'
+    +   'word-wrap:break-word;overflow-wrap:break-word}'
     + 'tr{page-break-inside:avoid}'
-    + '.w1{width:38px}.w2{width:30px;text-align:center}.w3{width:150px;font-weight:700}.w4{width:52px}'
-    + '.w5{width:70px}.w6{width:40px;text-align:center}.w7{width:60px;text-align:right}'
+    + '.w1{width:34px}.w2{width:26px;text-align:center}.w3{width:118px;font-weight:700}.w4{width:44px}'
+    + '.w5{width:58px}.w6{width:34px;text-align:center}.w7{width:52px;text-align:right}'
     + 'th.w2,th.w6{text-align:center}th.w7{text-align:right}'
     + '.vip{background:#6B1F2A;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px;vertical-align:1px}'
-    + '.tg{color:#6B1F2A}'
+    + '.tg{color:#6B1F2A}.more{color:#999}'
     + '.ft{margin-top:12px;padding-top:6px;border-top:1px solid #ccc;font-size:8px;color:#666;line-height:1.5}';
 
   var doc = '<!doctype html><html><head><meta charset="utf-8"><title>Service brief — '
