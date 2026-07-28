@@ -112,6 +112,185 @@ if(!window._resTimer){
   window._resTimer = setInterval(function(){
     if(state && state.currentTab==='reservations' && RES.date===resToday() && !RES.loading) resLoad(true);
   }, 90000);
+  // The guest panel lives on <body>, so it would outlive a tab change and
+  // hang over an unrelated screen. Sweep it as soon as the tab moves.
+  window._resGuestSweep = setInterval(function(){
+    if(typeof RESG!=='undefined' && RESG.open && state && state.currentTab!=='reservations') resCloseGuest();
+  }, 400);
+}
+
+// ── GUEST PANEL ───────────────────────────────────────────────────────────
+// Tap a name → their history. Asked for by Francesco 28 Jul 2026: the whole
+// point of this screen is that a manager shouldn't need a SevenRooms seat, and
+// "who is this guest" is the question the book can't answer on its own.
+//
+// The numbers come from the SevenRooms CLIENT record via the Kitchen edge
+// function's ?guest= mode — NOT from the booking. Verified 28 Jul: reservation
+// objects carry no linked check on any date tested, while the client record
+// carries the real lifetime figures (of 25 guests on 27 Jul, all 8 repeat
+// guests had spend; top AED42,386 / 145 visits). A first-timer legitimately
+// reads 0, which is why this screen says "first visit" rather than "AED 0".
+//
+// The edge function returns counting fields, tags and the guest note only —
+// no email, phone, address, birthday or loyalty id ever reaches the browser.
+// Spend is additionally hidden from anyone without Revenue access, exactly
+// like the Spend column and the Live-now strip.
+var RESG = {
+  open: false,
+  id: null,          // SevenRooms client id being shown
+  row: null,         // tonight's booking for that guest (already on screen)
+  data: null,
+  loading: false,
+  err: null,
+  cache: {}          // id → payload; a guest's lifetime total doesn't move
+                     // during a service, so re-tapping a name is free.
+};
+
+function resGuestEl(){
+  var el = document.getElementById('res-guest');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'res-guest';
+    document.body.appendChild(el);
+    // Close on backdrop tap, but ONLY on the backdrop itself — a tap that
+    // lands inside the card must never dismiss it.
+    el.addEventListener('click', function(e){ if(e.target === el) resCloseGuest(); });
+  }
+  return el;
+}
+
+function resPaintGuest(){
+  var el = resGuestEl();
+  el.innerHTML = RESG.open ? resGuestHtml() : '';
+  el.className = RESG.open ? 'rg-ov' : '';
+}
+
+function resOpenGuest(id, time){
+  if(!id) return;
+  var list = (RES.data && RES.data.reservations) || [];
+  // Match on time as well as id: a guest with two bookings tonight must open
+  // the one whose row was actually tapped.
+  RESG.row = null;
+  for(var i=0;i<list.length;i++){
+    if(list[i].client === id && (!time || list[i].time === time)){ RESG.row = list[i]; break; }
+  }
+  if(!RESG.row){ for(var j=0;j<list.length;j++){ if(list[j].client === id){ RESG.row = list[j]; break; } } }
+  RESG.open = true; RESG.id = id; RESG.err = null;
+  if(RESG.cache[id]){ RESG.data = RESG.cache[id]; RESG.loading = false; resPaintGuest(); return; }
+  RESG.data = null; RESG.loading = true;
+  resPaintGuest();
+  // The venue comes off the booking, never from a constant here: the guest's
+  // figures have to be read for the venue they're sitting in tonight.
+  resLoadGuest(id, (RESG.row && RESG.row.venue) || '');
+}
+
+function resCloseGuest(){
+  RESG.open = false; RESG.data = null; RESG.err = null; RESG.loading = false;
+  resPaintGuest();
+}
+
+// Esc closes it, the way every other overlay in the app behaves. Registered
+// once, and a no-op while the panel is shut.
+if(!window._resGuestKey){
+  window._resGuestKey = true;
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && RESG.open) resCloseGuest();
+  });
+}
+
+async function resLoadGuest(id, venue){
+  try{
+    var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guest=' + encodeURIComponent(id)
+        + (venue ? '&venue=' + encodeURIComponent(venue) : ''), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var j = await r.json();
+    if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
+    RESG.cache[id] = j;
+    if(RESG.id === id){ RESG.data = j; RESG.err = null; }
+  }catch(e){
+    console.warn('[reservations] guest load failed', e);
+    // The booking on screen is still true even when the profile won't load —
+    // say what's missing, don't blank the panel.
+    if(RESG.id === id) RESG.err = 'Could not read this guest’s history from SevenRooms just now.';
+  }
+  if(RESG.id === id){ RESG.loading = false; resPaintGuest(); }
+}
+
+function resMoney(n){ return '<small>AED </small>' + resNum(Math.round(Number(n)||0)); }
+
+function resGuestHtml(){
+  var row = RESG.row || {};
+  var g = RESG.data;
+  var money = !fohBlocked('revenue');
+  var h = ['<div class="rg-card" role="dialog" aria-modal="true" aria-label="Guest history">'];
+
+  h.push('<div class="rg-head">');
+  h.push('<div><div class="rg-kicker">Guest history &middot; SevenRooms</div>');
+  h.push('<div class="rg-name">'+(row.vip?'<span class="res-vip">VIP</span> ':'')+resEsc(row.name||'Guest')+'</div></div>');
+  h.push('<button class="rg-x" onclick="resCloseGuest()" aria-label="Close">&times;</button>');
+  h.push('</div>');
+
+  // ── Tonight first: the manager tapped this name because of tonight. ──
+  h.push('<div class="rg-tonight">');
+  h.push('<b>'+resEsc(row.time||'')+'</b> &middot; '+resNum(row.pax)+' cover'+(row.pax===1?'':'s')
+    + (row.area?' &middot; '+resEsc(row.area):'')
+    + ((row.tables&&row.tables.length)?' &middot; table '+resEsc(row.tables.join(', ')):''));
+  if(row.notes) h.push('<div class="rg-tonight-n">'+resEsc(row.notes)+'</div>');
+  h.push('</div>');
+
+  if(RESG.loading){
+    h.push('<div class="rg-load">Reading their history…</div>');
+  } else if(RESG.err){
+    h.push('<div class="rg-err">'+resEsc(RESG.err)+'<div class="rg-err-s">Tonight’s booking above is unaffected.</div></div>');
+  } else if(g){
+    // Numbers ONLY when they came back scoped to this venue. The group-wide
+    // totals are a different measure that disagrees with the profile the hosts
+    // read in SevenRooms (verified 28 Jul: 70 visits / AED22,259 group against
+    // 47 / AED62,715 on the page), so showing them would put a figure on the
+    // floor that contradicts the hosts' own screen. Tags and the note still
+    // stand on their own, so the panel is still worth opening.
+    var scoped = g.scope === 'venue';
+    var firstTime = (Number(g.visits)||0) <= 1;
+    if(!scoped){
+      h.push('<div class="rg-first">Their history for this venue isn’t available — tags and notes below still apply.</div>');
+    } else if(firstTime && !(Number(g.spend)>0)){
+      h.push('<div class="rg-first">First visit — no history yet.</div>');
+    } else {
+      // Only the figures we actually have. Spend disappears entirely without
+      // Revenue access rather than showing a blank box that invites a question.
+      var stats = [
+        ['Visits', resNum(g.visits)],
+        ['Covers', resNum(g.covers)]
+      ];
+      if(money){
+        stats.push(['Total spend', resMoney(g.spend)]);
+        if(Number(g.per_cover)>0) stats.push(['Avg per cover', resMoney(g.per_cover)]);
+      }
+      if(Number(g.noshows)>0) stats.push(['No-shows', resNum(g.noshows)]);
+      if(Number(g.cancellations)>0) stats.push(['Cancelled', resNum(g.cancellations)]);
+      h.push('<div class="rg-stats">');
+      stats.forEach(function(s){ h.push('<div class="rg-stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'); });
+      h.push('</div>');
+      if(g.last_visit){
+        h.push('<div class="rg-last">Last in on '+resEsc(resDateLabel(String(g.last_visit).slice(0,10)))+'</div>');
+      }
+    }
+    if(g.note) h.push('<div class="rg-note"><span>Note on file</span>'+resEsc(g.note)+'</div>');
+    if(g.tags && g.tags.length){
+      h.push('<div class="rg-tags">');
+      g.tags.forEach(function(t){ h.push('<span class="rg-tag">'+resEsc(t)+'</span>'); });
+      h.push('</div>');
+    }
+  }
+
+  h.push('<div class="rg-foot">Read-only from SevenRooms'
+    + (money?'':' &middot; spend is hidden on your access')
+    + '. To change anything about this guest, the hosts do it in SevenRooms.</div>');
+  h.push('</div>');
+  return h.join('');
 }
 
 // ── FILTERING ─────────────────────────────────────────────────────────────
@@ -232,7 +411,15 @@ function renderReservations(){
         h.push('<div class="res-r res-'+st+'">'
           + '<div class="res-time">'+resEsc(r.time||'')+'</div>'
           + '<div class="res-pax">'+resNum(r.pax)+(r.arrived?'<i> · '+resNum(r.arrived)+' in</i>':'')+'</div>'
-          + '<div class="res-name">'+(r.vip?'<span class="res-vip" title="VIP">VIP</span> ':'')+resEsc(r.name)
+          // The name is a button when SevenRooms has a client record for it —
+          // tapping opens their history. A booking with no client id (rare, and
+          // real: some walk-ins are logged without one) stays plain text rather
+          // than offering a tap that would open an empty panel. The id is
+          // stripped to id-safe characters before it goes near an onclick.
+          + '<div class="res-name">'+(r.vip?'<span class="res-vip" title="VIP">VIP</span> ':'')
+              + (r.client
+                  ? '<button class="res-guest-btn" onclick="resOpenGuest(\''+String(r.client).replace(/[^A-Za-z0-9_-]/g,'')+'\',\''+resEsc(r.time||'')+'\')" title="See this guest’s history">'+resEsc(r.name)+'</button>'
+                  : resEsc(r.name))
               + (r.phone_last4?'<i class="res-phone">••• '+resEsc(r.phone_last4)+'</i>':'')+'</div>'
           // Blank, not "not assigned": verified 23 Jul that SevenRooms' API only
           // returns a table once the hosts LOCK it (10 of 13 bookings that night
