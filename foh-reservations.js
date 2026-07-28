@@ -190,6 +190,10 @@ async function resLoad(force){
     // night has to be on screen whether or not SevenRooms answers for the
     // profiles. Only ids not already cached are requested.
     setTimeout(function(){ resEnsureHistory(); }, 0);
+    // Same rule for the public-figure check: alongside, never in the way. It
+    // is switched off by default and answers "off" in a single round trip, so
+    // on most nights this costs one request and changes nothing on screen.
+    setTimeout(function(){ resVipScan(); }, 0);
   }catch(e){
     console.warn('[reservations] load failed', e);
     RES.err = (String(e && e.message).indexOf('not deployed') > -1)
@@ -515,6 +519,178 @@ function resHistLine(r, money){
   if(money && Number(g.per_cover) > 0) bits.push('AED ' + resNum(Math.round(g.per_cover)) + ' net/cover');
   if(g.last_visit) bits.push('last ' + resVisitShort(g.last_visit));
   return '<i class="res-hist">' + resEsc(bits.join(' · ')) + '</i>';
+}
+
+// ── VIP NAME MATCH ────────────────────────────────────────────────────────
+// Checks tonight's guests against public-figure records and shows a chip on
+// the row when a name belongs to somebody notable.
+//
+// READ THE WORDING ON THE CHIP BEFORE CHANGING ANYTHING HERE. It says
+// "possible public figure - verify", never "VIP", and that is not timidity --
+// it is the only honest claim available. A name match cannot tell you the
+// Jennifer Lopez on table 21 is THE Jennifer Lopez. A host who greets the
+// wrong guest as a celebrity has done more damage than the feature could ever
+// repay, so the app surfaces and a manager decides. Once they decide, the
+// answer is remembered forever: confirmed shows as a real VIP on every future
+// booking, dismissed never asks again.
+//
+// The scan itself runs in the vip-scan edge function -- the notability rules
+// and the reasoning behind the thresholds live there.
+var RESV = {
+  rows: {},          // client id -> notability row
+  loading: false,
+  loaded: false,
+  enabled: null,     // null = not yet known, from the admin switch
+  source: '',        // which lookup source answered
+  busy: {}           // client id -> true while a decision is saving
+};
+
+// Called once per night-load. Silent by design: this is a garnish on a screen
+// whose job is the book, so every failure path here ends in "show no chips"
+// rather than an error the manager has to read past.
+async function resVipScan(){
+  if(RESV.loading) return;
+  var list = (RES.data && RES.data.reservations) || [];
+  var seen = {}, guests = [];
+  list.forEach(function(r){
+    if(!r.client || !r.name || seen[r.client]) return;
+    seen[r.client] = true;
+    guests.push({ client: String(r.client), name: String(r.name) });
+  });
+  if(!guests.length) return;
+  RESV.loading = true;
+  try{
+    var res = await sb.functions.invoke('vip-scan', { body: { guests: guests } });
+    if(res.error) throw res.error;
+    var j = res.data || {};
+    RESV.enabled = j.enabled !== false;
+    RESV.source = j.source || '';
+    (j.rows || []).forEach(function(row){ if(row && row.client_id) RESV.rows[row.client_id] = row; });
+    RESV.loaded = true;
+  }catch(e){
+    console.warn('[reservations] VIP scan unavailable', e);
+    RESV.enabled = false;
+  }
+  RESV.loading = false;
+  if(state.currentTab === 'reservations') renderMain();
+}
+
+// The chip under the guest's name. Three states and no fourth: an unverified
+// match, a confirmed VIP, and nothing at all -- which is what the great
+// majority of rows show, and is the point.
+function resVipChip(r){
+  if(!r || !r.client) return '';
+  var v = RESV.rows[r.client];
+  if(!v) return '';
+  var id = String(r.client).replace(/[^A-Za-z0-9_-]/g,'');
+  if(v.status === 'confirmed'){
+    return '<i class="res-vipchip res-vipchip-on" title="'+resEsc(v.description||'')+'">'
+      + 'VIP' + (v.decided_by ? ' &middot; confirmed' : '') + '</i>';
+  }
+  if(v.status === 'match'){
+    return '<button class="res-vipchip res-vipchip-q" onclick="resVipOpen(\''+id+'\')" '
+      + 'title="A public figure shares this name - tap to check">Possible public figure &mdash; verify</button>';
+  }
+  return '';
+}
+
+// ── The verify panel ──────────────────────────────────────────────────────
+var RESVP = { open: false, id: null };
+
+function resVipEl(){
+  var el = document.getElementById('res-vipv');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'res-vipv';
+    document.body.appendChild(el);
+    el.addEventListener('click', function(e){ if(e.target === el) resVipClose(); });
+  }
+  return el;
+}
+function resVipPaint(){
+  var el = resVipEl();
+  el.innerHTML = RESVP.open ? resVipHtml() : '';
+  el.className = RESVP.open ? 'rg-ov' : '';
+}
+function resVipOpen(id){ if(!id) return; RESVP.open = true; RESVP.id = id; resVipPaint(); }
+function resVipClose(){ RESVP.open = false; RESVP.id = null; resVipPaint(); }
+
+if(!window._resVipKey){
+  window._resVipKey = true;
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && RESVP.open) resVipClose();
+  });
+}
+
+function resVipHtml(){
+  var v = RESV.rows[RESVP.id];
+  if(!v) return '';
+  var list = (RES.data && RES.data.reservations) || [];
+  var row = null;
+  for(var i=0;i<list.length;i++){ if(list[i].client === RESVP.id){ row = list[i]; break; } }
+  row = row || {};
+  var busy = !!RESV.busy[RESVP.id];
+
+  var h = ['<div class="rg-card" role="dialog" aria-modal="true" aria-label="Verify possible public figure">'];
+  h.push('<div class="rg-head"><div>');
+  h.push('<div class="rg-kicker">Possible public figure</div>');
+  h.push('<div class="rg-name">'+resEsc(row.name || v.guest_name || 'Guest')+'</div>');
+  h.push('</div><button class="rg-x" onclick="resVipClose()" aria-label="Close">&times;</button></div>');
+
+  if(row.time){
+    h.push('<div class="rvp-sub">'+resEsc(row.time)+' &middot; '+resNum(row.pax)+' cover'+(row.pax===1?'':'s')
+      + (row.tables && row.tables.length ? ' &middot; table '+resEsc(row.tables.join(', ')) : '')
+      + (row.booked_by ? ' &middot; booked via '+resEsc(row.booked_by) : '')+'</div>');
+  }
+
+  h.push('<div class="rvp-lab">One name match found</div>');
+  h.push('<div class="rvp-hit">');
+  h.push('<div class="rvp-hit-t">'+resEsc(v.title||'')+'</div>');
+  if(v.description) h.push('<div class="rvp-hit-d">'+resEsc(v.description)+'</div>');
+  if(v.source_url){
+    h.push('<a class="rvp-hit-l" href="'+resEsc(v.source_url)+'" target="_blank" rel="noopener noreferrer">'
+      + (v.source === 'google-kg' ? 'Open the source page' : 'Open the Wikipedia page') + ' &#8599;</a>');
+  }
+  h.push('</div>');
+
+  // Said plainly, above the buttons, every single time. The manager is being
+  // asked to make a judgement the app cannot make, so the app has to be
+  // straight about what it does and does not know.
+  h.push('<div class="rvp-warn">This is a name match only. It may not be your guest &mdash; '
+    + 'check before treating them as a VIP.</div>');
+
+  h.push('<div class="rvp-acts">');
+  h.push('<button class="res-btn" onclick="resVipDecide(\'dismissed\')"'+(busy?' disabled':'')+'>Not them</button>');
+  h.push('<button class="res-btn res-btn-go" onclick="resVipDecide(\'confirmed\')"'+(busy?' disabled':'')+'>'
+    + (busy ? 'Saving...' : 'Confirm VIP') + '</button>');
+  h.push('</div>');
+  h.push('<div class="rvp-foot">Either answer is remembered for this guest, so nobody is asked twice.</div>');
+  h.push('</div>');
+  return h.join('');
+}
+
+async function resVipDecide(status){
+  var id = RESVP.id;
+  if(!id || RESV.busy[id]) return;
+  var v = RESV.rows[id];
+  if(!v) return;
+  RESV.busy[id] = true; resVipPaint();
+  var who = (state.userEmail || '').toLowerCase() || null;
+  var patch = { status: status, decided_by: who, decided_at: new Date().toISOString() };
+  var res = await sb.from('guest_notability').update(patch).eq('client_id', id);
+  RESV.busy[id] = false;
+  if(res.error){
+    console.warn('[reservations] could not save VIP decision', res.error);
+    toast('Could not save that just now - the booking is unchanged. Try again.', true);
+    resVipPaint();
+    return;
+  }
+  RESV.rows[id] = Object.assign({}, v, patch);
+  resVipClose();
+  toast(status === 'confirmed'
+    ? 'Marked as VIP - it will show on every future booking.'
+    : 'Dismissed - this guest will not be flagged again.');
+  renderMain();
 }
 
 // ── PRINT BRIEF ───────────────────────────────────────────────────────────
@@ -1164,7 +1340,11 @@ function renderReservations(){
               // Last visit and average spend per person sit under the name
               // rather than in two more columns: it is the same guest's
               // information, and the grid is already eight columns wide.
-              + resHistLine(r, money)+'</div>'
+              + resHistLine(r, money)
+              // Under the history line, not beside the name: the name column is
+              // already the widest thing on the row and a chip inline with it
+              // would push the table number off small screens.
+              + resVipChip(r)+'</div>'
           // Blank, not "not assigned": verified 23 Jul that SevenRooms' API only
           // returns a table once the hosts LOCK it (10 of 13 bookings that night
           // came back empty while the SevenRooms screen showed an auto-suggested

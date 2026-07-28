@@ -2505,6 +2505,34 @@
   .res-btn-go{background:var(--vino);color:#fff;border-color:var(--vino)}
   .res-btn-go:hover:not(:disabled){background:var(--vino-dark)}
   .res-vip{font-size:8.5px;font-weight:700;letter-spacing:.1em;color:#fff;background:var(--vino);border-radius:4px;padding:2px 5px;vertical-align:1px}
+
+  /* ── Public-figure chips, under the guest's name ──────────────────────────
+     Two states, deliberately different in weight. The unverified one is a
+     question the app is asking, so it is quiet, amber and tappable. The
+     confirmed one is a fact a manager established, so it carries the house
+     colour like the SevenRooms VIP pill beside it. Both sit on their own line
+     under the history and override .res-name's nowrap, which would otherwise
+     clip them. */
+  .res-vipchip{display:inline-block;margin-top:3px;font-style:normal;font-size:10px;font-weight:600;
+    letter-spacing:.02em;border-radius:4px;padding:2px 6px;line-height:1.35;white-space:normal;max-width:100%}
+  .res-vipchip-q{background:#FBF1DF;color:#8A5A12;border:1px solid #E9D2A6;cursor:pointer;text-align:left;font-family:inherit}
+  .res-vipchip-q:hover{background:#F6E7CB;border-color:#DCC08A}
+  .res-vipchip-on{background:var(--vino);color:#fff;border:1px solid var(--vino);
+    font-size:8.5px;font-weight:700;letter-spacing:.1em}
+
+  /* Verify panel — reuses the guest-history overlay shell (.rg-ov/.rg-card). */
+  .rvp-sub{font-size:11.5px;color:#6B5B4A;margin:-2px 0 14px}
+  .rvp-lab{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#A99887;font-weight:600;margin-bottom:6px}
+  .rvp-hit{background:#F5F0E8;border-radius:10px;padding:12px 14px}
+  .rvp-hit-t{font-weight:700;font-size:14.5px;color:var(--vino)}
+  .rvp-hit-d{font-size:12.5px;color:#6B5B4A;margin-top:2px;line-height:1.45}
+  .rvp-hit-l{display:inline-block;margin-top:9px;font-size:12px;font-weight:600;color:var(--vino);text-decoration:none}
+  .rvp-hit-l:hover{text-decoration:underline}
+  .rvp-warn{font-size:11.5px;color:#8A5A12;background:#FBF1DF;border-radius:8px;padding:9px 11px;
+    margin-top:12px;line-height:1.5}
+  .rvp-acts{display:flex;gap:8px;margin-top:16px}
+  .rvp-acts .res-btn{flex:1;justify-content:center;text-align:center}
+  .rvp-foot{font-size:10.5px;color:#A99887;margin-top:10px;text-align:center}
   .res-tbls{font-variant-numeric:tabular-nums}
   .res-tbls i{font-style:italic;color:#B0A18F;font-size:11.5px}
   .res-note,.res-by{font-size:11.5px;color:#6B5B4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -585,12 +585,17 @@ function loadAdminUsers(){
     sb.from('app_users').select('*').order('name'),
     sb.from('foh_staff').select('*').eq('active',true),
     sbKitchen.from('staff').select('*').eq('active',true),
-    sb.from('app_config').select('value').eq('key','signers').limit(1)
+    sb.from('app_config').select('value').eq('key','signers').limit(1),
+    sb.from('app_config').select('value').eq('key','vip_scan').limit(1)
   ]).then(function(res){
     state.adminUsers   = res[0].error ? [] : (res[0].data||[]);
     state.adminFoh     = res[1].error ? [] : (res[1].data||[]);
     state.adminKitchen = res[2].error ? [] : (res[2].data||[]);
     state.adminSigners = (res[3] && res[3].data && res[3].data[0]) ? (res[3].data[0].value||{}) : {};
+    // Missing row (the SQL has not been run yet) reads as OFF, not as broken:
+    // the settings screen says so in words rather than showing a switch that
+    // silently fails to save.
+    state.admVipCfg    = (res[4] && res[4].data && res[4].data[0]) ? (res[4].data[0].value||{}) : null;
     state.adminLoaded  = true;
     if(res[0].error || res[1].error || res[2].error){
       console.error('Admin data load error:', res[0].error||res[1].error||res[2].error);
@@ -672,6 +677,29 @@ async function adminDeleteUser(email){
 function adminRefresh(){ state.adminLoaded=false; loadAdminUsers(); }
 function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
 var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
+  // ── Settings tab ────────────────────────────────────────────────────────
+  // One card per switch, the explanation carrying more weight than the
+  // control: an admin turning something on for the whole house should be able
+  // to read what it does without leaving the row.
+  +'.adm-card{background:#fff;border:1px solid #EADFCF;border-radius:12px;padding:18px 20px;margin-bottom:14px;}'
+  +'.adm-set-row{display:flex;align-items:flex-start;gap:18px;}'
+  +'.adm-set-txt{flex:1;min-width:0;}'
+  +'.adm-set-t{font-weight:700;font-size:15px;color:#400207;margin-bottom:5px;}'
+  +'.adm-set-d{font-size:12.5px;color:#6B5B4A;line-height:1.55;}'
+  +'.adm-set-note{font-size:11.5px;color:#8B7A66;margin-top:12px;padding-top:11px;border-top:1px solid #F0E7DA;line-height:1.5;}'
+  +'.adm-set-note code{background:#F5F0E8;padding:1px 5px;border-radius:4px;font-size:11px;}'
+  +'.adm-set-off{font-size:11px;font-weight:600;color:#8A5A12;background:#FBF1DF;border:1px solid #E9D2A6;'
+    +'border-radius:5px;padding:4px 9px;white-space:nowrap;flex:none;}'
+  // A real switch, not a checkbox: this is a house-wide on/off and it should
+  // read as one across the room.
+  +'.adm-switch{position:relative;display:inline-block;width:46px;height:26px;flex:none;cursor:pointer;}'
+  +'.adm-switch input{position:absolute;opacity:0;width:0;height:0;}'
+  +'.adm-switch span{position:absolute;inset:0;background:#D8CDBC;border-radius:26px;transition:background .18s;}'
+  +'.adm-switch span:before{content:"";position:absolute;height:20px;width:20px;left:3px;top:3px;'
+    +'background:#fff;border-radius:50%;transition:transform .18s;}'
+  +'.adm-switch input:checked+span{background:#400207;}'
+  +'.adm-switch input:checked+span:before{transform:translateX(20px);}'
+  +'.adm-switch input:focus-visible+span{outline:2px solid #400207;outline-offset:2px;}'
   // Feedback: the list and the open item sit side by side once there is room
   // for both. On a phone the panel simply follows the list.
   //
@@ -912,8 +940,11 @@ function renderAdmin(){
     +'<button class="'+(v==='people'?'on':'')+'" onclick="admSetView(\'people\')">People</button>'
     +'<button class="'+(v==='usage'?'on':'')+'" onclick="admSetView(\'usage\')">Usage</button>'
     +'<button class="'+(v==='feedback'?'on':'')+'" onclick="admSetView(\'feedback\')">Feedback</button>'
+    +'<button class="'+(v==='settings'?'on':'')+'" onclick="admSetView(\'settings\')">Settings</button>'
     +'</div></div>';
-  var body = v==='usage' ? admUsageHTML() : (v==='feedback' ? admFbHTML() : admControlCentre());
+  var body = v==='usage' ? admUsageHTML()
+    : (v==='feedback' ? admFbHTML()
+    : (v==='settings' ? admSettingsHTML() : admControlCentre()));
   return '<style>'+ADM_CSS+'</style>'+tabs+body;
 }
 function admSetView(v){
@@ -925,6 +956,60 @@ function admSetView(v){
 }
 // "Who can sign" — per-action authorized signers, now edited inline in each FOH
 // person's detail panel (admDetailHTML). Saved to app_config via admSaveSigners.
+/* ===================================================================
+   ADMIN → SETTINGS — app-wide switches that are not about one person.
+   Deliberately a short page. A switch belongs here only when it changes
+   what the app DOES for everybody; anything per-person stays in People.
+   =================================================================== */
+function admSettingsHTML(){
+  var cfg = state.admVipCfg;
+  var missing = (cfg === null);           // the SQL has not been run
+  var on = !!(cfg && cfg.enabled);
+  var h = ['<div class="adm-wrap">'];
+
+  h.push('<div class="adm-card">');
+  h.push('<div class="adm-set-row">');
+  h.push('<div class="adm-set-txt">');
+  h.push('<div class="adm-set-t">Flag possible public figures in Reservations</div>');
+  h.push('<div class="adm-set-d">Checks tonight&rsquo;s guest names against public records and shows '
+    + '&ldquo;possible public figure&rdquo; on the booking. A manager confirms or dismisses it &mdash; '
+    + 'the app never decides on its own, because a matching name is not proof it is the same person. '
+    + 'A confirmed guest shows as VIP on every future booking.</div>');
+  h.push('</div>');
+  if(missing){
+    h.push('<span class="adm-set-off">Not set up</span>');
+  } else {
+    h.push('<label class="adm-switch"><input type="checkbox" '+(on?'checked':'')
+      + ' onchange="admToggleVipScan(this.checked)"><span></span></label>');
+  }
+  h.push('</div>');
+
+  if(missing){
+    h.push('<div class="adm-set-note">Run <code>foh-vip-scan.sql</code> once on this project, then reload this page.</div>');
+  } else if(on){
+    h.push('<div class="adm-set-note">On. It only looks up guests it has not seen before, and only where '
+      + 'SevenRooms gives a guest record &mdash; so most nights it checks a handful of names and shows nothing.</div>');
+  } else {
+    h.push('<div class="adm-set-note">Off. No guest name leaves the app while this is off.</div>');
+  }
+  h.push('</div>');
+  h.push('</div>');
+  return h.join('');
+}
+
+async function admToggleVipScan(on){
+  var next = Object.assign({}, state.admVipCfg||{}, { enabled: !!on });
+  var res = await sb.from('app_config').upsert(
+    { key:'vip_scan', value: next, updated_at: new Date().toISOString() }, { onConflict:'key' });
+  if(res.error){ toast('Could not save that: '+res.error.message, true); return; }
+  state.admVipCfg = next;
+  // The Reservations screen caches its scan for the session, so clear it —
+  // otherwise switching on here appears to do nothing until a reload.
+  if(typeof RESV !== 'undefined'){ RESV.loaded = false; RESV.enabled = null; RESV.rows = {}; }
+  toast(on ? 'On — Reservations will flag possible public figures.' : 'Off — no name checks will run.');
+  renderMain();
+}
+
 async function admSaveSigners(){
   var res=await sb.from('app_config').upsert({key:'signers',value:state.adminSigners||{},updated_at:new Date().toISOString()},{onConflict:'key'});
   if(res.error) alert('Could not save: '+res.error.message+'\n\n(If this is the first time, run the app_config table SQL once.)');
