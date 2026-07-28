@@ -2485,7 +2485,11 @@
      the width and the note column gives some back. */
   .res-r{display:grid;grid-template-columns:60px 78px minmax(205px,1.6fr) 88px 122px minmax(130px,1.3fr) 104px;
     gap:10px;align-items:center;padding:11px 15px;font-size:13px;color:var(--ink);border-top:1px solid rgba(107,31,42,.08)}
-  .res-money .res-r{grid-template-columns:60px 78px minmax(205px,1.6fr) 88px 122px minmax(120px,1.2fr) 104px 92px}
+  /* Spend went from one number to three lines (gross, net, per guest) on 28 Jul,
+     so it needs real width -- 92px wrapped "AED 1,234" onto two lines. The note
+     column gives it back; a truncated note is recoverable (it has a tooltip and
+     the search covers it), a wrapped money column is just hard to read. */
+  .res-money .res-r{grid-template-columns:60px 78px minmax(205px,1.6fr) 88px 122px minmax(104px,1fr) 104px 132px}
   .res-r:first-child{border-top:none}
   .res-hdr{background:var(--surface3);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
     color:var(--gold-dim);font-weight:700;padding-top:9px;padding-bottom:9px}
@@ -2505,6 +2509,30 @@
   .res-tbls i{font-style:italic;color:#B0A18F;font-size:11.5px}
   .res-note,.res-by{font-size:11.5px;color:#6B5B4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .res-by i{display:block;font-style:normal;font-size:10.5px;color:#A99887}
+
+  /* ── Spend cell: gross, net, average per guest ─────────────────────────────
+     Gross leads because it is what the guest paid and what the host would say
+     out loud; net sits under it in the same colour family but lighter, so the
+     eye reads the pair as one figure rather than two competing ones. Tabular
+     numerals keep the column aligned down the page. */
+  .res-hdr .res-right i{display:block;font-style:normal;font-size:8px;letter-spacing:.1em;
+    color:#B9A88F;font-weight:600;margin-top:2px}
+  .res-sp{font-variant-numeric:tabular-nums;line-height:1.3}
+  .res-sp-g{font-weight:600;color:var(--vino-dark);font-size:13px;white-space:nowrap}
+  .res-sp-n{font-size:11px;color:#7A6A58;white-space:nowrap}
+  .res-sp-pp{font-size:10px;color:#A99887;white-space:nowrap;margin-top:1px}
+  .res-sp small{font-size:9px;letter-spacing:.04em;color:#A99887}
+  /* An unlinked booking. Deliberately quiet -- it is an absence of data, not a
+     result, and it must not read as a zero. */
+  .res-sp-none{font-style:normal;color:#C6B8A6}
+  /* The money caveat under the table. Stated, not hidden: the figures above
+     cover only bookings with a linked check and never equal the night's
+     takings. Sits apart from the read-only footer so it is not skimmed past. */
+  .res-foot-money{margin-top:6px;border-top:1px solid rgba(107,31,42,.1);padding-top:9px;
+    color:#7A6A58;max-width:none}
+  .res-foot-money b{color:var(--vino-dark);font-weight:600}
+  .res-area b{letter-spacing:.04em;text-transform:none;font-weight:700;font-size:11.5px;color:var(--vino-dark)}
+  .res-area i{font-style:normal;color:#B0A18F;font-size:10.5px}
   .res-pill{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:11px;padding:4px 9px;white-space:nowrap}
   .res-pill-due{background:rgba(168,137,48,.12);color:#8A6F1E;border:1px solid rgba(168,137,48,.3)}
   .res-pill-seated{background:rgba(46,107,52,.12);color:#2E6B34;border:1px solid rgba(46,107,52,.32)}

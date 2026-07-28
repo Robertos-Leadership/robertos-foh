@@ -42,6 +42,69 @@ var RES = {
 };
 
 function resEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// ── Per-reservation money (added 28 Jul 2026, asked for by Nicole) ────────────
+// She needs what a table actually spent, gross AND net, plus the average per
+// person. The gross is the SevenRooms check subtotal, which is the menu-price
+// total the guest paid; net is that / 1.225, the verified stack (10% service +
+// 7% municipality on net, 5% VAT on net+SC).
+//
+// THE THING TO NOT FORGET: these figures cover only the bookings SevenRooms has
+// a linked check for. A walk-in served without a booking has no reservation to
+// attach a check to, so the column NEVER sums to the night's revenue. Checked
+// against rev_daily (Simphony, the revenue truth) for 20-25 Jul 2026 it came to
+// 83-98% of net and the gap moved every night. That is why the footer states the
+// coverage instead of quietly printing a total that contradicts the closing
+// report. Simphony stays the only source for "what did we take".
+//
+// LT_GROSS_TO_NET is defined once in foh-core.js -- read it, never re-type 1.225.
+function resGrossToNet(){ return (typeof LT_GROSS_TO_NET === 'number' && LT_GROSS_TO_NET > 0) ? LT_GROSS_TO_NET : 1.225; }
+function resNet(gross){ return (Number(gross)||0) / resGrossToNet(); }
+function resMoney0(n){ return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+// The gross on a booking. Prefers the new `gross` field (check SUBTOTAL) and
+// falls back to the old `spend` (check TOTAL, i.e. subtotal + tips) only while an
+// app build is running against an edge function that predates the split -- a tip
+// on top is a far smaller error than showing nothing at all.
+function resGrossOf(r){ return Number(r && (r.gross != null ? r.gross : r.spend)) || 0; }
+// How many people to divide by. SevenRooms gives both the booked size and the
+// number that actually turned up; the average per person means the people who
+// actually ate, so arrived wins when the hosts have entered it. A 6-top where 4
+// came would otherwise read a third light.
+function resHeads(r){ return Number(r && r.arrived) > 0 ? Number(r.arrived) : (Number(r && r.pax) || 0); }
+// The night's money, counted the SAME way the rows are.
+//
+// WHY THIS IS COMPUTED HERE and not read off totals.covers_with_money: the edge
+// function counts heads as the BOOKED size, the rows count them as the ARRIVED
+// size (resHeads). On 24 Jul that is 178 vs 176 people, which put two different
+// "net per guest" figures on one screen -- 317.15 on the tile against 320.75 down
+// the column. Small, and exactly the kind of drift that makes someone stop
+// trusting the screen. One rule, applied once, used by the tile, the area lines
+// and every row.
+function resNightMoney(){
+  var out = { gross:0, heads:0, bookings:0 };
+  var rows = (RES.data && RES.data.reservations) || [];
+  rows.forEach(function(r){
+    var g = resGrossOf(r);
+    if(!g) return;
+    out.gross += g; out.heads += resHeads(r); out.bookings++;
+  });
+  out.net = resNet(out.gross);
+  return out;
+}
+// One booking's money: gross, net, and the average per person.
+function resSpendCell(r){
+  var g = resGrossOf(r);
+  // No linked check is NOT zero spend, and must never look like it. A dim dash
+  // that says why beats both a blank cell (reads as "nothing here") and a 0
+  // (reads as "they spent nothing").
+  if(!g) return '<i class="res-sp-none" title="No check linked to this booking in SevenRooms yet">&mdash;</i>';
+  var n = resNet(g), heads = resHeads(r);
+  var pp = heads ? '<div class="res-sp-pp">'+resMoney0(g/heads)+' &middot; '+resMoney0(n/heads)+' per guest</div>' : '';
+  return '<div class="res-sp" title="Gross AED '+resMoney0(g)+' (menu price, what the guest paid) &#10;Net AED '+resMoney0(n)+' (gross / '+resGrossToNet()+')'
+    + (heads?' &#10;Over '+heads+' guest'+(heads===1?'':'s'):'')+'">'
+    + '<div class="res-sp-g"><small>AED </small>'+resMoney0(g)+'</div>'
+    + '<div class="res-sp-n"><small>AED </small>'+resMoney0(n)+' net</div>'
+    + pp + '</div>';
+}
 function resNum(n){ return Number(n||0).toLocaleString('en-US'); }
 function resToday(){ return (typeof chkToday==='function') ? chkToday().iso : new Date().toISOString().slice(0,10); }
 function resDateLabel(iso){
@@ -395,7 +458,13 @@ function resHistLine(r, money){
   var visits = Number(g.visits) || 0;
   if(visits <= 1 && !(Number(g.spend) > 0)) return '<i class="res-hist">first visit</i>';
   var bits = [visits + (visits === 1 ? ' visit' : ' visits')];
-  if(money && Number(g.per_cover) > 0) bits.push('AED ' + resNum(Math.round(g.per_cover)) + '/cover');
+  // Say NET. SevenRooms' own per-cover figure is computed on the net basis --
+  // checked 28 Jul against three live profiles, spend/covers reproduces it
+  // (780.83 and 463.58 to the fils) while gross/covers does not (921.39, 481.50).
+  // Unlabelled it was fine on its own, but the Spend column beside it now prints
+  // gross AND net on every row, and two money figures on one line with different
+  // bases and no labels is how someone ends up comparing the wrong pair.
+  if(money && Number(g.per_cover) > 0) bits.push('AED ' + resNum(Math.round(g.per_cover)) + ' net/cover');
   if(g.last_visit) bits.push('last ' + resVisitShort(g.last_visit));
   return '<i class="res-hist">' + resEsc(bits.join(' · ')) + '</i>';
 }
@@ -607,6 +676,21 @@ function renderReservations(){
     + '<div class="res-tot-i"><b>'+resNum(t.seated)+'</b><span>In now</span></div>'
     + '<div class="res-tot-i"><b>'+resNum(t.upcoming)+'</b><span>Still to come</span></div>'
     + '<div class="res-tot-i"><b>'+resNum(t.completed)+'</b><span>Finished</span></div>'
+    // Two money tiles, only once the night actually has checks. Net per guest is
+    // the one Nicole reads, so it gets its own tile rather than being buried in a
+    // tooltip. Both are labelled "linked checks" on the tile itself -- the tile
+    // sits beside Covers, and without the label it would be read as the night's
+    // revenue, which it is not (see resNet's note).
+    + (function(){
+        if(!money) return '';
+        var nm = resNightMoney();
+        if(!nm.gross) return '';
+        return '<div class="res-tot-i"><b><small>AED </small>'+resMoney0(nm.gross)+'</b><span>Gross &middot; linked checks</span></div>'
+          + '<div class="res-tot-i"><b><small>AED </small>'+resMoney0(nm.net)+'</b><span>Net &middot; linked checks</span></div>'
+          + (nm.heads
+              ? '<div class="res-tot-i"><b><small>AED </small>'+resMoney0(nm.net/nm.heads)+'</b><span>Net per guest</span></div>'
+              : '');
+      })()
     + '</div>');
 
   // ── Filters: shift chips (only when the night actually has more than one)
@@ -648,12 +732,22 @@ function renderReservations(){
     order.forEach(function(k){
       var list = byArea[k];
       var cov = list.reduce(function(s,r){ return s+(r.pax||0); },0);
-      h.push('<div class="res-area">'+resEsc(k)+' <span>'+list.length+' reservation'+(list.length===1?'':'s')+' &middot; '+cov+' covers</span></div>');
+      // Area money: only the bookings in THIS area that carry a check, and it says
+      // how many that was. "AED 24,436 over 12 of 22 bookings" is a figure a
+      // manager can act on; the same number with the coverage hidden is one they
+      // would wrongly read as the room's takings.
+      var aGross = 0, aHeads = 0, aN = 0;
+      if(money) list.forEach(function(r){ var g = resGrossOf(r); if(!g) return; aGross += g; aHeads += resHeads(r); aN++; });
+      h.push('<div class="res-area">'+resEsc(k)+' <span>'+list.length+' reservation'+(list.length===1?'':'s')+' &middot; '+cov+' covers'
+        + (aGross ? ' &middot; <b>AED '+resMoney0(aGross)+'</b> gross &middot; AED '+resMoney0(resNet(aGross))+' net'
+                    + (aHeads?' &middot; AED '+resMoney0(resNet(aGross)/aHeads)+' net per guest':'')
+                    + ' <i>(' + aN + ' of ' + list.length + ' with a check)</i>' : '')
+        + '</span></div>');
       h.push('<div class="res-tbl">');
       h.push('<div class="res-r res-hdr">'
         + '<div>Time</div><div>Covers</div><div>Guest</div><div>Table</div>'
         + '<div>Status</div><div>Note</div><div>Booked by</div>'
-        + (money?'<div class="res-right">Spend</div>':'')
+        + (money?'<div class="res-right">Spend<i>gross &middot; net</i></div>':'')
         + '</div>');
       list.forEach(function(r){
         var st = (r.state==='seated') ? 'seated' : (r.state==='completed' ? 'done' : 'due');
@@ -684,7 +778,7 @@ function renderReservations(){
           + '<div><span class="res-pill res-pill-'+st+'">'+resEsc(r.status_display||r.status||'')+'</span></div>'
           + '<div class="res-note" title="'+resEsc(r.notes||'')+'">'+resEsc(r.notes||'')+'</div>'
           + '<div class="res-by">'+resEsc(r.booked_by||'')+(r.created?'<i>'+resEsc(resWhen(r.created))+'</i>':'')+'</div>'
-          + (money?'<div class="res-right">'+(r.spend?('<small>AED </small>'+resNum(Math.round(r.spend))):'')+'</div>':'')
+          + (money?'<div class="res-right">'+resSpendCell(r)+'</div>':'')
           + '</div>');
       });
       h.push('</div>');
@@ -696,6 +790,28 @@ function renderReservations(){
     + (RES.loadedAt? ' &middot; updated '+RES.loadedAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '')
     + (isTonight ? ' &middot; refreshes on its own every 90 seconds' : '')
     + '. To add, move or cancel a booking, the hosts do it in SevenRooms.</div>');
+
+  // The money caveat, stated where the money is -- not in a tooltip somebody has
+  // to go looking for. Two separate cases, and they need different sentences:
+  //   * checks exist but cover only part of the night -> say what fraction, and
+  //     say plainly that Revenue/the closing report is the real figure. Walk-ins
+  //     served without a booking have no reservation to carry a check.
+  //   * no checks at all -> almost always the newest night, which SevenRooms
+  //     posts on a delay. Saying "no spend" there would be a lie.
+  if(money && RES.data){
+    var ft = RES.data.totals || {};
+    var nm = resNightMoney();
+    var totalRes = Number(ft.reservations)||0, withMoney = nm.bookings;
+    if(nm.gross){
+      h.push('<div class="res-foot res-foot-money">Spend covers the '+resNum(withMoney)+' of '+resNum(totalRes)
+        + ' booking'+(totalRes===1?'':'s')+' with a check linked in SevenRooms, so it is <b>not</b> the night&rsquo;s takings &mdash; a walk-in with no booking has nothing to attach a check to. '
+        + 'For what the venue actually took, use Revenue or the closing report. Net = gross &divide; '+resGrossToNet()
+        + ' (10% service + 7% municipality, then 5% VAT).</div>');
+    } else if(totalRes){
+      h.push('<div class="res-foot res-foot-money">No checks are linked to this night in SevenRooms yet &mdash; it posts them on a delay, so the newest night usually fills in later. '
+        + 'Blank here means <b>not posted yet</b>, not that nobody spent anything.</div>');
+    }
+  }
 
   h.push('</div>');
   return h.join('');
