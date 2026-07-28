@@ -94,9 +94,11 @@ function resHeads(r){ return Number(r && r.pax) || 0; }
 // the column. Small, and exactly the kind of drift that makes someone stop
 // trusting the screen. One rule, applied once, used by the tile, the area lines
 // and every row.
-function resNightMoney(){
+// Takes an explicit rows list so the date-range export can count a night that is
+// NOT the one on screen. No argument = tonight's book, exactly as before.
+function resNightMoney(rowsIn){
   var out = { gross:0, heads:0, bookings:0 };
-  var rows = (RES.data && RES.data.reservations) || [];
+  var rows = rowsIn || (RES.data && RES.data.reservations) || [];
   rows.forEach(function(r){
     var g = resGrossOf(r);
     if(!g) return;
@@ -164,6 +166,25 @@ function resWhen(ts){
 // One POST to the Kitchen edge function per date. The previous payload stays
 // on screen while this runs, so a refresh never blanks the night. Any failure
 // leaves a plain sentence and a Try again button — never an error object.
+// One night, fetched and validated, with NO state touched. Split out of resLoad
+// 28 Jul so the date-range export can read a night without hijacking the screen:
+// the range export must never leave a different date on the book behind it.
+async function resFetchDaysheet(d){
+  var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?daysheet=' + d, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  var j = await r.json();
+  if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
+  // An edge function that predates the ?daysheet= mode ignores the parameter
+  // and answers with its normal-mode payload — which is ok:true but carries no
+  // reservations. Without this check that reads as "empty night", which is a
+  // lie. Treat a payload with no reservations array as not-deployed-yet.
+  if(!Array.isArray(j.reservations)) throw new Error('daysheet mode not deployed');
+  return j;
+}
+
 async function resLoad(force){
   if(RES.loading) return;
   var d = RES.date || (RES.date = resToday());
@@ -171,18 +192,7 @@ async function resLoad(force){
   RES.loading = true; RES.err = null;
   if(typeof renderMain==='function' && state.currentTab==='reservations') renderMain();
   try{
-    var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?daysheet=' + d, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
-    });
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    var j = await r.json();
-    if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
-    // An edge function that predates the ?daysheet= mode ignores the parameter
-    // and answers with its normal-mode payload — which is ok:true but carries no
-    // reservations. Without this check that reads as "empty night", which is a
-    // lie. Treat a payload with no reservations array as not-deployed-yet.
-    if(!Array.isArray(j.reservations)) throw new Error('daysheet mode not deployed');
+    var j = await resFetchDaysheet(d);
     RES.data = j;
     RES.loadedAt = new Date();
     RES.err = null;
@@ -221,6 +231,9 @@ if(!window._resTimer){
   // hang over an unrelated screen. Sweep it as soon as the tab moves.
   window._resGuestSweep = setInterval(function(){
     if(typeof RESG!=='undefined' && RESG.open && state && state.currentTab!=='reservations') resCloseGuest();
+    // Same for the range dialog — but never while it is mid-download, or she
+    // loses ten nights of reading for a stray tab tap.
+    if(typeof RESR!=='undefined' && RESR.open && !RESR.busy && state && state.currentTab!=='reservations') resRangeClose();
   }, 400);
 }
 
@@ -1008,6 +1021,119 @@ var RES_XL_W = {
   'Gross (AED)':13, 'Net (AED)':13, 'Gross per guest (AED)':15, 'Net per guest (AED)':15
 };
 
+// ONE night as a styled worksheet. Lifted verbatim out of resExportExcel 28 Jul
+// when the date-range export arrived: two copies of this drift, and six months
+// from now Nicole's range file and her single-night file look like they came from
+// two different companies. One builder, both callers.
+//   wb      - the ExcelJS workbook to add to
+//   name    - the sheet tab name (must be unique in the workbook)
+//   rows    - the bookings, already filtered by the caller
+//   money   - false hides every money column (no Revenue access)
+//   subText - the italic line under the title: which night, how many, filters
+function resXlDaySheet(wb, name, rows, money, subText){
+  var C = RES_XL;
+  var aoa = resExportSheets(rows, money);
+  var head = aoa[0], body = aoa.slice(1);
+
+  var ws = wb.addWorksheet(name, {
+    views: [{ state:'frozen', ySplit:4 }],          // title+sub+spacer+header stay put
+    pageSetup: { orientation:'landscape', fitToPage:true, fitToWidth:1 }
+  });
+  ws.columns = head.map(function(h){ return { width: RES_XL_W[h] || 14 }; });
+  var n = head.length;
+
+  var title = ws.addRow(["ROBERTO'S DIFC  —  Reservations"]);
+  title.height = 34;
+  ws.mergeCells(title.number, 1, title.number, n);
+  title.getCell(1).style = {
+    font:{bold:true, size:16, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+    fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+    alignment:{horizontal:'center', vertical:'middle'}
+  };
+  var sub = ws.addRow([subText]);
+  sub.height = 18;
+  ws.mergeCells(sub.number, 1, sub.number, n);
+  sub.getCell(1).style = {
+    font:{size:9, italic:true, color:{argb:'FF'+C.VINO}, name:'Calibri'},
+    fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.SABBIA}},
+    alignment:{horizontal:'center', vertical:'middle'}
+  };
+  ws.addRow([]);
+
+  var hdr = ws.addRow(head);
+  hdr.height = 30;
+  hdr.eachCell(function(cell){
+    cell.style = {
+      font:{bold:true, size:9, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+      alignment:{horizontal:'center', vertical:'middle', wrapText:true},
+      border: resXlBorder(C.GOLD)
+    };
+  });
+  var headerRowNo = hdr.number;
+
+  // Which columns are money / whole numbers, worked out from the header text so
+  // this survives a column being added or the money block being dropped for a
+  // user without Revenue access.
+  var isMoney = head.map(function(h){ return /\(AED\)/.test(h); });
+  var isCount = head.map(function(h){ return h==='Covers' || h==='Arrived' || h==='Visits'; });
+
+  body.forEach(function(r, i){
+    var row = ws.addRow(r);
+    row.height = 15;
+    row.eachCell({includeEmpty:true}, function(cell, ci){
+      var z = i % 2 === 1;
+      cell.style = {
+        font:{size:9, name:'Calibri', color:{argb:'FF'+C.DARK}},
+        fill: z ? {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.LIGHT}} : undefined,
+        border: resXlBorder('E2D9C9', 'hair'),
+        alignment:{ vertical:'top',
+          horizontal: isMoney[ci-1] ? 'right' : (isCount[ci-1] ? 'center' : 'left'),
+          wrapText: head[ci-1] === 'Note' }
+      };
+      // Two decimals on money, none on counts. Without this Excel shows
+      // 127.35000000000001 on some rows and 78 on others, in the same column.
+      if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
+      else if(isCount[ci-1]) cell.numFmt = '0';
+    });
+  });
+
+  // Filter + total row: she is going to slice this by area and by shift, and a
+  // SUBTOTAL (not SUM) re-totals itself as she filters, so the number under the
+  // column always matches the rows she is looking at.
+  ws.autoFilter = { from:{row:headerRowNo, column:1}, to:{row:headerRowNo + body.length, column:n} };
+  if(body.length){
+    // ONLY the night's own two money columns are summable. Everything else that
+    // happens to carry (AED) must stay blank:
+    //   * per-guest columns are averages -- adding them up means nothing
+    //   * the lifetime columns belong to the GUEST, not the booking. Summing
+    //     lifetime spend down a night double-counts anyone who booked twice and
+    //     produces a number that looks like revenue and is nothing of the sort.
+    // This was previously driven off "does the header say (AED)", which totalled
+    // the lifetime per-cover column -- a meaningless figure sitting in a bold
+    // TOTAL row, which is exactly where a wrong number gets believed.
+    var SUMMABLE = { 'Gross (AED)':1, 'Net (AED)':1 };
+    var totals = head.map(function(h, ci){
+      if(!SUMMABLE[h]) return null;
+      var col = ws.getColumn(ci+1).letter;
+      return { formula:'SUBTOTAL(109,' + col + (headerRowNo+1) + ':' + col + (headerRowNo+body.length) + ')' };
+    });
+    totals[0] = 'TOTAL';
+    var tr = ws.addRow(totals);
+    tr.height = 20;
+    tr.eachCell({includeEmpty:true}, function(cell, ci){
+      cell.style = {
+        font:{bold:true, size:9.5, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+        border: resXlBorder(C.GOLD),
+        alignment:{horizontal: isMoney[ci-1] ? 'right' : 'left', vertical:'middle'}
+      };
+      if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
+    });
+  }
+  return ws;
+}
+
 async function resExportExcel(){
   var btn = document.getElementById('res-xls-btn');
   try{
@@ -1034,114 +1160,17 @@ async function resExportExcel(){
     }
     await resLoadExcelJS();
     var money = !fohBlocked('revenue');
-    var aoa = resExportSheets(rows, money);
-    var head = aoa[0], body = aoa.slice(1);
-    var C = RES_XL;
-
-    var wb = new ExcelJS.Workbook();
-    wb.creator = "Roberto's DIFC"; wb.created = new Date();
-
-    var ws = wb.addWorksheet('Reservations', {
-      views: [{ state:'frozen', ySplit:4 }],          // title+sub+spacer+header stay put
-      pageSetup: { orientation:'landscape', fitToPage:true, fitToWidth:1 }
-    });
-    ws.columns = head.map(function(h){ return { width: RES_XL_W[h] || 14 }; });
-    var n = head.length;
-
-    var title = ws.addRow(["ROBERTO'S DIFC  —  Reservations"]);
-    title.height = 34;
-    ws.mergeCells(title.number, 1, title.number, n);
-    title.getCell(1).style = {
-      font:{bold:true, size:16, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
-      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
-      alignment:{horizontal:'center', vertical:'middle'}
-    };
     var filter = [];
     if(RES.shift !== 'all') filter.push('shift: ' + RES.shift);
     if(RES.q) filter.push('search: "' + RES.q + '"');
-    var sub = ws.addRow([resDateLabel(RES.date) + '   |   ' + rows.length + ' booking' + (rows.length===1?'':'s')
+
+    var wb = new ExcelJS.Workbook();
+    wb.creator = "Roberto's DIFC"; wb.created = new Date();
+    resXlDaySheet(wb, 'Reservations', rows, money,
+      resDateLabel(RES.date) + '   |   ' + rows.length + ' booking' + (rows.length===1?'':'s')
       + (filter.length ? '   |   filtered by ' + filter.join(', ') : '')
-      + '   |   exported ' + new Date().toLocaleString('en-GB')]);
-    sub.height = 18;
-    ws.mergeCells(sub.number, 1, sub.number, n);
-    sub.getCell(1).style = {
-      font:{size:9, italic:true, color:{argb:'FF'+C.VINO}, name:'Calibri'},
-      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.SABBIA}},
-      alignment:{horizontal:'center', vertical:'middle'}
-    };
-    ws.addRow([]);
-
-    var hdr = ws.addRow(head);
-    hdr.height = 30;
-    hdr.eachCell(function(cell){
-      cell.style = {
-        font:{bold:true, size:9, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
-        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
-        alignment:{horizontal:'center', vertical:'middle', wrapText:true},
-        border: resXlBorder(C.GOLD)
-      };
-    });
-    var headerRowNo = hdr.number;
-
-    // Which columns are money / whole numbers, worked out from the header text so
-    // this survives a column being added or the money block being dropped for a
-    // user without Revenue access.
-    var isMoney = head.map(function(h){ return /\(AED\)/.test(h); });
-    var isCount = head.map(function(h){ return h==='Covers' || h==='Arrived' || h==='Visits'; });
-
-    body.forEach(function(r, i){
-      var row = ws.addRow(r);
-      row.height = 15;
-      row.eachCell({includeEmpty:true}, function(cell, ci){
-        var z = i % 2 === 1;
-        cell.style = {
-          font:{size:9, name:'Calibri', color:{argb:'FF'+C.DARK}},
-          fill: z ? {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.LIGHT}} : undefined,
-          border: resXlBorder('E2D9C9', 'hair'),
-          alignment:{ vertical:'top',
-            horizontal: isMoney[ci-1] ? 'right' : (isCount[ci-1] ? 'center' : 'left'),
-            wrapText: head[ci-1] === 'Note' }
-        };
-        // Two decimals on money, none on counts. Without this Excel shows
-        // 127.35000000000001 on some rows and 78 on others, in the same column.
-        if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
-        else if(isCount[ci-1]) cell.numFmt = '0';
-      });
-    });
-
-    // Filter + total row: she is going to slice this by area and by shift, and a
-    // SUBTOTAL (not SUM) re-totals itself as she filters, so the number under the
-    // column always matches the rows she is looking at.
-    ws.autoFilter = { from:{row:headerRowNo, column:1}, to:{row:headerRowNo + body.length, column:n} };
-    if(body.length){
-      // ONLY the night's own two money columns are summable. Everything else that
-      // happens to carry (AED) must stay blank:
-      //   * per-guest columns are averages -- adding them up means nothing
-      //   * the lifetime columns belong to the GUEST, not the booking. Summing
-      //     lifetime spend down a night double-counts anyone who booked twice and
-      //     produces a number that looks like revenue and is nothing of the sort.
-      // This was previously driven off "does the header say (AED)", which totalled
-      // the lifetime per-cover column -- a meaningless figure sitting in a bold
-      // TOTAL row, which is exactly where a wrong number gets believed.
-      var SUMMABLE = { 'Gross (AED)':1, 'Net (AED)':1 };
-      var totals = head.map(function(h, ci){
-        if(!SUMMABLE[h]) return null;
-        var col = ws.getColumn(ci+1).letter;
-        return { formula:'SUBTOTAL(109,' + col + (headerRowNo+1) + ':' + col + (headerRowNo+body.length) + ')' };
-      });
-      totals[0] = 'TOTAL';
-      var tr = ws.addRow(totals);
-      tr.height = 20;
-      tr.eachCell({includeEmpty:true}, function(cell, ci){
-        cell.style = {
-          font:{bold:true, size:9.5, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
-          fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
-          border: resXlBorder(C.GOLD),
-          alignment:{horizontal: isMoney[ci-1] ? 'right' : 'left', vertical:'middle'}
-        };
-        if(isMoney[ci-1]) cell.numFmt = '#,##0.00';
-      });
-    }
+      + '   |   exported ' + new Date().toLocaleString('en-GB'));
+    var C = RES_XL;
 
     // ── Summary ──
     var sws = wb.addWorksheet('Summary', { pageSetup:{orientation:'portrait', fitToPage:true, fitToWidth:1} });
@@ -1199,6 +1228,373 @@ async function resExportExcel(){
   }
 }
 
+// ── DATE-RANGE EXPORT ─────────────────────────────────────────────────────
+// Asked for by Francesco 28 Jul 2026 for Nicole: she compiles the chairman's
+// report every 10 days and was exporting each night one at a time, then pasting
+// ten files together by hand. This gives her ONE workbook: a Summary sheet with
+// a line per date, then one full sheet per date behind it.
+//
+// HOW IT WORKS: exactly the same single call per night the screen already makes
+// (resFetchDaysheet), run one date at a time, plus the guest-history call per
+// night. Sequential on purpose -- firing 31 nights at the edge function at once
+// is how you get rate-limited half way through and end up with a file that is
+// quietly missing four days.
+//
+// WHAT IT DELIBERATELY DOES NOT DO:
+//   * It ignores the shift chip and the search box. A range report is a report,
+//     not the screen; a filter silently applied across 10 nights is a trap. The
+//     dialog says so, and so does the Summary sheet.
+//   * It does not touch RES.date / RES.data, so the book on screen is exactly
+//     where she left it when the download finishes.
+//   * A night that fails is NEVER dropped in silence -- it is named on the
+//     Summary sheet under "Nights that could not be read", because a missing
+//     night in a chairman's report is worse than no report.
+var RES_RANGE_MAX = 31;      // one month at a time; 31 nights is ~62 round trips
+var RESR = { open:false, from:'', to:'', busy:false, done:0, total:0, note:'', err:'' };
+
+function resRangeEl(){
+  var el = document.getElementById('res-range');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'res-range';
+    document.body.appendChild(el);
+    // Backdrop closes it, but never while a download is running -- a half-built
+    // workbook thrown away by a stray tap is exactly the kind of small cruelty
+    // that stops people using a feature.
+    el.addEventListener('click', function(e){ if(e.target === el && !RESR.busy) resRangeClose(); });
+  }
+  return el;
+}
+function resRangePaint(){
+  var el = resRangeEl();
+  el.innerHTML = RESR.open ? resRangeHtml() : '';
+  el.className = RESR.open ? 'rg-ov' : '';
+}
+function resRangeOpen(){
+  RESR.open = true; RESR.err = ''; RESR.note = ''; RESR.done = 0; RESR.total = 0;
+  // Sensible default: the ten nights ending on the night she is looking at,
+  // which is the shape of the report she actually writes.
+  if(!RESR.to) RESR.to = RES.date || resToday();
+  if(!RESR.from) RESR.from = resShiftDate(RESR.to, -9);
+  resRangePaint();
+}
+function resRangeClose(){ if(RESR.busy) return; RESR.open = false; resRangePaint(); }
+function resRangeSet(which, v){
+  if(!v) return;
+  RESR[which] = v;
+  RESR.err = '';
+  resRangePaint();
+}
+if(!window._resRangeKey){
+  window._resRangeKey = true;
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && RESR.open && !RESR.busy) resRangeClose();
+  });
+}
+
+// The nights between two dates, inclusive. Returns [] if the range is backwards
+// or longer than the cap -- the caller says why, this just answers.
+function resRangeDates(from, to){
+  var out = [];
+  if(!from || !to || from > to) return out;
+  var d = from;
+  while(d <= to){
+    out.push(d);
+    d = resShiftDate(d, 1);
+    if(out.length > RES_RANGE_MAX) break;
+  }
+  return out;
+}
+
+function resRangeHtml(){
+  var days = resRangeDates(RESR.from, RESR.to);
+  var bad = '';
+  if(RESR.from && RESR.to && RESR.from > RESR.to) bad = 'The "from" date is after the "to" date.';
+  else if(days.length > RES_RANGE_MAX) bad = 'That is ' + days.length + ' nights. Please pick ' + RES_RANGE_MAX + ' or fewer — a longer range takes too long and SevenRooms starts refusing.';
+  var h = ['<div class="rg-card" role="dialog" aria-modal="true" aria-label="Export a date range">'];
+  h.push('<div class="rg-head"><div>');
+  h.push('<div class="rg-kicker">Excel &middot; date range</div>');
+  h.push('<div class="rg-name">Several nights, one file</div></div>');
+  if(!RESR.busy) h.push('<button class="rg-x" onclick="resRangeClose()" aria-label="Close">&times;</button>');
+  h.push('</div>');
+
+  h.push('<div class="rvp-sub">One Summary sheet with a line per night, then a full sheet for each night — the same layout as the single-night export.</div>');
+
+  h.push('<div class="resr-row"><label>From<input class="res-date" type="date" value="'+resEsc(RESR.from)+'" '
+    + (RESR.busy?'disabled ':'') + 'onchange="resRangeSet(\'from\', this.value)"></label>');
+  h.push('<label>To<input class="res-date" type="date" value="'+resEsc(RESR.to)+'" '
+    + (RESR.busy?'disabled ':'') + 'onchange="resRangeSet(\'to\', this.value)"></label></div>');
+
+  if(bad){
+    h.push('<div class="resr-bad">'+resEsc(bad)+'</div>');
+  }else if(days.length){
+    h.push('<div class="resr-note">'+days.length+' night'+(days.length===1?'':'s')
+      + ' &middot; about '+Math.max(1, Math.round(days.length*3/60*10)/10)+' min to build</div>');
+  }
+  h.push('<div class="resr-note resr-quiet">The shift chips and the search box are ignored — a range file always carries the whole of every night.</div>');
+
+  if(RESR.busy){
+    h.push('<div class="resr-prog"><b>'+resEsc(RESR.note||'Working…')+'</b>'
+      + '<div class="resr-bar"><i style="width:'+(RESR.total?Math.round(RESR.done/RESR.total*100):0)+'%"></i></div>'
+      + '<span>'+RESR.done+' of '+RESR.total+' nights read</span></div>');
+    h.push('<div class="resr-note resr-quiet">Keep this window open until the file downloads.</div>');
+  }
+  if(RESR.err) h.push('<div class="resr-bad">'+resEsc(RESR.err)+'</div>');
+
+  h.push('<div class="rvp-acts">');
+  h.push('<button class="res-btn" onclick="resRangeClose()"'+(RESR.busy?' disabled':'')+'>Close</button>');
+  h.push('<button class="res-btn res-btn-go" onclick="resRangeRun()"'
+    + ((RESR.busy || bad || !days.length) ? ' disabled title="'+resEsc(bad || 'Pick a from and a to date')+'"' : '')
+    + '>'+(RESR.busy?'Building…':'Download Excel')+'</button>');
+  h.push('</div></div>');
+  return h.join('');
+}
+
+// Guest history for a night that is NOT on screen. Deliberately separate from
+// resEnsureHistory: that one owns the screen's loading flag and its in-flight
+// promise, and the range export must not make the book look like it is loading.
+// Shares the same RESH.got cache, so a guest who ate on four of the ten nights
+// is fetched once. Never throws -- a night with no history is still a good sheet.
+async function resHistoryForRows(rows){
+  var want = [], venue = '';
+  (rows || []).forEach(function(r){
+    if(!venue && r.venue) venue = r.venue;
+    var id = r.client;
+    if(id && !RESH.got[id] && !RESH.failed[id] && want.indexOf(id) === -1) want.push(id);
+  });
+  if(!want.length) return;
+  try{
+    var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guests=' + encodeURIComponent(want.join(','))
+        + '&venue=' + encodeURIComponent(venue), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var j = await r.json();
+    if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
+    var map = j.guests || {};
+    want.forEach(function(id){ if(map[id]) RESH.got[id] = map[id]; else RESH.failed[id] = 1; });
+  }catch(e){
+    console.warn('[reservations] range history failed', e);
+  }
+}
+
+async function resRangeRun(){
+  if(RESR.busy) return;
+  var days = resRangeDates(RESR.from, RESR.to);
+  if(!days.length || days.length > RES_RANGE_MAX) return;
+  RESR.busy = true; RESR.err = ''; RESR.done = 0; RESR.total = days.length;
+  RESR.note = 'Starting…';
+  resRangePaint();
+  try{
+    await resLoadExcelJS();
+    var money = !fohBlocked('revenue');
+    var C = RES_XL;
+    var wb = new ExcelJS.Workbook();
+    wb.creator = "Roberto's DIFC"; wb.created = new Date();
+
+    // Summary first so it is the tab that opens, filled in at the end once every
+    // night is counted.
+    var sws = wb.addWorksheet('Summary', { pageSetup:{orientation:'landscape', fitToPage:true, fitToWidth:1} });
+
+    var lines = [], problems = [], anyRows = false;
+    for(var i=0;i<days.length;i++){
+      var d = days[i];
+      RESR.note = 'Reading ' + resDateLabel(d);
+      resRangePaint();
+      try{
+        var pay = await resFetchDaysheet(d);
+        var rows = (pay && pay.reservations) || [];
+        if(rows.length){
+          await resHistoryForRows(rows);
+          anyRows = true;
+        }
+        var t = (pay && pay.totals) || {};
+        var nm = resNightMoney(rows);
+        lines.push({
+          date: d,
+          bookings: Number(t.reservations) || rows.length,
+          covers: Number(t.covers) || rows.reduce(function(a,r){ return a + (Number(r.pax)||0); }, 0),
+          withCheck: nm.bookings, heads: nm.heads, gross: nm.gross, net: nm.net
+        });
+        // An empty night still gets its own sheet, so nobody wonders whether a
+        // missing tab means "closed" or "the export skipped it".
+        resXlDaySheet(wb, d, rows, money,
+          resDateLabel(d) + '   |   ' + rows.length + ' booking' + (rows.length===1?'':'s')
+          + '   |   whole night, no filters   |   exported ' + new Date().toLocaleString('en-GB'));
+      }catch(e){
+        console.warn('[reservations] range: night failed', d, e);
+        problems.push({ date: d, why: (e && e.message) ? String(e.message) : 'could not be read' });
+      }
+      RESR.done = i + 1;
+      resRangePaint();
+    }
+
+    if(!lines.length){
+      RESR.err = 'None of those nights could be read from SevenRooms. Nothing was downloaded.';
+      return;
+    }
+
+    // ── Summary sheet ──
+    RESR.note = 'Building the file…';
+    resRangePaint();
+    var head = ['Date','Day','Bookings','Covers'];
+    if(money) head = head.concat(['Bookings with a check','Guests on those','Gross (AED)','Net (AED)','Net per guest (AED)']);
+    var W = {'Date':13,'Day':12,'Bookings':11,'Covers':10,'Bookings with a check':17,'Guests on those':14,
+             'Gross (AED)':14,'Net (AED)':14,'Net per guest (AED)':16};
+    sws.columns = head.map(function(h){ return { width: W[h] || 14 }; });
+    var n = head.length;
+
+    var stitle = sws.addRow(["ROBERTO'S DIFC  —  Reservations"]);
+    stitle.height = 34; sws.mergeCells(stitle.number, 1, stitle.number, n);
+    stitle.getCell(1).style = {
+      font:{bold:true, size:16, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+      alignment:{horizontal:'center', vertical:'middle'}
+    };
+    var ssub = sws.addRow([resDateLabel(days[0]) + '  to  ' + resDateLabel(days[days.length-1])
+      + '   |   ' + lines.length + ' night' + (lines.length===1?'':'s')
+      + '   |   whole night, no filters   |   exported ' + new Date().toLocaleString('en-GB')]);
+    ssub.height = 18; sws.mergeCells(ssub.number, 1, ssub.number, n);
+    ssub.getCell(1).style = {
+      font:{size:9, italic:true, color:{argb:'FF'+C.VINO}, name:'Calibri'},
+      fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.SABBIA}},
+      alignment:{horizontal:'center', vertical:'middle'}
+    };
+    sws.addRow([]);
+
+    var shdr = sws.addRow(head);
+    shdr.height = 30;
+    shdr.eachCell(function(cell){
+      cell.style = {
+        font:{bold:true, size:9, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+        alignment:{horizontal:'center', vertical:'middle', wrapText:true},
+        border: resXlBorder(C.GOLD)
+      };
+    });
+    var isM = head.map(function(h){ return /\(AED\)/.test(h); });
+    var tot = { bookings:0, covers:0, withCheck:0, heads:0, gross:0, net:0 };
+    lines.forEach(function(L, i){
+      tot.bookings += L.bookings; tot.covers += L.covers;
+      tot.withCheck += L.withCheck; tot.heads += L.heads;
+      tot.gross += L.gross; tot.net += L.net;
+      var vals = [L.date, resWeekday(L.date), L.bookings, L.covers];
+      if(money) vals = vals.concat([
+        L.withCheck, L.heads,
+        L.gross ? Math.round(L.gross*100)/100 : null,
+        L.gross ? Math.round(L.net*100)/100 : null,
+        (L.gross && L.heads) ? Math.round(L.net/L.heads*100)/100 : null
+      ]);
+      var row = sws.addRow(vals);
+      row.height = 16;
+      row.eachCell({includeEmpty:true}, function(cell, ci){
+        cell.style = {
+          font:{size:9.5, name:'Calibri', color:{argb:'FF'+C.DARK}},
+          fill: (i % 2 === 1) ? {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.LIGHT}} : undefined,
+          border: resXlBorder('E2D9C9', 'hair'),
+          alignment:{ vertical:'middle', horizontal: isM[ci-1] ? 'right' : (ci<=2 ? 'left' : 'center') }
+        };
+        if(isM[ci-1]) cell.numFmt = '#,##0.00';
+        else if(ci > 2) cell.numFmt = '0';
+      });
+    });
+    // Plain numbers, not SUBTOTAL: this sheet has no filter on it, and the total
+    // of the per-guest column is an AVERAGE (total net / total guests), which a
+    // SUM would get wrong.
+    var trow = ['TOTAL','', tot.bookings, tot.covers];
+    if(money) trow = trow.concat([
+      tot.withCheck, tot.heads,
+      Math.round(tot.gross*100)/100, Math.round(tot.net*100)/100,
+      tot.heads ? Math.round(tot.net/tot.heads*100)/100 : null
+    ]);
+    var tr = sws.addRow(trow);
+    tr.height = 20;
+    tr.eachCell({includeEmpty:true}, function(cell, ci){
+      cell.style = {
+        font:{bold:true, size:10, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
+        border: resXlBorder(C.GOLD),
+        alignment:{horizontal: isM[ci-1] ? 'right' : (ci<=2 ? 'left' : 'center'), vertical:'middle'}
+      };
+      if(isM[ci-1]) cell.numFmt = '#,##0.00';
+      else if(ci > 2) cell.numFmt = '0';
+    });
+
+    // Anything that did not make it into the file, named. Never silent.
+    if(problems.length){
+      sws.addRow([]);
+      var pb = sws.addRow(['NIGHTS THAT COULD NOT BE READ — they are NOT in this file']);
+      pb.height = 22; sws.mergeCells(pb.number, 1, pb.number, n);
+      pb.getCell(1).style = {
+        font:{bold:true, size:10, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF8C2F1E'}},
+        alignment:{horizontal:'left', vertical:'middle', indent:1}
+      };
+      problems.forEach(function(p){
+        var r = sws.addRow([p.date, p.why]);
+        sws.mergeCells(r.number, 2, r.number, n);
+        r.getCell(1).style = { font:{bold:true, size:9.5, color:{argb:'FF'+C.VINO}, name:'Calibri'} };
+        r.getCell(2).style = { font:{size:9.5, italic:true, name:'Calibri', color:{argb:'FF'+C.DARK}} };
+      });
+    }
+
+    // The same warning the single-night file carries. A range file travels
+    // further, not less far, so it needs it more.
+    if(money){
+      sws.addRow([]);
+      var wb1 = sws.addRow(['READ THIS BEFORE USING THE TOTALS']);
+      wb1.height = 22; sws.mergeCells(wb1.number, 1, wb1.number, n);
+      wb1.getCell(1).style = {
+        font:{bold:true, size:10, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
+        fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF8C2F1E'}},
+        alignment:{horizontal:'left', vertical:'middle', indent:1}
+      };
+      [
+        'These figures cover only the bookings with a check linked in SevenRooms.',
+        'A walk-in served without a booking has nothing to attach a check to, so this is NOT what the venue took.',
+        'Measured against Simphony it runs roughly 83-98% of the real net, and the gap moves night to night.',
+        'For what the venue actually took, use the Revenue module or the closing report.',
+        'The average PER GUEST is reliable (within about 2% of Simphony); the TOTAL is not.',
+        'Net = gross ÷ ' + resGrossToNet() + '  (10% service + 7% municipality on net, then 5% VAT). Gross is the menu-price total on the guest’s check.',
+        'Covers and Bookings are SevenRooms’ own counts for the night. Guests on those counts only the bookings that carry a check.'
+      ].forEach(function(t){
+        var r = sws.addRow(['', t]);
+        sws.mergeCells(r.number, 2, r.number, n);
+        r.getCell(2).style = { font:{size:9.5, italic:true, name:'Calibri', color:{argb:'FF'+C.DARK}}, alignment:{vertical:'top', wrapText:true} };
+        r.height = 15;
+      });
+    }
+    if(!anyRows) RESR.note = 'No bookings on any of those nights.';
+
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = "Roberto's Reservations " + days[0] + " to " + days[days.length-1] + ".xlsx";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+    RESR.busy = false;
+    RESR.open = false;                       // done — get out of her way
+    resRangePaint();
+    return;
+  }catch(e){
+    console.warn('[reservations] range export failed', e);
+    RESR.err = 'Could not build the file: ' + ((e && e.message) ? e.message : e) + '. Nothing was lost — the book on screen is untouched.';
+  }finally{
+    RESR.busy = false;
+    resRangePaint();
+  }
+}
+
+// "Wednesday" for the Summary sheet. Its own helper because resDateLabel prints
+// the whole date and the Summary already has a Date column beside it.
+function resWeekday(iso){
+  try{ return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long'}); }
+  catch(e){ return ''; }
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────────
 function renderReservations(){
   if(!RES.date) RES.date = resToday();
@@ -1227,6 +1623,7 @@ function renderReservations(){
     + (RESH.loading?' disabled title="Reading guest history…"':' title="Print a pre-service brief for the team"')
     + '>'+(RESH.loading?'Reading guests…':'Print brief')+'</button>');
   h.push('<button class="res-btn" id="res-xls-btn" onclick="resExportExcel()" title="Download this night as an Excel file">Excel</button>');
+  h.push('<button class="res-btn" onclick="resRangeOpen()" title="Download several nights as ONE Excel file — a summary line per night plus a full sheet for each">Excel: date range</button>');
   h.push('<button class="res-btn" onclick="resRefresh()"'+(RES.loading?' disabled':'')+'>'+(RES.loading?'Refreshing…':'Refresh')+'</button>');
   h.push('</div></div>');
 
