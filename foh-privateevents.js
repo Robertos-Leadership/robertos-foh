@@ -4139,8 +4139,12 @@ function peCmStart(basedOnKey, eventId){
         name: c.name||'Course',
         choose: !!c.choose,
         lines: ((c.choose ? c.options : c.items)||[]).map(function(n){
+          // The allergens travel separately from the prose now, so the editor
+          // has to carry both. Reading only the text would drop the allergens
+          // of every dish she keeps from the base menu.
+          var a = peAlgOf(c, n);
           return { name:n, from:'set', price:null, supplement:0, out:null, alcId:null,
-                   inherited: dsc[n]||'' };
+                   inherited: dsc[n]||'', inheritedAlg: a.known ? a.list : null };
         })
       };
     })
@@ -4694,23 +4698,44 @@ function peDescOf(c, dish){
   var t = (c && c.desc && c.desc[dish]) || '';
   return t.replace(PE_ALG_RE, '').trim();
 }
-// The desc map a course carries to the guest page and the documents, in the
-// shape they already read: { "Dish name": "what it is (D)(E)" }.
+// What a course carries to the guest page and the documents. TWO maps now:
+//   desc = { "Dish name": "what it is" }        — prose, no codes in it
+//   allg = { "Dish name": ["D","E"] }           — a field that can be checked
+// This used to be one map with the codes glued onto the end of the sentence,
+// which is how the same dish ended up saying egg on one menu and dairy on
+// another with nothing able to notice.
+//
 // inherited = what the menu she started from says about that dish. It wins:
 // it was written for that menu, and it covers dishes the à la carte has never
 // heard of. The à la carte only fills the gaps — the dishes she swapped in.
-function peCmCourseDesc(courseName, names, inherited){
+function peCmCourseDesc(courseName, names, inherited, inheritedAlg){
   var kind = peCmCourseKind({name:courseName});
   var inh = inherited || {};
-  var out = {};
+  var inhA = inheritedAlg || {};
+  var desc = {}, allg = {};
   (names||[]).forEach(function(n){
-    if(inh[n]){ out[n] = inh[n]; return; }
+    if(inh[n] || inhA[n]){
+      // The base menu wrote this line. Its allergens come across as a list if
+      // it already had one; otherwise split them back out of the prose, so an
+      // older menu is upgraded rather than losing them.
+      var t = String(inh[n]||''), codes = [], m;
+      PE_ALG_RE.lastIndex = 0;
+      while((m = PE_ALG_RE.exec(t))) codes.push(m[1].toUpperCase());
+      var clean = t.replace(PE_ALG_RE, '').trim();
+      if(clean) desc[n] = clean;
+      if(inhA[n]) allg[n] = inhA[n].slice();
+      else if(codes.length) allg[n] = codes;
+      return;
+    }
     var info = peCmDishInfo(n, kind);
     if(!info) return;
-    var s = ((info.desc||'') + peCmAlgCodes(info.allergens)).trim();
-    if(s) out[n] = s;
+    if(info.desc) desc[n] = String(info.desc).trim();
+    // An à la carte dish always knows its allergens — including when the answer
+    // is "none", which is a recorded fact, not a gap. Storing the empty array
+    // is what lets the guest page tell those two apart.
+    if(info.allergens) allg[n] = info.allergens.slice();
   });
-  return out;
+  return { desc:desc, allg:allg };
 }
 // ── what she can do with a menu she has built ────────────────────────────────
 // Open it exactly as the guest will see it. "Check the PDF" for a customised
@@ -4733,9 +4758,15 @@ function peCmPrintMenu(key){
       // the same shape peQuickPrint uses for canapés.
       // The menu's OWN text wins; the à la carte only fills a gap.
       var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
-      var codes = info ? peCmAlgCodes(info.allergens) : '';
-      var line = stored[o] || (info && info.desc ? info.desc : '');
-      body += '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
+      var alg  = peAlgOf(c, o);
+      if(!alg.known && info && info.allergens && info.allergens.length){
+        alg = { known:true, list:info.allergens };
+      }
+      var line = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
+      var codes = alg.known
+        ? (alg.list.length ? '('+alg.list.join(')(')+')' : '')
+        : 'allergens not recorded — please ask us';
+      body += '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes)+'</span>':'')+
         (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
     });
   });
@@ -4811,10 +4842,15 @@ async function peCmSave(){
       // The description + allergen codes travel WITH the menu, in the shape
       // client-setmenu.html already renders — so the guest page shows them
       // without having to look every dish up again.
-      var inh = {};
-      c.lines.forEach(function(l){ if(l.inherited) inh[String(l.name||'').trim()] = l.inherited; });
-      var desc = peCmCourseDesc(out.name, names, inh);
-      if(Object.keys(desc).length) out.desc = desc;
+      var inh = {}, inhA = {};
+      c.lines.forEach(function(l){
+        var nm = String(l.name||'').trim();
+        if(l.inherited) inh[nm] = l.inherited;
+        if(l.inheritedAlg) inhA[nm] = l.inheritedAlg;
+      });
+      var dd = peCmCourseDesc(out.name, names, inh, inhA);
+      if(Object.keys(dd.desc).length) out.desc = dd.desc;
+      if(Object.keys(dd.allg).length) out.allg = dd.allg;
       return out;
     }).filter(Boolean);
     var key = 'custom-'+String(cm.basedOn||'menu')+'-'+Math.random().toString(36).slice(2,8);
@@ -5300,9 +5336,11 @@ async function peDeleteDish(id){
 function peSmRawById(id){ for(var i=0;i<peState.setMenus.length;i++){ if(peState.setMenus[i].id===id) return peState.setMenus[i]; } return null; }
 function peSmDraftFrom(courses){
   return (courses||[]).map(function(c){
-    // desc = {dish name: one-line English description} — shown to the guest on
-    // the pick-your-numbers page; carried through the editor untouched.
-    return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice(), desc:(c.desc||null) };
+    // desc = {dish name: one-line English description}, allg = {dish name:
+    // ["D","E"]} — both shown to the guest on the pick-your-numbers page and
+    // carried through the editor untouched. allg MUST travel with desc: drop it
+    // here and an edit quietly strips the allergens off a live menu.
+    return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice(), desc:(c.desc||null), allg:(c.allg||null) };
   });
 }
 function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
@@ -5419,6 +5457,7 @@ function peParseMenuJson(t){
       if(c.choose||Array.isArray(c.options)) out={name:c.name||'',choose:1,options:(c.options||c.items||[]).map(String)};
       else out={name:c.name||'',items:(c.items||[]).map(String)};
       if(c.desc && typeof c.desc==='object' && !Array.isArray(c.desc)) out.desc=c.desc;
+      if(c.allg && typeof c.allg==='object' && !Array.isArray(c.allg)) out.allg=c.allg;
       return out;
     }).filter(function(c){ return (c.items&&c.items.length)||(c.options&&c.options.length); });
     return o.courses.length?o:null;
@@ -5527,6 +5566,7 @@ async function peSaveSetMenu(id){
     var lines=(c.lines||[]).filter(Boolean);
     var out = c.choose ? {name:(c.name||'Choice'),choose:1,options:lines} : {name:(c.name||'Course'),items:lines};
     if(c.desc) out.desc = c.desc;
+    if(c.allg) out.allg = c.allg;
     return out;
   }).filter(function(c){ return (c.items&&c.items.length)||(c.options&&c.options.length); });
   if(!courses.length){ peToast('Add at least one course with a dish in it', true); return; }

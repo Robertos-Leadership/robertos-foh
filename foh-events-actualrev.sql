@@ -1,0 +1,13 @@
+-- Events desk — real revenue after the night ran.
+--
+-- Optional per booking. When Valentina types the "Real total charged" on a
+-- confirmed/done event (more guests than quoted, or extra bar / off-menu spend),
+-- it is stored here and becomes THAT event's revenue in the monthly report and on
+-- every list/calendar/pipeline view (peEventValue).
+--
+-- It deliberately does NOT touch the quoted total, the signed agreement, or the
+-- deposit — those stay on the price the client agreed to (peAgBase). Leaving it
+-- blank keeps the quoted total, exactly as before.
+--
+-- Safe + reversible: additive nullable column, no data touched. Run once.
+alter table events_desk add column if not exists actual_revenue numeric;

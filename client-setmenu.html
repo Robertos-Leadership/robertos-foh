@@ -57,6 +57,37 @@ var token = q.get('t')||'', menuKey = q.get('m')||'', guests = parseInt(q.get('g
 var agreedPP = parseFloat(q.get('p')); // the event's agreed per-guest price, when Valentina negotiated one
 var menu = null, counts = {};
 
+// ── Allergens ────────────────────────────────────────────────────────────
+// They used to live inside the description prose — "…cartoccio style (R)(S)" —
+// which meant nothing could check them and they drifted silently: the same
+// dish said egg on one menu and dairy on another, and an oven-baked seabass
+// was flagged raw and shellfish on two menus at once.
+// A course now carries a real field, courses[].allg = { "Dish": ["D","N"] }.
+// Menus written before that still keep the codes in the text, so we read
+// either — the structured field wins where it exists.
+var ALG_RE = /\s*\(([A-Za-z]{1,3})\)/g;
+function algOf(c, dish){
+  if(c && c.allg && Object.prototype.hasOwnProperty.call(c.allg, dish)){
+    return { known:true, list:(c.allg[dish]||[]) };
+  }
+  var t = (c && c.desc && c.desc[dish]) || '', out = [], m;
+  ALG_RE.lastIndex = 0;
+  while((m = ALG_RE.exec(t))) out.push(m[1].toUpperCase());
+  return { known: out.length > 0, list: out };
+}
+function descOf(c, dish){
+  var t = (c && c.desc && c.desc[dish]) || '';
+  return t.replace(ALG_RE, '').trim();
+}
+// One dish line. A dish with nothing recorded must never look like a dish with
+// nothing in it — silence on a guest-facing menu is the dangerous case.
+function dishLine(c, dish){
+  var d = descOf(c, dish), a = algOf(c, dish), tail;
+  if(!a.known) tail = '<b>Allergens not recorded — please ask us</b>';
+  else if(!a.list.length) tail = 'No declared allergens';
+  else tail = '('+a.list.join(')(')+')';
+  return d ? esc(d)+' '+tail : tail;
+}
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function el(id){ return document.getElementById(id); }
 var flashTimer = null;
@@ -104,7 +135,7 @@ function render(){
       h += '<div class="sect"><div class="sect-t">'+esc(c.name)+'</div>'+
         (c.choose?'<div class="sect-n">each guest chooses one</div>':'')+
         ((c.choose?c.options:c.items)||[]).map(function(o){
-          return '<div class="shared" style="text-align:center">'+esc(o)+(dsc[o]?'<span class="ds">'+esc(dsc[o])+'</span>':'')+'</div>';
+          return '<div class="shared" style="text-align:center">'+esc(o)+'<span class="ds">'+dishLine(c,o)+'</span></div>';
         }).join('')+'</div>';
     });
     h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
@@ -127,13 +158,13 @@ function render(){
       counts[c.name] = counts[c.name] || {};
       h += '<div class="hint">How many guests would like each?</div>'+
         (c.options||[]).map(function(o, oi){
-          return '<div class="opt"><span class="nm">'+esc(o)+(dsc[o]?'<span class="ds">'+esc(dsc[o])+'</span>':'')+'</span><span class="step">'+
+          return '<div class="opt"><span class="nm">'+esc(o)+'<span class="ds">'+dishLine(c,o)+'</span></span><span class="step">'+
             '<button class="sbtn" onclick="bump('+ci+','+oi+',-1)">−</button>'+
             '<input class="qin" id="q-'+ci+'-'+oi+'" type="number" min="0" value="" placeholder="0" oninput="setN('+ci+','+oi+',this.value)">'+
             '<button class="sbtn" onclick="bump('+ci+','+oi+',1)">+</button></span></div>';
         }).join('');
     } else {
-      h += (c.items||[]).map(function(it){ return '<div class="shared">'+esc(it)+' <span class="tag">— served for everyone</span>'+(dsc[it]?'<span class="ds">'+esc(dsc[it])+'</span>':'')+'</div>'; }).join('');
+      h += (c.items||[]).map(function(it){ return '<div class="shared">'+esc(it)+' <span class="tag">— served for everyone</span><span class="ds">'+dishLine(c,it)+'</span></div>'; }).join('');
     }
     h += '</div>';
   });

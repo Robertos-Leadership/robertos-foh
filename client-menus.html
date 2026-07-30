@@ -195,7 +195,14 @@ function render(menus, bevs, alc){
             return '<label class="item" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">'+
               '<input type="checkbox" data-alc="'+esc(a.id)+'" onchange="tick(this)" style="accent-color:var(--vino);margin-top:4px">'+
               '<span style="flex:1"><span class="nm">'+esc(a.name)+
-                ((a.allergens&&a.allergens.length)?' <span class="codes" style="font-size:10px;color:var(--ink-faint)">('+a.allergens.join(')(')+')</span>':'')+'</span>'+
+                // A dish with nothing recorded must not read the same as a dish
+                // with nothing in it. An empty array means "checked, none";
+                // a missing one means nobody has said, and the guest must ask.
+                (a.allergens
+                   ? (a.allergens.length
+                        ? ' <span class="codes" style="font-size:10px;color:var(--ink-faint)">('+a.allergens.join(')(')+')</span>'
+                        : '')
+                   : ' <span class="codes" style="font-size:10px;color:var(--err)">allergens not recorded — please ask us</span>')+'</span>'+
               (pr?'<div class="pr">'+esc(pr)+'</div>':'')+
               (a.description?'<span class="ds">'+esc(a.description)+'</span>':'')+'</span></label>';
           }).join('');
