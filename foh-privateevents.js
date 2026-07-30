@@ -1590,7 +1590,7 @@ async function peNewEvent(){
 }
 function peCalcTotals(e){
   var items = peState.items[e.id]||[];
-  var foodComputed = 0, cost = 0, pcs = 0, missing = [];
+  var foodComputed = 0, cost = 0, pcs = 0, missing = [], noPrice = [], noCost = [];
   items.forEach(function(it){
     var d = peDishById(it.dish_id); if(!d) return;
     var p = Number(it.pcs_per_guest)||0;
@@ -1600,6 +1600,12 @@ function peCalcTotals(e){
     cost += (Number(d.cost)||0)*p;
     pcs += p;
     if(!(d.allergens||[]).length && d.category!=='Dessert') missing.push(d.name);
+    // A dish with no sell price or no cost recorded contributes ZERO here, which
+    // makes the quote look complete and the food-cost % look better than it is.
+    // The module's own rule (peCmTotals, peQuickTotals) is that nothing downstream
+    // may silently treat "no price" as zero — so name them instead.
+    if(!it.comp && (d.sell_price==null || d.sell_price==='') && p>0) noPrice.push(d.name);
+    if((d.cost==null || d.cost==='') && p>0) noCost.push(d.name);
   });
   // A set-menu event has no dish items — the chef's cost/guest on the menu
   // keeps the food-cost % honest (vs the agreed price, so discounts show).
@@ -1627,7 +1633,8 @@ function peCalcTotals(e){
   var actual = (e.actual_revenue!=null && e.actual_revenue!=='') ? Math.max(0, Number(e.actual_revenue)) : null;
   return { foodComputed:foodComputed, foodPP:foodPP, bevPP:bevPP, perGuest:perGuest,
            subtotal:subtotal, discount:discount, total:total, actual:actual,
-           pcs:pcs, foodCostPct:foodCostPct, missingAllergens:missing, items:items };
+           pcs:pcs, foodCostPct:foodCostPct, missingAllergens:missing,
+           noPrice:noPrice, noCost:noCost, items:items };
 }
 // The agreement's quoted base and deposit — one place, so the editor card, the
 // guided screen and the payment-link send all agree. A courtesy discount reduces
@@ -2067,8 +2074,19 @@ function peRenderEvent(){
   if(e.food_price_pp!=null && e.food_price_pp!=='' && Math.round(t.foodComputed) > Math.round(Number(e.food_price_pp))){
     h += '<div class="pe-flag" style="color:#7A5500">▲ Dishes worth AED '+peMoney(t.foodComputed)+'/guest — you’re charging the set AED '+peMoney(e.food_price_pp)+'</div>';
   }
+  // A dish on the quote with no price is money she is not charging for.
+  if(t.noPrice && t.noPrice.length){
+    h += '<div class="pe-flag" style="color:#B00020">▲ No price set, so charged as 0: '+peEsc(t.noPrice.join(', '))+'</div>';
+  }
   if(t.foodCostPct!=null){
-    h += '<div class="pe-flag" style="color:'+(t.foodCostPct<=27?'#2E5B30':'#7A5500')+'">'+(t.foodCostPct<=27?'✓':'▲')+' Food cost '+t.foodCostPct.toFixed(1)+'%'+(t.foodCostPct<=27?' — on target':' — above the 27% target')+'</div>';
+    // A missing cost counts as zero in the maths, so the percentage reads better
+    // than the truth. Say the figure is incomplete rather than showing a green tick.
+    var costBlind = t.noCost && t.noCost.length;
+    h += '<div class="pe-flag" style="color:'+(costBlind?'#7A5500':(t.foodCostPct<=27?'#2E5B30':'#7A5500'))+'">'+
+      (costBlind?'▲':(t.foodCostPct<=27?'✓':'▲'))+' Food cost '+t.foodCostPct.toFixed(1)+'%'+
+      (costBlind
+        ? ' — at least. No cost recorded for '+peEsc(t.noCost.join(', '))+', so the real figure is higher.'
+        : (t.foodCostPct<=27?' — on target':' — above the 27% target'))+'</div>';
   }
   if(t.pcs){
     // Informational — there is no piece-count norm; the client's budget sets it.
@@ -2556,6 +2574,9 @@ function peSendChecks(e){
   // Allergen safety — the dishes below have no allergen info recorded, so a guest
   // (or the kitchen) can't see what's in them. Named before any client-facing send.
   if(t.missingAllergens && t.missingAllergens.length) msgs.push(t.missingAllergens.length+(t.missingAllergens.length>1?' dishes have':' dish has')+' no allergens recorded: '+t.missingAllergens.join(', ')+'.');
+  // A dish with no price is on the quote at zero — the client would be reading a
+  // number that does not cover what the kitchen is making. Named before any send.
+  if(t.noPrice && t.noPrice.length) msgs.push(t.noPrice.length+(t.noPrice.length>1?' dishes have':' dish has')+' no price, so '+(t.noPrice.length>1?'they are':'it is')+' on the quote at AED 0: '+t.noPrice.join(', ')+'.');
   // Double-booking — the same date + area already holds another live event. Named
   // here so a send confirm says it out loud, not only the banner she may have scrolled past.
   peClashPairs(e).forEach(function(c){
