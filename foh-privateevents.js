@@ -3349,9 +3349,10 @@ function peProposalSetMenuHTML(e){
     // Every menu we send names the dish, what it is in English, and its
     // allergens. The proposal printed the name alone.
     var dishLine = function(o){
-      var info = peCmDishInfo(o, kind);
+      // Same order as the printed menu: the menu's own text first.
+      var info = stored[o] ? null : peCmDishInfo(o, kind);
       var codes = info ? peCmAlgCodes(info.allergens) : '';
-      var txt = (info && info.desc) ? info.desc : (stored[o]||'');
+      var txt = stored[o] || (info && info.desc ? info.desc : '');
       return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
         (txt?'<br><span class="d">'+peEsc(txt)+'</span>':'')+'</div>';
     };
@@ -3758,6 +3759,27 @@ function peRenderPacksView(){
           '</span></div>';
       }).join('')+'</div>';
   }
+  // À la carte, tickable dish by dish. Valentina (30 Jul): a guest wants to see
+  // the à la carte and say what they'd like — she picks what goes on the link,
+  // with or without prices, and the guest ticks from exactly that.
+  if(peState.alacarteOk && peAlcAll().length){
+    h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">À la carte</b>'+peSelLinks('alc')+'</div>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Tick the dishes to put in front of the guest — a whole section or a handful. They can tick what they’d like and send it back to you.</div>';
+    peAlcSections().forEach(function(s){
+      var rows = peAlcAll().filter(function(a){ return a.section===s; });
+      if(!rows.length) return;
+      h += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:10px 0 2px">'+
+        '<span style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#B99C03">'+peEsc(peAlcSecLabel(s))+'</span>'+
+        '<span style="font-size:11px;color:#8B7355;text-decoration:underline;cursor:pointer" onclick="peMpSelectSection(\''+peSmEsc(s)+'\')">tick this section</span></div>';
+      rows.forEach(function(a){
+        h += '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="alc" data-key="'+a.id+'" data-section="'+peEsc(a.section)+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+          '<b>'+peEsc(a.name)+'</b>'+((a.allergens&&a.allergens.length)?' <span style="color:#A5876B;font-size:10px">('+a.allergens.join(')(')+')</span>':'')+
+          ' · '+peEsc(peAlcPriceText(a))+'</label>'+
+          (a.description?'<br><span style="font-size:11px;color:#8B7355">'+peEsc(a.description)+'</span>':'')+'</span></div>';
+      });
+    });
+    h += '</div>';
+  }
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner.</div>'+
     (bevs.length?bevs.map(function(b){
@@ -3829,7 +3851,47 @@ function peAlcFiltered(){
 }
 function peAlcQ(v){ peState.alcQ = v; renderMain(); var el=document.getElementById('pe-alc-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
 function peAlcSec(v){ peState.alcSec = v; renderMain(); }
+// What guests have ticked on an à la carte link. A reply that lands nowhere is
+// worse than no reply, so it sits at the top of the screen the dishes live on.
+function peAlcPicksHTML(){
+  var picks = peState.alcPicks || [];
+  if(!picks.length) return '';
+  return '<div class="pe-card" style="border-color:#C9A84C;background:#FBF6EA">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">'+
+    '<b style="color:#400207">Guests have chosen dishes</b>'+
+    '<span style="font-size:11px;color:#8B7355;text-decoration:underline;cursor:pointer" onclick="peAlcLoadPicks(true)">refresh</span></div>'+
+    picks.map(function(p){
+      var c = p.choices||{};
+      var ev = (peState.events||[]).filter(function(e){ return e.client_token===p.token; })[0];
+      return '<div class="pe-dishrow"><span><b style="color:#400207">'+peEsc((c.guest||(ev&&ev.client_name)||'A guest'))+'</b>'+
+        ' <span style="font-size:11px;color:#8B7355">'+peEsc(String(p.created_at||'').slice(0,16).replace('T',' '))+'</span>'+
+        '<br><span style="font-size:12px;color:#6B4A33">'+peEsc((c.dishes||[]).join(' · '))+'</span>'+
+        (p.note?'<br><span style="font-size:11.5px;color:#B00020">“'+peEsc(p.note)+'”</span>':'')+
+        '</span>'+
+        '<span style="display:flex;gap:6px;flex-shrink:0">'+
+        (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+ev.id+'\')">Open booking</button>':'')+
+        '<button class="pe-btn sec sm" onclick="peAlcPickDone(\''+p.id+'\')">Done with it</button></span></div>';
+    }).join('')+'</div>';
+}
+async function peAlcLoadPicks(force){
+  if(peState.alcPicksLoaded && !force) return;
+  peState.alcPicksLoaded = true;
+  var r = await sb.from('event_menu_choices').select('*').eq('menu_key','alacarte').eq('applied', false)
+    .order('created_at',{ascending:false}).limit(30);
+  if(!r.error){ peState.alcPicks = r.data||[]; renderMain(); }
+}
+// "Done with it" clears the card — applied=true is the same flag the set-menu
+// choices already use, so nothing new had to be invented to track it.
+async function peAlcPickDone(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var r = await sb.from('event_menu_choices').update({applied:true}).eq('id', id);
+  if(r.error){ peToast('Could not clear it — '+String(r.error.message||'').slice(0,90), true); return; }
+  peState.alcPicks = (peState.alcPicks||[]).filter(function(p){ return String(p.id)!==String(id); });
+  peToast('Cleared ✓');
+  renderMain();
+}
 function peRenderAlaCarte(){
+  peAlcLoadPicks();
   if(!peState.alacarteOk){
     return '<div class="pe-card"><b style="color:#400207">À la carte</b>'+
       '<div style="font-size:12.5px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:10px 12px;margin-top:8px">'+
@@ -3838,7 +3900,8 @@ function peRenderAlaCarte(){
   }
   var rows = peAlcFiltered();
   var secs = peAlcSections();
-  var h = '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Roberto’s à la carte, June 2026 — every price checked against the POS. '+
+  var h = peAlcPicksHTML();
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Roberto’s à la carte, June 2026 — every price checked against the POS. '+
     'This is the list “Customise a menu” swaps from, so a dish added to a menu carries its real price.</div>';
   h += '<div class="pe-card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
     '<input class="pe-in" id="pe-alc-q" style="flex:1;min-width:180px" placeholder="Search a dish — e.g. burrata, branzino, truffle" value="'+peEsc(peState.alcQ||'')+'" oninput="peAlcQ(this.value)">'+
@@ -3912,11 +3975,17 @@ function peCmStart(basedOnKey, eventId){
     note: '',
     priceOverride: null,
     courses: (base ? base.courses : []).map(function(c){
+      // Carry the base menu's OWN descriptions. They are authored for that menu
+      // (Mare's burrata is "Apulian burrata, Roberto's tomatoes selection and
+      // basil", which is not what the à la carte says) and they cover dishes
+      // the à la carte does not have at all, like Bresaola and Ribeye di Angus.
+      var dsc = c.desc||{};
       return {
         name: c.name||'Course',
         choose: !!c.choose,
         lines: ((c.choose ? c.options : c.items)||[]).map(function(n){
-          return { name:n, from:'set', price:null, supplement:0, out:null, alcId:null };
+          return { name:n, from:'set', price:null, supplement:0, out:null, alcId:null,
+                   inherited: dsc[n]||'' };
         })
       };
     })
@@ -4442,14 +4511,18 @@ function peCmAlgCodes(al){
 }
 // The desc map a course carries to the guest page and the documents, in the
 // shape they already read: { "Dish name": "what it is (D)(E)" }.
-function peCmCourseDesc(courseName, names){
+// inherited = what the menu she started from says about that dish. It wins:
+// it was written for that menu, and it covers dishes the à la carte has never
+// heard of. The à la carte only fills the gaps — the dishes she swapped in.
+function peCmCourseDesc(courseName, names, inherited){
   var kind = peCmCourseKind({name:courseName});
+  var inh = inherited || {};
   var out = {};
   (names||[]).forEach(function(n){
+    if(inh[n]){ out[n] = inh[n]; return; }
     var info = peCmDishInfo(n, kind);
     if(!info) return;
-    var s = (info.desc||'') + peCmAlgCodes(info.allergens);
-    s = s.trim();
+    var s = ((info.desc||'') + peCmAlgCodes(info.allergens)).trim();
     if(s) out[n] = s;
   });
   return out;
@@ -4473,9 +4546,10 @@ function peCmPrintMenu(key){
     ((c.choose ? c.options : c.items)||[]).forEach(function(o){
       // Codes after the name, description underneath — the house layout, and
       // the same shape peQuickPrint uses for canapés.
-      var info = peCmDishInfo(o, peCmCourseKind(c));
+      // The menu's OWN text wins; the à la carte only fills a gap.
+      var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
       var codes = info ? peCmAlgCodes(info.allergens) : '';
-      var line = info && info.desc ? info.desc : (stored[o]||'');
+      var line = stored[o] || (info && info.desc ? info.desc : '');
       body += '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
         (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
     });
@@ -4533,7 +4607,9 @@ async function peCmSave(){
       // The description + allergen codes travel WITH the menu, in the shape
       // client-setmenu.html already renders — so the guest page shows them
       // without having to look every dish up again.
-      var desc = peCmCourseDesc(out.name, names);
+      var inh = {};
+      c.lines.forEach(function(l){ if(l.inherited) inh[String(l.name||'').trim()] = l.inherited; });
+      var desc = peCmCourseDesc(out.name, names, inh);
       if(Object.keys(desc).length) out.desc = desc;
       return out;
     }).filter(Boolean);
@@ -4586,13 +4662,25 @@ async function peCmSave(){
 function peSelLinks(kind){
   return '<span style="font-size:11px;color:#8B7355">tick <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peMpSelectAll(\''+kind+'\',true)">all</span> · <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peMpSelectAll(\''+kind+'\',false)">none</span></span>';
 }
+// A whole course in one tap — sending "the Secondi" is the common case, and
+// ticking eleven boxes for it is not a workflow.
+function peMpSelectSection(section){
+  var any = false;
+  document.querySelectorAll('.pe-mp-check[data-kind=alc]').forEach(function(el){
+    if(el.getAttribute('data-section')===section && !el.checked) any = true;
+  });
+  document.querySelectorAll('.pe-mp-check[data-kind=alc]').forEach(function(el){
+    if(el.getAttribute('data-section')===section) el.checked = any;
+  });
+  peMpCount();
+}
 function peMpSelectAll(kind, on){
   document.querySelectorAll('.pe-mp-check[data-kind='+kind+']').forEach(function(el){ el.checked = !!on; });
   peMpCount();
 }
 function peMpCount(){
   var t = peMpTicked();
-  var n = t.food.length + t.bev.length;
+  var n = t.food.length + t.bev.length + (t.alc||[]).length;
   var el = document.getElementById('pe-mp-count');
   if(el) el.innerHTML = n ? 'Will send: <b style="color:#400207">'+peEsc(peMpSummary(t))+'</b> — by email, or one WhatsApp with one link.'
                           : 'Nothing ticked yet — tick at least one menu or package above.';
@@ -4686,7 +4774,7 @@ function peSendMenuPackWa(){
   var noPriceElW = document.getElementById('pe-mp-noprice');
   var noPrice = !!(noPriceElW && noPriceElW.checked);
   var t = peMpTicked();
-  if(!t.food.length && !t.bev.length){ peToast('Tick at least one menu or package to send', true); return; }
+  if(!t.food.length && !t.bev.length && !(t.alc||[]).length){ peToast('Tick at least one menu, dish or package to send', true); return; }
   var msg = 'Ciao'+(name?' '+name.split(' ')[0]:'')+'! Thank you for thinking of Roberto’s for your occasion.'+
     (note?'\n\n'+note:'')+
     '\n\nHere is everything for your occasion ('+peMpSummary(t)+'), on one page:\n'+
@@ -4714,7 +4802,8 @@ function peGuestEmailHTML(title, intro, name, note, inner, noPrice){
 function peMailSection(label){
   return '<div style="text-align:center;margin:30px 0 2px"><span style="font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase">'+label+'</span></div>';
 }
-function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice){
+function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pickUrl){
+  alcIds = alcIds || [];
   // Include unpriced menus too — a no-price send (minimum-spend client) needs them,
   // and a priced send simply omits the price line for any that has none.
   // Resolve by KEY, not by filtering the designed-menu list — a menu Valentina
@@ -4745,6 +4834,28 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice){
         '<div class="dish"><span class="d">'+peEsc(m.line||peSmSummary(m.courses))+'</span></div>'+extra;
     }).join('');
   }
+  // The à la carte dishes she ticked, grouped the way the menu is printed, with
+  // the English description and the allergens — the same standard as every
+  // other menu we send.
+  if(alcIds.length){
+    var picked = alcIds.map(peAlcById).filter(Boolean);
+    if(picked.length){
+      inner += peMailSection('À la carte');
+      peAlcSections().forEach(function(s){
+        var rows = picked.filter(function(a){ return a.section===s; });
+        if(!rows.length) return;
+        inner += '<div class="sec">'+peEsc(peAlcSecLabel(s))+'</div>'+
+          rows.map(function(a){
+            var pr = (noPrice || peAlcPrice(a)==null) ? '' : ' — AED '+peMoney(peAlcPrice(a))+(a.unit==='per piece'?' per piece':'');
+            return '<div class="dish">'+peEsc(a.name)+peEsc(peCmAlgCodes(a.allergens))+peEsc(pr)+
+              (a.description?'<br><span class="d">'+peEsc(a.description)+'</span>':'')+'</div>';
+          }).join('');
+      });
+      if(pickUrl){
+        inner += '<div style="text-align:center;margin:16px 0 20px"><a href="'+pickUrl+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">Choose your dishes</a></div>';
+      }
+    }
+  }
   if(bevs.length){
     if(both) inner += peMailSection('The beverages — packages');
     inner += bevs.map(function(b){
@@ -4767,19 +4878,20 @@ async function peSendMenuPack(){
   peInlineErr(document.getElementById('pe-mp-email'),'');
   var noPriceEl = document.getElementById('pe-mp-noprice');
   var noPrice = !!(noPriceEl && noPriceEl.checked);
-  var t = peMpTicked(), food = t.food, bev = t.bev;
-  if(!food.length && !bev.length){ peToast('Tick at least one menu or package to send', true); return; }
+  var t = peMpTicked(), food = t.food, bev = t.bev, alc = t.alc||[];
+  if(!food.length && !bev.length && !alc.length){ peToast('Tick at least one menu, dish or package to send', true); return; }
   if(!(await peConfirm({title:'Send to the guest?', html:'Send <b>'+peEsc(peMpSummary(t))+'</b> to <b>'+peEsc(email)+'</b> in one email now?'+(noPrice?'<br><span style="color:#854F0B">Without prices — the guest sees the dishes and packages only.</span>':''), ok:'Send email', cancel:'Not yet'}))) return;
   // The sender is copied and set as reply-to, same as client proposals.
   var sender = state.userEmail || 'vdetoni@robertos.ae';
-  var subject = food.length && bev.length ? 'Roberto’s — menus & beverage packages for your occasion'
+  var subject = (food.length||alc.length) && bev.length ? 'Roberto’s — menus & beverage packages for your occasion'
               : food.length ? 'Roberto’s — our set menus'
+              : alc.length ? 'Roberto’s — our à la carte for your occasion'
               : 'Roberto’s — beverage packages for your occasion';
   var btn = document.getElementById('pe-mp-send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
       to: peSendTo(email, sender), reply_to:sender, from_name:peSenderName(), subject:subject,
-      html: peMenuPackEmailHTML(food, bev, name, note, noPrice)
+      html: peMenuPackEmailHTML(food, bev, name, note, noPrice, alc, alc.length ? peMenuPackUrl(t, name, noPrice) : '')
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     peToast('Sent to '+email+' ✓ — you are copied and replies come to you');

@@ -45,12 +45,65 @@ var who      = (q.get('n')||'').slice(0, 40).trim();
 // Minimum-spend clients are sent the menu WITHOUT prices — the price lives in the
 // proposal / contract, not on this page.
 var noPrice  = q.get('np')==='1';
+// À la carte dishes Valentina ticked, and the token their picks come back on.
+var alcIds   = clean(q.get('alc'), /^[0-9a-f-]{36}$/i);
+var pickTok  = (q.get('pick')||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,64);
+var picked   = {};
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function el(id){ return document.getElementById(id); }
 function money(n){ return (n==null||isNaN(n)) ? '' : Number(n).toLocaleString('en-US'); }
 function fail(msg){ el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="msg">'+esc(msg)+'</div>'; }
 function inList(a){ return 'in.(' + a.map(function(x){ return '"'+x+'"'; }).join(',') + ')'; }
+
+function secLabel(x){
+  var MINOR={e:1,di:1,del:1,della:1,la:1,le:1,il:1,al:1,alla:1,allo:1,con:1,da:1,dal:1,nostra:1,nostro:1,'in':1,a:1};
+  return String(x||'').toLowerCase().split(/\s+/).map(function(w,i){
+    if(i && MINOR[w]) return w;
+    return w.replace(/^([a-zà-ÿ])/, function(m,c){ return c.toUpperCase(); });
+  }).join(' ');
+}
+function priceText(a){
+  if(a.tiers && a.tiers.length) return a.tiers.map(function(t){ return t.size+' AED '+money(t.price); }).join(' · ');
+  if(a.market_price) return 'Market price';
+  if(a.price==null) return '';
+  return 'AED '+money(a.price)+(a.unit==='per piece' ? ' per piece' : '');
+}
+function tick(cb){
+  var id = cb.getAttribute('data-alc');
+  if(cb.checked) picked[id]=true; else delete picked[id];
+  var n = Object.keys(picked).length;
+  var btn = el('alc-send'), msg = el('alc-msg');
+  if(btn) btn.disabled = !n;
+  if(msg) msg.textContent = n ? (n+' dish'+(n>1?'es':'')+' chosen — send them whenever you are ready.') : 'Tick a dish to send your choices.';
+}
+// The picks go straight into event_menu_choices, which accepts an anonymous
+// insert — no server of our own in the way. Valentina sees them in the app.
+async function sendPicks(){
+  var ids = Object.keys(picked);
+  if(!ids.length) return;
+  var btn = el('alc-send'), msg = el('alc-msg');
+  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
+  var names = (window.__alc||[]).filter(function(a){ return picked[a.id]; }).map(function(a){ return a.name; });
+  try{
+    var r = await fetch(SUPA+'/rest/v1/event_menu_choices', {
+      method:'POST',
+      headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'return=minimal' },
+      body: JSON.stringify({
+        token: pickTok || 'alc-no-token',
+        menu_key: 'alacarte',
+        choices: { alacarte_ids: ids, dishes: names, guest: who || null },
+        note: (el('alc-note')&&el('alc-note').value.slice(0,900)) || null
+      })
+    });
+    if(!r.ok) throw new Error(r.status);
+    if(btn) btn.style.display='none';
+    if(msg){ msg.style.color='#2E6B34'; msg.innerHTML='Grazie! Your choices are with us.<br>Valentina will come back to you shortly.'; }
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Send my choices to Roberto’s'; }
+    if(msg){ msg.style.color='#B00020'; msg.textContent='That did not send — please try once more, or simply reply to Valentina.'; }
+  }
+}
 
 async function get(path){
   var r = await fetch(SUPA+'/rest/v1/'+path, { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
@@ -59,7 +112,7 @@ async function get(path){
 }
 
 async function load(){
-  if(!foodKeys.length && !bevIds.length){
+  if(!foodKeys.length && !bevIds.length && !alcIds.length){
     return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
   }
   // Fetch beverage packages asking for the pdf column, but fall back to the older
@@ -75,25 +128,33 @@ async function load(){
       // event_bev_public is the guest-safe view: name, hours, price and what's
       // included. Our cost per guest lives on the base table and never leaves it.
       foodKeys.length ? get('event_set_menus?key='+inList(foodKeys)+'&active=is.true&select=key,name,price_pp,line,pdf') : [],
-      getBevs()
+      getBevs(),
+      alcIds.length ? get('event_alacarte?id='+inList(alcIds)+'&active=is.true&select=id,section,name,description,price,unit,tiers,market_price,allergens,sort_order') : []
     ]);
-    render(res[0]||[], res[1]||[]);
+    render(res[0]||[], res[1]||[], res[2]||[]);
   }catch(e){
     fail('Could not load the menus — please check your connection and reopen the link.');
   }
 }
 
-function render(menus, bevs){
-  if(!menus.length && !bevs.length){
+function render(menus, bevs, alc){
+  alc = alc || [];
+  window.__alc = alc;
+  if(!menus.length && !bevs.length && !alc.length){
     return fail('These menus are no longer available — please get in touch and we’ll help right away.');
   }
   // Keep the order Valentina ticked them in, not whatever the database returns.
   menus.sort(function(a,b){ return foodKeys.indexOf(a.key) - foodKeys.indexOf(b.key); });
   bevs.sort(function(a,b){ return bevIds.indexOf(a.id) - bevIds.indexOf(b.id); });
 
-  var both = menus.length && bevs.length;
+  var both = (menus.length || alc.length) && bevs.length;
   var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
-    '<div class="sub">'+(both ? 'Menus &amp; beverage packages' : (menus.length ? 'Our set menus' : 'Beverage packages'))+'</div>'+
+    '<div class="sub">'+(
+      (menus.length && alc.length) ? 'Menus &amp; our à la carte'
+      : both ? 'Menus &amp; beverage packages'
+      : menus.length ? 'Our set menus'
+      : alc.length ? 'Our à la carte'
+      : 'Beverage packages')+'</div>'+
     '<div class="sub2">'+(who ? 'For '+esc(who)+' · ' : '')+'DIFC, Dubai — private dining &amp; events</div>';
 
   if(menus.length){
@@ -108,6 +169,33 @@ function render(menus, bevs){
           (m.line ? '<span class="ds">'+esc(m.line)+'</span>' : '')+
           '<a class="open" href="'+esc(href)+'" target="_blank" rel="noopener">View the full menu</a></div>';
       }).join('')+'</div>';
+  }
+
+  if(alc.length){
+    // Grouped the way the menu is printed, each dish with its English
+    // description and allergens — and a tick, so the guest can tell us what
+    // they would like rather than writing it out in a reply.
+    alc.sort(function(a,b){ return (a.sort_order||999)-(b.sort_order||999); });
+    var secs = [];
+    alc.forEach(function(a){ if(secs.indexOf(a.section)<0) secs.push(a.section); });
+    h += '<div class="sect">'+(both||menus.length ? '<div class="sect-t">À la carte</div>' : '')+
+      '<div class="hint" style="text-align:center;font-size:12px;color:#8A6A4F;margin-bottom:8px">Tick anything you would like and send it back to us.</div>'+
+      secs.map(function(sname){
+        return '<div class="sect-t" style="margin-top:14px">'+esc(secLabel(sname))+'</div>'+
+          alc.filter(function(a){ return a.section===sname; }).map(function(a){
+            var pr = noPrice ? '' : priceText(a);
+            return '<label class="item" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">'+
+              '<input type="checkbox" data-alc="'+esc(a.id)+'" onchange="tick(this)" style="accent-color:#400207;margin-top:4px">'+
+              '<span style="flex:1"><span class="nm">'+esc(a.name)+
+                ((a.allergens&&a.allergens.length)?' <span class="codes" style="font-size:10px;color:#A5876B">('+a.allergens.join(')(')+')</span>':'')+'</span>'+
+              (pr?'<div class="pr">'+esc(pr)+'</div>':'')+
+              (a.description?'<span class="ds">'+esc(a.description)+'</span>':'')+'</span></label>';
+          }).join('');
+      }).join('')+
+      '<div style="margin-top:14px"><textarea id="alc-note" placeholder="Anything we should know? Allergies, the occasion, a dish you cannot see here…" style="width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:60px"></textarea></div>'+
+      '<div style="margin-top:10px"><button id="alc-send" onclick="sendPicks()" style="width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:13px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer" disabled>Send my choices to Roberto’s</button>'+
+      '<div id="alc-msg" style="font-size:11.5px;color:#8A6A4F;text-align:center;margin-top:7px">Tick a dish to send your choices.</div></div>'+
+      '</div>';
   }
 
   if(bevs.length){
