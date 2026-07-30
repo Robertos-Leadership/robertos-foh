@@ -1851,8 +1851,18 @@ function peRenderEvent(){
     }).join('') : '<div style="font-size:12px;color:#8B7355">Nothing logged yet.</div>')+'</div>';
   h += '</div><div>';
   // totals
+  // On a minimum-spend booking the MINIMUM is the price she charges — the rows below
+  // are only what the menu adds up to so far, which is usually 0 while she is still
+  // building it. Leading with those made every min-spend event read "AED 0".
+  var isMin = e.pricing_type==='min_spend';
+  var msAmt = Number(e.min_spend)||0;
   h += '<div class="pe-tot">'+
     '<div class="pe-lbl" style="color:#8A6A4F">Live totals</div>'+
+    (isMin
+      ? '<div class="pe-tot-row" style="border-bottom:1px solid #DCC9B2;padding-bottom:7px;margin-bottom:5px"><span>Minimum spend</span><b style="color:#400207">'+
+          (msAmt ? 'AED '+peMoney(msAmt) : '— set it above')+'</b></div>'+
+        '<div style="font-size:11px;color:#8B7355;margin:-3px 0 7px">This is what they are charged. Below is what the menu comes to so far.</div>'
+      : '')+
     '<div class="pe-tot-row"><span>Food / guest</span><b>AED '+peMoney(t.foodPP||0)+(e.food_price_pp!=null&&e.food_price_pp!==''?' (set)':'')+'</b></div>'+
     '<div class="pe-tot-row"><span>Beverage / guest</span><b>AED '+peMoney(t.bevPP)+'</b></div>'+
     '<div class="pe-tot-row" style="border-top:1px solid #DCC9B2;margin-top:4px;padding-top:7px"><span>Per guest</span><b>AED '+peMoney(t.perGuest)+'</b></div>'+
@@ -1862,7 +1872,10 @@ function peRenderEvent(){
     h += '<div class="pe-tot-row"><span>Discount / courtesy</span><b style="color:#4A6B2E">− AED '+peMoney(t.discount)+'</b></div>'+
       '<div class="pe-tot-row" style="border-top:1px solid #DCC9B2;margin-top:4px;padding-top:7px"><span>Total</span><b>AED '+peMoney(t.total)+'</b></div>';
   }
-  if(e.min_spend && t.total!=null){
+  // Only compare once something is actually priced. Comparing against a total of 0
+  // told her every untouched minimum-spend booking was short by its whole minimum —
+  // which then made the warning meaningless on the bookings that genuinely fall short.
+  if(e.min_spend && t.total){
     var gap = Number(e.min_spend)-t.total;
     h += gap>0 ? '<div class="pe-flag" style="color:#7A5500">▲ AED '+peMoney(gap)+' below the '+peMoney(e.min_spend)+' min spend</div>'
                : '<div class="pe-flag" style="color:#2E5B30">✓ Min spend covered</div>';
