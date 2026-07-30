@@ -421,14 +421,32 @@ async function fohLoadHubStats(){
     }
   }catch(e){}
   try{
-    var pe = await sb.from('events_desk').select('event_date,status,client_name,company').in('status',['draft','sent','confirmed','deposit']).limit(200);
+    var pe = await sb.from('events_desk').select('event_date,status,client_name,company,time_from,area,guests').in('status',['draft','sent','confirmed','deposit']).limit(200);
     if(!pe.error && pe.data){
       var openN = pe.data.length;
-      var future = pe.data.filter(function(x){ return x.event_date && String(x.event_date).slice(0,10) >= localISO(new Date()); })
-        .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
-      var nxt = future.length ? new Date(String(future[0].event_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) : null;
-      var who = future.length ? (future[0].client_name || future[0].company || '') : '';
-      setStat('privateevents', openN?'#A88930':'#8B7355', openN ? (openN+' open quotation'+(openN>1?'s':'')+(nxt?' \u00b7 next '+nxt+(who?' \u00b7 '+who.slice(0,24):''):'')) : 'No open quotations');
+      var todayISO = localISO(new Date());
+      // A private event happening TONIGHT is the one thing on this tile that
+      // somebody needs to act on today, so it outranks the pipeline count. Without
+      // it the floor had no way to learn there was an event on at all.
+      var tonight = pe.data.filter(function(x){
+        return String(x.event_date||'').slice(0,10) === todayISO &&
+               ['confirmed','deposit'].indexOf(x.status) >= 0;
+      });
+      if(tonight.length){
+        var ev0 = tonight[0];
+        var bits = [(ev0.client_name || ev0.company || 'Private event')];
+        if(ev0.time_from) bits.push(String(ev0.time_from));
+        if(ev0.area) bits.push(String(ev0.area));
+        if(ev0.guests) bits.push(ev0.guests + ' guests');
+        setStat('privateevents', '#8A2A1A',
+          'Tonight \u00b7 ' + bits.join(' \u00b7 ') + (tonight.length>1 ? ' \u00b7 +'+(tonight.length-1)+' more' : ''));
+      } else {
+        var future = pe.data.filter(function(x){ return x.event_date && String(x.event_date).slice(0,10) >= todayISO; })
+          .sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
+        var nxt = future.length ? new Date(String(future[0].event_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) : null;
+        var who = future.length ? (future[0].client_name || future[0].company || '') : '';
+        setStat('privateevents', openN?'#A88930':'#8B7355', openN ? (openN+' open quotation'+(openN>1?'s':'')+(nxt?' \u00b7 next '+nxt+(who?' \u00b7 '+who.slice(0,24):''):'')) : 'No open quotations');
+      }
     }
   }catch(e){}
   try{

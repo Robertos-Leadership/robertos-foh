@@ -867,6 +867,34 @@ function peHeader(active){
 var PE_FOOT = '</div></div></div>';
 
 // ── list view ────────────────────────────────────────────────────────────────
+// ── tonight ──────────────────────────────────────────────────────────────────
+// What is actually happening today, with the operational facts on the face of it
+// rather than one tap inside the booking. Before this the only way to know an
+// event was on tonight was to already know.
+function peTonightHTML(){
+  var today = peToday();
+  var evs = (peState.events||[]).filter(function(e){
+    return String(e.event_date||'').slice(0,10) === today &&
+           ['confirmed','deposit'].indexOf(e.status) >= 0;
+  });
+  if(!evs.length) return '';
+  return '<div class="pe-card" style="border-color:#8A2A1A;background:#FCF2EE;margin-bottom:12px">'+
+    '<b style="color:#8A2A1A">Tonight — '+evs.length+' private event'+(evs.length>1?'s':'')+'</b>'+
+    evs.map(function(e){
+      var when = [e.time_from, e.time_to].filter(Boolean).join(' – ');
+      var facts = [when, e.area, (e.guests?e.guests+' guests':'')].filter(Boolean).join(' · ');
+      var food = e.package_label || (e.set_menu && peSetMenuByKey(e.set_menu.key) ? peSetMenuByKey(e.set_menu.key).name : '');
+      return '<div class="pe-dishrow"><span>'+
+        '<b style="color:#400207">'+peEsc(e.client_name || e.company || 'Private event')+'</b>'+
+        (facts?'<br><span style="font-size:12px;color:#6B4A33">'+peEsc(facts)+'</span>':'')+
+        (food?'<br><span style="font-size:11.5px;color:#8B7355">'+peEsc(food)+'</span>':'')+
+        // The allergy line is the one thing on this card that can hurt someone.
+        (e.dietary?'<br><span style="font-size:11.5px;color:#B00020">'+peEsc(e.dietary)+'</span>':'')+
+        (peBriefSent(e)?'':'<br><span style="font-size:11.5px;color:#8A6400">The team has not been sent the brief.</span>')+
+        '</span>'+
+        '<span style="display:flex;gap:6px;flex-shrink:0"><button class="pe-btn sm" onclick="peGo(\'event\',\''+e.id+'\')">Open</button></span></div>';
+    }).join('')+'</div>';
+}
 // ── guest replies, in one place ──────────────────────────────────────────────
 // Every kind of guest reply used to land somewhere different and none of them was
 // the screen she opens first: set-menu numbers raised a banner inside one event,
@@ -1218,7 +1246,8 @@ function peRenderList(){
   h += '<div style="margin-bottom:10px"><div class="pe-title">Events</div>'+
     '<div style="font-size:12px;color:#8B7355">'+(peCanEdit()?'Create a booking, quote it, send the agreement.':'Every booking, readable end to end.')+'</div></div>';
   h += peViewBanner();
-  h += peRepliesHTML();   // guest replies first: a reply that waits is the costliest thing on this screen
+  h += peTonightHTML();   // what is on TODAY outranks everything else on this screen
+  h += peRepliesHTML();   // then replies: a reply that waits is the costliest thing here
   var fo = peState.focus;
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:'+(fo?'8px':'12px')+'">'+
     peStatPill(st.week,'this week','#FBF6EC','#C9A84C','#8A6400','#6B4A33','pePillFocus(\'week\')',fo==='week')+
