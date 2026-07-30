@@ -30,6 +30,7 @@
     var el = document.activeElement;
     if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;   // don't nuke someone mid-typing
     if (window.__schedEditing && window.__schedEditing()) return true;     // don't nuke a mid-edit schedule
+    if (window.__peUnsaved && window.__peUnsaved()) return true;           // don't nuke a half-built menu or quote
     return false;
   }
   function check(){

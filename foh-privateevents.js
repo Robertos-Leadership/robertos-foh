@@ -301,6 +301,52 @@ function peSendTo(field, sender){
   if(sender && l.indexOf(sender)<0) l.push(sender);
   return l;
 }
+// Three of the menu builders live only in memory — the customise builder, the Quick
+// menu and the budget wizard. The app's ETag auto-reloader would refresh the page out
+// from under a half-built quote and take the lot. index.html asks this before it
+// reloads, exactly as it already asks __schedEditing for the schedule.
+function peHasUnsavedWork(){
+  try{
+    // Customise builder: open with at least one dish typed in.
+    if(peState.cm && (peState.cm.courses||[]).some(function(c){
+      return (c.lines||[]).some(function(l){ return String(l.name||'').trim(); });
+    })) return true;
+    // Quick menu: any canapé or à la carte quantity above zero.
+    var anyQty = function(o){ return o && Object.keys(o).some(function(k){ return Number(o[k])>0; }); };
+    if(peState.view==='quick' && (anyQty(peQuick.qty) || anyQty(peQuick.alc)) && !peQuick.savedId) return true;
+    // Budget wizard: a client name or a budget typed, not yet created.
+    if(peState.view==='wizard' && (String(peWiz.client||'').trim() || String(peWiz.budget||'').trim())) return true;
+  }catch(e){ /* never let this block a deploy refresh */ }
+  return false;
+}
+window.__peUnsaved = peHasUnsavedWork;
+// "Start a different menu" threw the whole customised menu away on one tap, with no
+// confirm — and it is the control sitting directly above the builder.
+async function peCmDiscard(){
+  var n = 0;
+  try{ (peState.cm.courses||[]).forEach(function(c){
+    (c.lines||[]).forEach(function(l){ if(String(l.name||'').trim()) n++; });
+  }); }catch(e){}
+  if(n && !(await peConfirm({title:'Throw this menu away?',
+    html:'You have <b>'+n+' dish'+(n>1?'es':'')+'</b> on this menu and it has not been saved. Starting a different one loses it.',
+    ok:'Throw it away', cancel:'Keep building', danger:true}))) return;
+  peState.cm = null; renderMain();
+}
+// The sidebar link used to blank the canapé quantities on the way in, so tapping
+// "Quick menu" from inside a half-built Quick menu silently emptied it.
+async function peQuickOpen(){
+  var anyQty = function(o){ return o && Object.keys(o).some(function(k){ return Number(o[k])>0; }); };
+  var has = anyQty(peQuick.qty) || anyQty(peQuick.alc);
+  if(has){
+    if(!(await peConfirm({title:'Start a new quick menu?',
+      html:'You already have dishes chosen'+(peQuick.savedId?' and saved':'')+'. Starting a new one clears them.',
+      ok:'Start a new one', cancel:'Go back to it'}))){
+      peGo('quick'); return;      // keep what she had
+    }
+    peQuick.qty = {}; peQuick.alc = {}; peQuick.savedId = null; peQuick.savedToken = null;
+  }
+  peGo('quick');
+}
 // WhatsApp messages were signed "Valentina" whoever sent them, so a guest could get
 // a message from Katarina signed by someone else. Sign with whoever is actually
 // logged in; fall back to the desk if we somehow have no name.
@@ -783,7 +829,7 @@ function peHeader(active){
       '<div class="pe-slbl">My events</div>'+
       mine.map(function(t){ return snav(t[0], t[1]); }).join('')+
       '<div class="pe-slbl">Tools</div>'+
-      '<span class="pe-snav" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</span>'+
+      '<span class="pe-snav" onclick="peQuickOpen()">Quick menu</span>'+
       '<span class="pe-snav'+(active==='wizard'?' on':'')+'" onclick="peWizReset();peGo(\'wizard\')">New quote from a budget</span>'+
       // Stays "Guest link" — Valentina uses this every day and renaming it mid-
       // flow cost her more than the missing option did. Same name, same place;
@@ -4548,7 +4594,7 @@ function peRenderCustomise(){
   // ── the builder ──
   var t = peCmTotals();
   var alc = peAlcAll();
-  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px;cursor:pointer" onclick="peState.cm=null;renderMain()">← Start a different menu</div>';
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px;cursor:pointer" onclick="peCmDiscard()">← Start a different menu</div>';
   h += '<div class="pe-card"><div class="pe-lbl">What this menu is called on the proposal</div>'+
     '<input class="pe-in" value="'+peEsc(cm.name)+'" placeholder="e.g. Mare set menu — Sara’s dinner" onchange="peCmSet(\'name\',this.value)">'+
     (cm.basedOn?'<div style="font-size:11px;color:#8B7355;margin-top:5px">Started from <b>'+peEsc(cm.baseName)+'</b>'+(cm.basePrice!=null?' at AED '+peMoney(cm.basePrice)+'/guest':'')+' — the designed menu is untouched.</div>':'')+
@@ -6102,6 +6148,10 @@ async function peWizCreate(){
   if(!w.ready){ peToast('Fill guests, budget and beverage first', true); return; }
   if(peWiz.busy) return;
   peWiz.busy = true; peWizPaint();
+  // The booking is written first and the dishes after. If the dishes fail, the
+  // booking still exists — so the catch must not tell her nothing was created,
+  // which is how the same event got built twice.
+  var created = null;
   try{
     var timeTo = null;
     if(peWiz.time){
@@ -6122,6 +6172,7 @@ async function peWizCreate(){
                 payment_terms:'50% deposit to confirm, balance on the day' };
     var r = await peInsertEvent(row);
     if(r.error || !r.data) throw (r.error||{message:'no data'});
+    created = r.data;
     peState.events.push(r.data);
     var items = w.picked.map(function(p){ return {event_id:r.data.id, dish_id:p.dish.id, pcs_per_guest:p.pcs}; });
     if(items.length){
@@ -6136,7 +6187,15 @@ async function peWizCreate(){
     peToast('Draft created ✓ — review it, then print or email the proposal');
     peGo('event', r.data.id);
   }catch(err){
-    peWiz.busy = false; peWizPaint();
+    peWiz.busy = false;
+    if(created){
+      // It exists. Take her to it and name what is missing, rather than sending
+      // her back to a form that would create the whole thing a second time.
+      peToast('Booking created ✓ — but the dishes did not attach. Add them on the event.', true);
+      peGo('event', created.id);
+      return;
+    }
+    peWizPaint();
     peToast('NOT created — '+String(err&&err.message||err).slice(0,120), true);
   }
 }
