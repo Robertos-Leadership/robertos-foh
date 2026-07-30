@@ -882,6 +882,22 @@ var PE_CHIP = {
 // a brief that failed to send must never show as sent, or the kitchen and the
 // hostess team reach the night not knowing about a confirmed event.
 function peBriefSent(e){ return !!(peState.briefSent && peState.briefSent[e.id]); }
+// The brief the team holds is a snapshot frozen at send time — nothing refreshes it.
+// So once it has gone, a change to any of these makes their copy wrong, and only she
+// can put that right by re-sending. Deliberately NOT `updated_at > sent_at`: routine
+// bookkeeping after the night moves updated_at and would cry wolf on every event.
+// Money fields are left out on purpose — they don't change what the kitchen cooks.
+var PE_BRIEF_FIELDS = ['Guests','Date','Area','Start time','End time'];
+function peBriefChangedSince(e, log){
+  var sent = peState.briefSent && peState.briefSent[e.id];
+  if(!sent) return [];
+  var t = new Date(sent).getTime();
+  return (log||[]).filter(function(l){
+    if(l.action!=='edited' || !l.detail) return false;
+    if(new Date(l.created_at).getTime() <= t) return false;
+    return PE_BRIEF_FIELDS.some(function(f){ return l.detail.indexOf(f+' →')===0; });
+  });
+}
 // The one action this booking needs next.
 function peNextStep(e){
   var name = e.client_name || e.company;
@@ -1658,10 +1674,18 @@ function peRenderEvent(){
   // Amber until it's actually been sent — a green "all good" panel above an
   // unsent brief is exactly how a confirmed event reaches the day unbriefed.
   if(e.status==='confirmed' || e.status==='deposit'){
+    var briefChanges = peBriefSent(e) ? peBriefChangedSince(e, log) : [];
     h += peBriefSent(e)
-      ? '<div style="background:#E7F0E4;border:1px solid #BAD5B5;border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12.5px;color:#2E5B30;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+      ? (briefChanges.length
+        // Their copy is now wrong. Say what changed and since when — a green tick over
+        // a stale brief is how a team turns up cooking for the old guest count.
+        ? '<div style="background:#FBF0D8;border:1px solid #E6C766;border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12.5px;color:#6B4A00;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+          '<span>The team has the brief from <b>'+peDLabel(String(peState.briefSent[e.id]).slice(0,10))+'</b>, but this has changed since: <b>'+
+          peEsc(briefChanges.map(function(l){ return l.detail; }).join(' · '))+'</b>. Their copy still shows the old details.</span>'+
+          (ce?'<button class="pe-btn sm" onclick="peSendCoordEmail(\''+e.id+'\')">Re-send the brief</button>':'')+'</div>'
+        : '<div style="background:#E7F0E4;border:1px solid #BAD5B5;border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12.5px;color:#2E5B30;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<span>This event is <b>ON</b> and the <b>team brief has been sent ✓</b> — the kitchen and hostess team have it.</span>'+
-        (ce?'<button class="pe-btn sec sm" onclick="peSendCoordEmail(\''+e.id+'\')">Re-send the brief</button>':'')+'</div>'
+        (ce?'<button class="pe-btn sec sm" onclick="peSendCoordEmail(\''+e.id+'\')">Re-send the brief</button>':'')+'</div>')
       : '<div style="background:#FBF0D8;border:1px solid #E6C766;border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12.5px;color:#6B4A00;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<span>This event is <b>ON</b>, but the <b>team brief has not been sent</b> — the kitchen and hostess team do not know about it yet.</span>'+
         (ce?'<button class="pe-btn sm" onclick="peSendCoordEmail(\''+e.id+'\')">Send the team brief now</button>':'')+'</div>';
@@ -3348,7 +3372,13 @@ function peBriefBodyHTML(e){
   body += row('Beverage', bev ? bev.name+(bev.price_pp!=null?' · AED '+peMoney(bev.price_pp)+'/guest':' · price on the proposal') : (e.bev_mode==='dry'?'DRY EVENT — no alcohol served (soft drinks & water)':'—'));
   body += row('Estimated total', t.total ? 'AED '+peMoney(t.total) : '—')+row('Minimum spend', e.min_spend?'AED '+peMoney(e.min_spend):'—');
   body += row('Dietary', e.dietary)+row('Payment', e.payment_terms);
-  body += row('Status', peStatusMeta(e.status).n)+row('Last update', new Date().toLocaleDateString('en-GB')+' · '+peActor());
+  // When the BOOKING last changed — not when the paper was printed. This used to be
+  // new Date() plus whoever was holding the screen, so the one line a chef would use
+  // to decide whether to trust the sheet always said today and named the reader.
+  // The actor is deliberately left off: only some update paths write updated_by, so
+  // printing it would name a stale person.
+  body += row('Status', peStatusMeta(e.status).n)+
+    row('Last update', e.updated_at ? new Date(e.updated_at).toLocaleDateString('en-GB') : '—');
   body += '</table>';
   body += peSetMenuPrepHTML(e);
   body += peKitchenPrepHTML(e, t);
