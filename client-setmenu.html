@@ -16,6 +16,12 @@
   .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
   .sect-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
   .sect-h b{font-size:15px;color:#400207;font-weight:normal}
+  /* The house course heading — gold, letter-spaced small caps. Identical to
+     client-menus.html and client-agreement.html, so a menu sent from here does
+     not look like a different restaurant's. */
+  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;margin-bottom:10px;font-family:Arial,sans-serif}
+  .sect-n{text-align:center;font-size:11px;color:#A5876B;font-family:Arial,sans-serif;margin:-6px 0 8px}
+  .pr{font-size:12.5px;color:#8A6A4F;text-align:center;font-family:Arial,sans-serif;margin-top:4px}
   .cnt{font-size:11px;font-family:Arial,sans-serif}
   .hint{font-size:12px;color:#8A6A4F;margin-bottom:6px}
   .opt{display:flex;gap:11px;align-items:center;padding:7px 0}
@@ -79,19 +85,30 @@ async function load(){
 function chooseCourses(){ return (menu.courses||[]).filter(function(c){ return c.choose; }); }
 
 function render(){
+  // Header in the house order used by every other guest document: wordmark,
+  // the menu's name, the price, then who we are. The price used to sit in the
+  // positioning line's place, which is why this page read as off-brand.
+  var priceLine = isFinite(agreedPP) ? 'AED '+agreedPP+' per guest'
+                : (menu.price_pp!=null ? 'AED '+menu.price_pp+' per guest' : '');
   var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+esc(menu.name)+'</div>'+
-    '<div class="sub2">'+(!viewOnly&&guests?guests+' guests · ':'')+(isFinite(agreedPP)?'AED '+agreedPP+' per guest':(menu.price_pp!=null?'AED '+menu.price_pp+' per guest':''))+'</div>';
+    ((!viewOnly&&guests)||priceLine
+      ? '<div class="pr">'+(!viewOnly&&guests?guests+' guests':'')+((!viewOnly&&guests)&&priceLine?' · ':'')+priceLine+'</div>'
+      : '')+
+    '<div class="sub2">DIFC, Dubai — private dining &amp; events</div>';
   if(viewOnly){
     (menu.courses||[]).forEach(function(c){
       var dsc = c.desc||{};
-      h += '<div class="sect"><div class="sect-h"><b>'+esc(c.name)+'</b>'+(c.choose?'<span class="cnt" style="color:#A5876B">each guest chooses one</span>':'')+'</div>'+
+      h += '<div class="sect"><div class="sect-t">'+esc(c.name)+'</div>'+
+        (c.choose?'<div class="sect-n">each guest chooses one</div>':'')+
         ((c.choose?c.options:c.items)||[]).map(function(o){
-          return '<div class="shared">'+esc(o)+(dsc[o]?'<span class="ds">'+esc(dsc[o])+'</span>':'')+'</div>';
+          return '<div class="shared" style="text-align:center">'+esc(o)+(dsc[o]?'<span class="ds">'+esc(dsc[o])+'</span>':'')+'</div>';
         }).join('')+'</div>';
     });
-    h += '<div class="btnrow"><div class="ft">To book your event or ask us anything:<br>'+
-      '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a> — Valentina will take care of the rest.</div></div>';
+    h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
+      '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a>.<br><br>'+
+      (priceLine ? 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>' : '')+
+      'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
     el('card').innerHTML = h;
     return;
   }

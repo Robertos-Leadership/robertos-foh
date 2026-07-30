@@ -3733,14 +3733,18 @@ function peRenderPacksView(){
       '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Built in “Customise a menu”. Tick one to send it exactly like a set menu.</div>'+
       mine.map(function(m){
         var ev = m.eventId ? peEvById(m.eventId) : null;
-        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'"'+(peState.mpPreTick===m.key?' checked':'')+' onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
           '<b>'+peEsc(m.name)+'</b>'+(m.price!=null?' · AED '+peMoney(m.price)+' / person':' · <span style="background:#FAEEDA;color:#854F0B;font-size:10.5px;padding:1px 8px;border-radius:20px">price on the proposal</span>')+'</label><br>'+
           '<span style="font-size:11px;color:#8B7355">'+
           (m.basedOn?'from '+peEsc((peSetMenuByKey(m.basedOn)||{name:m.basedOn}).name)+' · ':'')+
           (ev?peEsc(ev.client_name||'a booking'):'not on a booking')+' · '+peEsc(peSmSummary(m.courses))+'</span></span>'+
-          '<span style="display:flex;gap:6px;flex-shrink:0">'+
+          '<span style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">'+
+          '<button class="pe-btn sec sm" onclick="peCmOpen(\''+peSmEsc(m.key)+'\')">View</button>'+
+          '<button class="pe-btn sec sm" onclick="peCmPrintMenu(\''+peSmEsc(m.key)+'\')">Print / PDF</button>'+
           '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
-          (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Booking</button>':'')+'</span></div>';
+          (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Booking</button>':'')+
+          '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peCmDelete(\''+peSmEsc(m.key)+'\')">Delete</button>'+
+          '</span></div>';
       }).join('')+'</div>';
   }
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
@@ -3752,6 +3756,15 @@ function peRenderPacksView(){
         (b.pdf?'<span style="display:flex;gap:6px;flex-shrink:0"><button class="pe-btn sec sm" onclick="window.open(\''+b.pdf+'\',\'_blank\')">Open PDF</button></span>':'')+'</div>';
     }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
   h += peMenuPackEmailForm();
+  // Arriving from "Email" on a customised menu, the box is already ticked —
+  // but the summary line and the Send button only update on a change event, so
+  // without this they would say "nothing ticked" over a ticked box and stay
+  // disabled. Run the count once the markup is in the DOM, then forget the
+  // pre-tick so it does not re-tick on every later visit.
+  if(peState.mpPreTick){
+    peState.mpPreTick = null;
+    setTimeout(function(){ if(typeof peMpCount==='function') peMpCount(); }, 0);
+  }
   return h+PE_FOOT;
 }
 // ── à la carte ───────────────────────────────────────────────────────────────
@@ -4194,9 +4207,13 @@ function peRenderCustomise(){
             (m.basedOn?'from '+peEsc((peSetMenuByKey(m.basedOn)||{name:m.basedOn}).name)+' · ':'')+
             (ev?peEsc(ev.client_name||'event')+(ev.event_date?' · '+peEsc(ev.event_date):''):'not on a booking')+
             '</span></span>'+
-            '<span style="display:flex;gap:6px;flex-shrink:0">'+
+            '<span style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">'+
+            '<button class="pe-btn sec sm" onclick="peCmOpen(\''+peSmEsc(m.key)+'\')">View</button>'+
+            '<button class="pe-btn sec sm" onclick="peCmPrintMenu(\''+peSmEsc(m.key)+'\')">Print / PDF</button>'+
+            '<button class="pe-btn sec sm" onclick="peCmEmail(\''+peSmEsc(m.key)+'\')">Email</button>'+
             '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
             (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Open booking</button>':'')+
+            '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peCmDelete(\''+peSmEsc(m.key)+'\')">Delete</button>'+
             '</span></div>';
         }).join('')+'</div>';
     }
@@ -4363,6 +4380,62 @@ function peCmEventOptions(){
     return '<option value="'+e.id+'"'+(cm&&cm.eventId===e.id?' selected':'')+'>'+
       peEsc(e.client_name||'(no name)')+(e.event_date?' · '+peEsc(e.event_date):'')+(e.guests?' · '+e.guests+' guests':'')+'</option>';
   }).join('');
+}
+// ── what she can do with a menu she has built ────────────────────────────────
+// Open it exactly as the guest will see it. "Check the PDF" for a customised
+// menu means this page — there is no designed PDF for a menu invented today.
+function peCmOpen(key){
+  window.open(peBaseUrl()+'client-setmenu.html?m='+encodeURIComponent(key), '_blank');
+}
+// A printable/PDF copy on the house documents' shell, so it matches the
+// proposal and the canapé menu rather than being a screenshot of a web page.
+function peCmPrintMenu(key){
+  var m = peSetMenuByKey(key); if(!m) return;
+  var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
+    '<h2>'+peEsc(m.name)+'</h2>'+
+    (m.price!=null ? '<div class="sub">AED '+peMoney(m.price)+' / person</div>' : '');
+  (m.courses||[]).forEach(function(c){
+    body += '<div class="sec">'+peEsc(c.name)+(c.choose?' — each guest chooses one':'')+'</div>';
+    ((c.choose ? c.options : c.items)||[]).forEach(function(o){
+      body += '<div class="dish">'+peEsc(o)+'</div>';
+    });
+  });
+  body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
+    (m.price!=null?'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>':'')+
+    'D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+  pePrintHTML(peDocShell(m.name, body));
+}
+// Email goes through the one guest-send card that already exists — this ticks
+// the menu there and takes her to it, rather than growing a second send form
+// that could drift from the first.
+function peCmEmail(key){
+  peState.mpPreTick = key;
+  peState.packsTab = 'menus';
+  peGo('packs');
+  peToast('Ticked below — add the guest’s name and email, then Send email');
+}
+// Delete a menu she built. A menu that is the food on a booking is NOT
+// deletable: the booking stores only its key, so removing the row would leave
+// that event with a menu that cannot be resolved — the proposal and the kitchen
+// brief would simply lose their food.
+async function peCmDelete(key){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var m = peSetMenuByKey(key); if(!m) return;
+  var used = (peState.events||[]).filter(function(e){ return e.set_menu && e.set_menu.key===key; });
+  if(used.length){
+    var names = used.map(function(e){ return e.client_name||'a booking'; }).join(', ');
+    peToast('Can’t delete — it’s the food on '+names+'. Remove the set menu there first.', true);
+    return;
+  }
+  var ok = await peConfirm({ title:'Delete this menu?',
+    body:'“'+m.name+'” will be removed. Any WhatsApp link already sent for it will stop working.',
+    ok:'Delete', cancel:'Keep it', danger:true });
+  if(!ok){ renderMain(); return; }
+  var r = await sb.from('event_set_menus').delete().eq('key', key);
+  if(r.error){ peToast('NOT deleted — '+String(r.error.message||'').slice(0,110), true); return; }
+  peState.setMenus = (peState.setMenus||[]).filter(function(x){ return x.key!==key; });
+  peToast('Deleted ✓');
+  renderMain();
 }
 // Save as a normal event_set_menus row flagged is_custom — see the SQL header
 // for why that beats a table of its own.
