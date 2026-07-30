@@ -3720,6 +3720,25 @@ function peRenderPacksView(){
         '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
         (m.pdf?'<button class="pe-btn sec sm" onclick="window.open(\''+m.pdf+'\',\'_blank\')">Open PDF</button>':'')+'</span></div>';
     }).join('')+'</div>';
+  // The menus Valentina built herself. They are kept out of the designed list
+  // above on purpose, but she still has to be able to SEND one — this is that
+  // door. Ticks travel through exactly the same email and WhatsApp path.
+  var mine = peSetMenusAll().filter(function(m){ return peSmIsCustom(m) && m.active!==false; });
+  if(mine.length){
+    h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Menus you customised</b>'+peSelLinks('food')+'</div>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Built in “Customise a menu”. Tick one to send it exactly like a set menu.</div>'+
+      mine.map(function(m){
+        var ev = m.eventId ? peEvById(m.eventId) : null;
+        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="food" data-key="'+m.key+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+          '<b>'+peEsc(m.name)+'</b>'+(m.price!=null?' · AED '+peMoney(m.price)+' / person':' · <span style="background:#FAEEDA;color:#854F0B;font-size:10.5px;padding:1px 8px;border-radius:20px">price on the proposal</span>')+'</label><br>'+
+          '<span style="font-size:11px;color:#8B7355">'+
+          (m.basedOn?'from '+peEsc((peSetMenuByKey(m.basedOn)||{name:m.basedOn}).name)+' · ':'')+
+          (ev?peEsc(ev.client_name||'a booking'):'not on a booking')+' · '+peEsc(peSmSummary(m.courses))+'</span></span>'+
+          '<span style="display:flex;gap:6px;flex-shrink:0">'+
+          '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
+          (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Booking</button>':'')+'</span></div>';
+      }).join('')+'</div>';
+  }
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Beverage packages</b>'+peSelLinks('bev')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Guest prices only — costs never leave the Beverage corner.</div>'+
     (bevs.length?bevs.map(function(b){
@@ -4155,7 +4174,7 @@ function peRenderCustomise(){
     var mine = peSetMenusAll().filter(function(m){ return peSmIsCustom(m) && m.active!==false; });
     if(mine.length){
       h += '<div class="pe-card"><b style="color:#400207">Menus you have customised</b>'+
-        '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Already on their booking. Open the event’s Food card to change the price or the guests’ choice.</div>'+
+        '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">To send one to a guest, tick it under <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peState.packsTab=\'menus\';renderMain()">Set menus &amp; beverage</span> — or WhatsApp it straight from here. One on a booking also goes out with that proposal.</div>'+
         mine.map(function(m){
           var ev = m.eventId ? peEvById(m.eventId) : null;
           return '<div class="pe-dishrow"><span><b style="color:#400207">'+peEsc(m.name)+'</b>'+
@@ -4164,8 +4183,10 @@ function peRenderCustomise(){
             (m.basedOn?'from '+peEsc((peSetMenuByKey(m.basedOn)||{name:m.basedOn}).name)+' · ':'')+
             (ev?peEsc(ev.client_name||'event')+(ev.event_date?' · '+peEsc(ev.event_date):''):'not on a booking')+
             '</span></span>'+
+            '<span style="display:flex;gap:6px;flex-shrink:0">'+
+            '<button class="pe-btn sec sm" onclick="peWaShareMenu(\''+peSmEsc(m.key)+'\')">WhatsApp</button>'+
             (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Open booking</button>':'')+
-            '</div>';
+            '</span></div>';
         }).join('')+'</div>';
     }
     return h;
@@ -4381,7 +4402,11 @@ async function peCmSave(){
                 (t.adds.length?', '+t.adds.length+' addition'+(t.adds.length>1?'s':''):'')).slice(0,400) });
     }
     peState.cm = null; peState.cmBusy = false;
-    peToast(cm.eventId ? 'Saved ✓ — it’s the food on that booking now' : 'Saved ✓');
+    // Say what happens next. "Saved ✓" on its own leaves her wondering how the
+    // guest ever sees it.
+    peToast(cm.eventId
+      ? 'Saved ✓ — it’s the food on that booking, and it goes out with the proposal'
+      : 'Saved ✓ — tick it under “Set menus & beverage” to send it to a guest');
     if(cm.eventId) peGo('event', cm.eventId); else renderMain();
   }catch(err){
     peState.cmBusy = false; renderMain();
@@ -4507,7 +4532,10 @@ function peMailSection(label){
 function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice){
   // Include unpriced menus too — a no-price send (minimum-spend client) needs them,
   // and a priced send simply omits the price line for any that has none.
-  var menus = peSetMenusPickInc().filter(function(m){ return foodKeys.indexOf(m.key)>=0; });
+  // Resolve by KEY, not by filtering the designed-menu list — a menu Valentina
+  // customised is a real menu she must be able to send, and it is deliberately
+  // absent from that list. peSetMenuByKey finds both.
+  var menus = foodKeys.map(peSetMenuByKey).filter(Boolean);
   var bevs = bevKeys.map(peBevById).filter(Boolean);
   var both = menus.length && bevs.length;
   var title = both ? 'Menus & Beverage Packages' : (menus.length ? 'Set Menus' : 'Beverage Packages');
