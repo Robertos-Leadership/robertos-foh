@@ -615,6 +615,7 @@ async function peLoadAll(force){
       : { spaces:true, options:true, alt_dates:true, actual_revenue:true };
     peState.loaded = true;
     peState.lastLoad = Date.now();
+    peLoadReplies(true);   // fire-and-forget; its own error handling
   }catch(e){
     console.warn('[peLoadAll]', e);
     peToast('Events data did NOT load — check connection and try again.', true);
@@ -866,6 +867,87 @@ function peHeader(active){
 var PE_FOOT = '</div></div></div>';
 
 // ── list view ────────────────────────────────────────────────────────────────
+// ── guest replies, in one place ──────────────────────────────────────────────
+// Every kind of guest reply used to land somewhere different and none of them was
+// the screen she opens first: set-menu numbers raised a banner inside one event,
+// à la carte picks sat under Menu packages, and a reply whose token matched no
+// booking was visible nowhere at all. This loads the lot, unfiltered.
+async function peLoadReplies(force){
+  if(peState.repliesLoading) return;
+  if(peState.repliesLoaded && !force) return;
+  peState.repliesLoading = true;
+  var r = await sb.from('event_menu_choices').select('*').eq('applied', false)
+    .order('created_at',{ascending:false}).limit(50);
+  peState.repliesLoading = false;
+  // supabase-js does not throw. Only mark it loaded once it actually worked, or a
+  // failed read looks exactly like "nobody has replied".
+  if(r.error){
+    peToast('Could not check for guest replies — '+String(r.error.message||'').slice(0,70), true);
+    return;
+  }
+  peState.repliesLoaded = true;
+  peState.replies = r.data||[];
+  renderMain();
+}
+// What the guest actually sent, in one line she can read without opening anything.
+function peReplySummary(row){
+  var c = row.choices || {};
+  if(row.menu_key === 'alacarte'){
+    var d = c.dishes || [];
+    return d.length ? d.join(' · ') : 'à la carte choices';
+  }
+  var parts = [];
+  Object.keys(c).forEach(function(course){
+    var picks = c[course];
+    if(!picks || typeof picks !== 'object') return;
+    var n = 0; Object.keys(picks).forEach(function(k){ n += Number(picks[k])||0; });
+    if(n) parts.push(course+': '+n);
+  });
+  return parts.length ? parts.join(' · ') : 'menu choices';
+}
+function peReplyEvent(row){
+  return (peState.events||[]).filter(function(e){ return e.client_token===row.token; })[0] || null;
+}
+function peRepliesHTML(){
+  var rs = peState.replies || [];
+  if(!rs.length) return '';
+  return '<div class="pe-card" style="border-color:#C9A84C;background:#FBF6EA;margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">'+
+    '<b style="color:#400207">'+rs.length+' guest '+(rs.length>1?'replies':'reply')+' waiting</b>'+
+    '<span style="font-size:11px;color:#8B7355;text-decoration:underline;cursor:pointer" onclick="peLoadReplies(true)">refresh</span></div>'+
+    rs.map(function(row){
+      var ev = peReplyEvent(row);
+      var who = (row.choices && row.choices.guest) || (ev && (ev.client_name||ev.company)) || 'A guest';
+      return '<div class="pe-dishrow"><span>'+
+        '<b style="color:#400207">'+peEsc(who)+'</b>'+
+        ' <span style="font-size:11px;color:#8B7355">'+peEsc(peWhenLabel(row.created_at))+
+          (row.menu_key==='alacarte'?' · à la carte':' · set menu')+'</span>'+
+        '<br><span style="font-size:12px;color:#6B4A33">'+peEsc(peReplySummary(row))+'</span>'+
+        (row.note?'<br><span style="font-size:11.5px;color:#B00020">“'+peEsc(row.note)+'”</span>':'')+
+        // A reply we cannot place is the one most likely to be lost, so it says so
+        // in words rather than quietly showing "A guest".
+        (!ev?'<br><span style="font-size:11.5px;color:#8A6400">We can’t tell which booking this belongs to — open the booking and use “Check for the guest’s numbers”.</span>':'')+
+        '</span>'+
+        '<span style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'+
+        (ev?'<button class="pe-btn sm" onclick="peGo(\'event\',\''+ev.id+'\')">Open booking</button>':'')+
+        '<button class="pe-btn sec sm" onclick="peReplyDone(\''+row.id+'\')">Not needed</button>'+
+        '</span></div>';
+    }).join('')+'</div>';
+}
+async function peReplyDone(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var row = (peState.replies||[]).filter(function(r){ return r.id===id; })[0];
+  if(!row) return;
+  if(!(await peConfirm({title:'Clear this reply?',
+    html:'The guest’s reply stays saved — this only takes it off the list.'+
+      (peReplyEvent(row)?'<br><br>You can still pull their numbers in later from the booking.':''),
+    ok:'Clear it', cancel:'Keep it'}))) return;
+  var r = await sb.from('event_menu_choices').update({applied:true}).eq('id', id);
+  if(r.error){ peToast('NOT cleared — '+String(r.error.message||'').slice(0,80), true); return; }
+  peState.replies = (peState.replies||[]).filter(function(x){ return x.id!==id; });
+  peToast('Cleared ✓');
+  renderMain();
+}
 // A booking that is lost or has moved on can leave this banner asserting forever,
 // because applying was the only thing that cleared it. Same idea as "Done with it"
 // on the à la carte card: the guest's reply stays saved, it just stops asking.
@@ -1136,6 +1218,7 @@ function peRenderList(){
   h += '<div style="margin-bottom:10px"><div class="pe-title">Events</div>'+
     '<div style="font-size:12px;color:#8B7355">'+(peCanEdit()?'Create a booking, quote it, send the agreement.':'Every booking, readable end to end.')+'</div></div>';
   h += peViewBanner();
+  h += peRepliesHTML();   // guest replies first: a reply that waits is the costliest thing on this screen
   var fo = peState.focus;
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:'+(fo?'8px':'12px')+'">'+
     peStatPill(st.week,'this week','#FBF6EC','#C9A84C','#8A6400','#6B4A33','pePillFocus(\'week\')',fo==='week')+
