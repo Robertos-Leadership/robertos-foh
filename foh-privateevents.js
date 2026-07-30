@@ -907,7 +907,7 @@ function peListRow(e){
   }
   if(e.area) parts.push(peEsc(e.area));
   else if(['draft','sent'].indexOf(e.status)>=0) parts.push('<span style="color:#B00020">no area yet</span>');
-  if(e.guests) parts.push(e.guests+' pax');
+  if(e.guests) parts.push(e.guests+' guests');
   // Who took the lead — shown in brackets after the name so the desk reads at a
   // glance whose booking each one is. Prefer "Handled by"; when that's blank, fall
   // back to whoever actually sent the proposal (from the log). Name without domain.
@@ -1026,7 +1026,7 @@ function peTidyDrafts(){
   var bg = document.createElement('div'); bg.className='pe-modal-bg';
   bg.addEventListener('click', function(ev){ if(ev.target===bg) bg.remove(); });
   var rows = empties.length ? empties.map(function(e){
-    return '<div class="pe-dishrow"><span style="font-size:12.5px;color:#6B4A33">Empty draft'+(e.guests?' · '+e.guests+' pax':'')+(e.event_date?' · '+peDLabel(e.event_date):'')+'</span>'+
+    return '<div class="pe-dishrow"><span style="font-size:12.5px;color:#6B4A33">Empty draft'+(e.guests?' · '+e.guests+' guests':'')+(e.event_date?' · '+peDLabel(e.event_date):'')+'</span>'+
       '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peTidyDeleteOne(\''+e.id+'\')">Delete</button></div>';
   }).join('') : '<div style="font-size:12.5px;color:#8B7355;padding:8px 0">No empty drafts — all tidy.</div>';
   bg.innerHTML = '<div class="pe-modal" style="max-width:460px">'+
@@ -1334,7 +1334,7 @@ function peRenderCalendar(){
       // order rather than as a single room that is only half the truth.
       var where = peIsMultiSpace(e) ? peRunOfEvening(e) : (peEsc(e.area||'')+(e.time_from?' · '+peEsc(e.time_from):''));
       h += '<div class="pe-card" style="padding:9px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer'+(r.held?';border-style:dashed;opacity:.85':'')+'" onclick="peGo(\'event\',\''+e.id+'\')">'+
-        '<span><b style="font-size:13px;color:#2C1810">'+(r.held?'<span style="color:#8B7355;font-weight:400">or: </span>':'')+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' pax':'')+'<br><span style="font-size:11px;color:#8B7355">'+
+        '<span><b style="font-size:13px;color:#2C1810">'+(r.held?'<span style="color:#8B7355;font-weight:400">or: </span>':'')+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' guests':'')+'<br><span style="font-size:11px;color:#8B7355">'+
         (r.held ? 'One of the dates held for this booking — counted on '+peEsc(peDLabel(e.event_date)) : peEsc(where))+'</span></span>'+
         '<span class="pe-pill '+(r.held?'pe-p-draft':pm.pill)+'">'+(r.held?'Date held':pm.n)+'</span></div>';
     });
@@ -1356,7 +1356,7 @@ function peLeadsStrip(){
   function row(e, why){
     var v = peEventValue(e);
     return '<div class="pe-card" style="padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="peGo(\'event\',\''+e.id+'\')">'+
-      '<span><b style="font-size:13px;color:#2C1810">'+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' pax':'')+
+      '<span><b style="font-size:13px;color:#2C1810">'+peEsc(e.client_name||e.company||'Unnamed')+'</b>'+(e.guests?' · '+e.guests+' guests':'')+
       '<br><span style="font-size:11px;color:#8B7355">'+why+'</span></span>'+
       '<span style="font-size:12px;color:#6B4A33;white-space:nowrap">'+(v?'AED '+peMoney(v):'no value yet')+'</span></div>';
   }
@@ -1674,7 +1674,7 @@ function peRenderEvent(){
   h += '<div class="pe-card"><div class="pe-grid2">'+
     peIn('Client / booking name','client_name',e)+peSel('Venue / area','area',e,PE_AREAS)+
   '</div><div class="pe-grid2" style="margin-top:10px">'+
-    peIn('Date','event_date',e,'date')+peGuestField('Guests (pax)',e)+
+    peIn('Date','event_date',e,'date')+peGuestField('Guests',e)+
   '</div>';
   if(!showMore){
     h += '<div style="margin-top:12px;border-top:1px dashed rgba(107,31,42,0.18);padding-top:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="peState.moreOpen=peState.moreOpen||{};peState.moreOpen[\''+e.id+'\']=true;renderMain()">'+
@@ -1833,7 +1833,7 @@ function peRenderEvent(){
   h += '</div>';
   // follow-ups
   h += '<div class="pe-card"><b style="font-size:14px;color:#400207">Follow-up log</b>'+
-    (ce?'<div style="display:flex;gap:6px;margin:8px 0"><input class="pe-in" id="pe-fu-note" placeholder="e.g. Called Ramona — waiting on final pax"><button class="pe-btn sm" onclick="peAddFollowup(\''+e.id+'\')">Add</button></div>':'<div style="margin:8px 0"></div>')+
+    (ce?'<div style="display:flex;gap:6px;margin:8px 0"><input class="pe-in" id="pe-fu-note" placeholder="e.g. Called Ramona — waiting on final guest count"><button class="pe-btn sm" onclick="peAddFollowup(\''+e.id+'\')">Add</button></div>':'<div style="margin:8px 0"></div>')+
     (log.length ? log.map(function(l){
       var d = new Date(l.created_at);
       return '<div class="pe-log"><span class="t">'+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · '+peEsc(l.actor||'')+'</span><br>'+peEsc(l.action==='followup'?(l.detail||''):(l.action+(l.detail?' — '+l.detail:'')))+'</div>';
@@ -2793,12 +2793,21 @@ async function peAddItem(eventId, dishId, pcs){
 async function peRemoveItem(itemId){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var evId = peEventOfItem(itemId);
+  // Deleting the row cannot be undone, so name the dish before doing it.
+  var it = null;
+  Object.keys(peState.items).forEach(function(k){
+    (peState.items[k]||[]).forEach(function(i){ if(i.id===itemId) it = i; });
+  });
+  var dish = it ? peDishById(it.dish_id) : null;
+  var nm = (dish && dish.name) || 'this dish';
+  if(!(await peConfirm({title:'Take it off the menu?', html:'Remove <b>'+peEsc(nm)+'</b> from this menu? You would have to add it again — this cannot be undone.', ok:'Remove '+peEsc(nm), cancel:'Keep it'}))) return;
   if(evId && !(await peConfirmSignedEdit(evId, 'the menu'))){ renderMain(); return; }
   var r = await sb.from('event_items').delete().eq('id', itemId);
   if(r.error){ peToast('NOT removed — check connection', true); return; }
   Object.keys(peState.items).forEach(function(k){
     peState.items[k] = peState.items[k].filter(function(i){ return i.id!==itemId; });
   });
+  peToast('Removed ✓');
   renderMain();
 }
 async function peSetPcs(itemId, val){
@@ -3565,6 +3574,12 @@ async function peDoSendCoord(id, list){
     peToast('Email NOT sent — '+String(err&&err.message||err).slice(0,120), true);
   }
 }
+// What the client sees in their inbox. A set-menu dinner is not a canape proposal.
+function peProposalSubject(e){
+  if(e && e.set_menu) return 'Your menu proposal — Roberto’s';
+  if(e && (peState.items[e.id]||[]).length) return 'Your canapé proposal — Roberto’s';
+  return 'Your event proposal — Roberto’s';
+}
 async function peEmailProposal(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.contact_email) return;
@@ -3578,7 +3593,9 @@ async function peEmailProposal(id){
       to: peSendTo(e.contact_email, sender),
       from_name: peSenderName(),
       reply_to: sender,
-      subject: 'Your canap\u00e9 proposal \u2014 Roberto\u2019s'+(e.event_date?' \u00b7 '+peDLabel(e.event_date):''),
+      // The subject has to match what is actually inside, or a set-menu dinner
+      // arrives in the client's inbox titled "canape proposal".
+      subject: peProposalSubject(e)+(e.event_date?' \u00b7 '+peDLabel(e.event_date):''),
       html: peProposalHTML(e)
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
@@ -4360,9 +4377,10 @@ function peRenderCustomise(){
         (c.choose && isAlc && l.diff!=null && Number(l.supplement)>0
           ? '<div style="margin-top:6px;font-size:11px;color:#6B4A33">Taken by '+
             '<input class="pe-in" style="width:56px;padding:3px 5px;text-align:center;display:inline-block" type="number" min="0"'+
-              (cm.guests?'':' disabled title="Add the guest count above first"')+
+              (cm.guests?'':' disabled')+
               ' value="'+(l.forGuests!=null?l.forGuests:'')+'" onchange="peCmForGuests('+ci+','+li+',this.value)">'+
             ' of '+(cm.guests||'?')+' guests'+
+            (cm.guests?'':' <span style="color:#8A2A1A">— add the guest count above before you can split this</span>')+
             (l.forGuests!=null && cm.guests
               ? ' — the AED '+peMoney(l.diff)+' difference spread over everyone is <b>AED '+peMoney(l.supplement)+' / guest</b>'
               : ' — leave blank to charge every guest the full AED '+peMoney(l.diff))+'</div>'
@@ -4389,7 +4407,9 @@ function peRenderCustomise(){
       var lbl = mode==='supplement' ? 'Keep the set price + supplements' : 'Reprice from every dish';
       var dis = (mode==='supplement' && cm.basePrice==null);
       return '<button class="pe-btn '+(on?'':'sec')+' sm"'+(dis?' disabled title="This menu didn’t start from a priced set menu, so there is no set price to keep"':' onclick="peCmSet(\'priceMode\',\''+mode+'\')"')+'>'+lbl+'</button>';
-    }).join('')+'</div>';
+    }).join('')+'</div>'+
+    // Rule 3: a disabled button has to say why on the screen, not on hover.
+    (cm.basePrice==null?'<div style="font-size:11px;color:#8A2A1A;margin-top:6px">This menu didn’t start from a priced set menu, so there is no set price to keep — price it from every dish.</div>':'');
   if(cm.priceMode==='supplement'){
     h += '<div class="pe-tot-row" style="margin-top:8px"><span>'+peEsc(cm.baseName||'Set menu')+'</span><b>AED '+peMoney(t.base||0)+'</b></div>'+
       '<div class="pe-tot-row"><span>Supplements on this menu</span><b>'+(t.supp?'+ AED '+peMoney(t.supp):'none')+'</b></div>';
@@ -6536,8 +6556,9 @@ function peRenderQuick(){
           }).join('')+
         '</select>'+
         '<button class="pe-btn sec sm" onclick="peCmStart(null,null)">Start from nothing</button>'+
-        '<button class="pe-btn sec sm"'+(tt.anything?'':' disabled title="Add some dishes below first"')+' onclick="peCmFromQuick()">Turn what’s below into a menu she can edit</button>'+
+        '<button class="pe-btn sec sm"'+(tt.anything?'':' disabled')+' onclick="peCmFromQuick()">Turn what’s below into a menu she can edit</button>'+
       '</div>'+
+      (tt.anything?'':'<div style="font-size:11px;color:#8A2A1A;margin-top:6px">Add some dishes below first, then you can turn them into a menu.</div>')+
       (peState.alacarteOk?'':'<div style="font-size:11px;color:#B00020;margin-top:8px">The à la carte isn’t loaded yet — run foh-events-alacarte.sql to swap dishes from it.</div>')+
       '</div>';
   }
@@ -6610,9 +6631,12 @@ function peRenderQuick(){
   }
   if(tt.minViol.length) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Below minimum order: '+peEsc(tt.minViol.join(', '))+'</div>';
   h += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">'+
-    '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Print / PDF menu</button>'+
-    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickWhatsApp()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Send by WhatsApp</button>':'')+
-    (peCanEdit()&&!peQuick.savedId?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Save as event draft</button>':'')+
+    // One visible line for the whole group — three identical hover tooltips
+    // told her nothing on a phone.
+    (tt.anything?'':'<div style="font-size:11px;color:#8A2A1A;margin-bottom:2px">Add a dish below before you can print, send or save this menu.</div>')+
+    '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.anything?'':'disabled')+'>Print / PDF menu</button>'+
+    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickWhatsApp()" '+(tt.anything?'':'disabled')+'>Send by WhatsApp</button>':'')+
+    (peCanEdit()&&!peQuick.savedId?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.anything?'':'disabled')+'>Save as event draft</button>':'')+
     '</div></div></div></div>';
   return h+'</div>';
 }
