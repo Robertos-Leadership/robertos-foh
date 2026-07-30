@@ -5,42 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Roberto's — Your menu choices</title>
+<link rel="stylesheet" href="client-brand.css">
 <style>
-  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  body{margin:0;background:var(--page);font-family:var(--font-display);color:var(--ink)}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
-  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden}
   .brand{text-align:center;padding:26px 20px 20px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
-  .sub{font-size:14px;color:#8A6A4F;text-align:center}
-  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
-  .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
+  .sub{font-size:14px;color:var(--ink-soft);text-align:center}
+  .sub2{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:3px;font-family:var(--font-body)}
+  .sect{border-top:1px solid var(--line-soft);margin:16px 22px 0;padding-top:13px}
   .sect-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
-  .sect-h b{font-size:15px;color:#400207;font-weight:normal}
+  .sect-h b{font-size:15px;color:var(--vino);font-weight:normal}
   /* The house course heading — gold, letter-spaced small caps. Identical to
      client-menus.html and client-agreement.html, so a menu sent from here does
      not look like a different restaurant's. */
-  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;margin-bottom:10px;font-family:Arial,sans-serif}
-  .sect-n{text-align:center;font-size:11px;color:#A5876B;font-family:Arial,sans-serif;margin:-6px 0 8px}
-  .pr{font-size:12.5px;color:#8A6A4F;text-align:center;font-family:Arial,sans-serif;margin-top:4px}
-  .cnt{font-size:11px;font-family:Arial,sans-serif}
-  .hint{font-size:12px;color:#8A6A4F;margin-bottom:6px}
+  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:var(--warn);text-transform:uppercase;margin-bottom:10px;font-family:var(--font-body)}
+  .sect-n{text-align:center;font-size:11px;color:var(--ink-faint);font-family:var(--font-body);margin:-6px 0 8px}
+  .pr{font-size:12.5px;color:var(--ink-soft);text-align:center;font-family:var(--font-body);margin-top:4px}
+  .cnt{font-size:11px;font-family:var(--font-body)}
+  .hint{font-size:12px;color:var(--ink-soft);margin-bottom:6px}
   .opt{display:flex;gap:11px;align-items:center;padding:7px 0}
   .nm{font-size:13.5px;flex:1}
-  .ds{font-size:11.5px;color:#8A6A4F;display:block;margin-top:1px}
+  .ds{font-size:11.5px;color:var(--ink-soft);display:block;margin-top:1px}
   .step{display:flex;align-items:center;gap:6px;flex-shrink:0}
-  .sbtn{width:30px;height:30px;border-radius:8px;border:1px solid #C9AD96;background:#fff;color:#400207;font-size:16px;font-family:Georgia,serif;cursor:pointer;line-height:1}
-  .qin{width:44px;border:1px solid #C9AD96;border-radius:7px;background:#fff;padding:6px 2px;font-family:Arial,sans-serif;font-size:13px;text-align:center}
+  .sbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--vino);font-size:16px;font-family:var(--font-display);cursor:pointer;line-height:1}
+  .qin{width:44px;border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 2px;font-family:var(--font-body);font-size:13px;text-align:center}
   .shared{font-size:13.5px;padding:4px 0}
-  .shared .tag{font-size:10.5px;color:#8A9A5B;font-family:Arial,sans-serif}
+  .shared .tag{font-size:10.5px;color:var(--olive);font-family:var(--font-body)}
   .note{margin:18px 22px 0}
-  .note textarea{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:64px;resize:vertical}
-  .gbox{margin:16px 22px 0;background:#F3E9DA;border-radius:10px;padding:12px 14px;font-family:Arial,sans-serif;font-size:12.5px;color:#400207}
+  .note textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px;font-family:var(--font-body);font-size:13px;min-height:64px;resize:vertical}
+  .gbox{margin:16px 22px 0;background:var(--page);border-radius:10px;padding:12px 14px;font-family:var(--font-body);font-size:12.5px;color:var(--vino)}
   .btnrow{padding:20px 22px 26px}
-  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer}
+  .btn{width:100%;background:var(--vino);color:var(--sabbia);border:none;border-radius:9px;padding:14px;font-size:14px;font-family:var(--font-display);letter-spacing:1px;cursor:pointer}
   .btn:disabled{opacity:.55}
-  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
-  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
-  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:#400207;color:#F3E7D8;border-radius:10px;padding:11px 14px;font-family:Arial,sans-serif;font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
+  .ft{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:12px;line-height:1.7;font-family:var(--font-body)}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:var(--ink-mid)}
+  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:var(--vino);color:var(--page);border-radius:10px;padding:11px 14px;font-family:var(--font-body);font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
 </style>
 </head>
 <body>
@@ -106,7 +107,7 @@ function render(){
         }).join('')+'</div>';
     });
     h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
-      '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a>.<br><br>'+
+      '<a href="mailto:reservations@robertos.ae" style="color:var(--vino)">reservations@robertos.ae</a>.<br><br>'+
       (priceLine ? 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>' : '')+
       'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
     el('card').innerHTML = h;
@@ -135,7 +136,7 @@ function render(){
     }
     h += '</div>';
   });
-  h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">Anything we should change or know? A vegan main, allergies, the occasion…</div>'+
+  h += '<div class="note"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Anything we should change or know? A vegan main, allergies, the occasion…</div>'+
        '<textarea id="cl-note" maxlength="900"></textarea></div>';
   h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send my choices to Roberto’s</button>'+
        '<div class="ft">Valentina will confirm everything back to you.<br>Our chefs will do their best to accommodate your dietary requirements.</div></div>';
@@ -168,9 +169,9 @@ function sums(){
     if(!c.choose) return;
     var node = el('cnt-'+ci); if(!node) return;
     var s = courseSum(c);
-    if(!guests){ node.textContent = s ? s+' chosen' : ''; node.style.color = '#A5876B'; return; }
-    if(s===guests){ node.textContent = s+' of '+guests+' ✓'; node.style.color = '#2E6B34'; }
-    else { node.textContent = s+' of '+guests+(s<guests?' — '+(guests-s)+' to go':' — '+(s-guests)+' too many'); node.style.color = s?'#B00020':'#A5876B'; }
+    if(!guests){ node.textContent = s ? s+' chosen' : ''; node.style.color = 'var(--ink-faint)'; return; }
+    if(s===guests){ node.textContent = s+' of '+guests+' ✓'; node.style.color = 'var(--ok)'; }
+    else { node.textContent = s+' of '+guests+(s<guests?' — '+(guests-s)+' to go':' — '+(s-guests)+' too many'); node.style.color = s?'var(--err)':'var(--ink-faint)'; }
   });
 }
 async function send(){

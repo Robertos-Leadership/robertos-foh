@@ -1,0 +1,52 @@
+/* ── Roberto's — guest-facing brand tokens ───────────────────────────────
+   THE ONE PLACE the guest pages get their colour and lettering from.
+
+   Before this file, client-agreement / client-event / client-menus /
+   client-setmenu each carried their own <style> block with its own literals:
+   21 distinct colours between them, including FOUR near-identical page
+   grounds (#F3EBDF, #F3E9DA, #F3E7D8, #EFE4D4) and THREE greens. A guest
+   who opened two links saw two slightly different restaurants.
+
+   Values are the SOP standard — the same wine, cream and lettering used on
+   the printed menus and the document library, chosen by Francesco 30 Jul
+   2026 so the page on a guest's phone matches what they are handed at the
+   table.
+
+   The webfonts are a progressive enhancement: Georgia and Arial are the
+   fallbacks, so a guest on a poor connection gets a plain but correct page
+   rather than a blank one. */
+
+@import url('https://fonts.googleapis.com/css2?family=Forum&family=Outfit:wght@300;400;500;600&display=swap');
+
+:root{
+  /* Brand core */
+  --vino:      #450207;   /* Vino Amarena — mastheads, headings, prices */
+  --sabbia:    #E8D9C7;   /* Cream — panels, totals, row tints */
+  --arancio:   #FA4700;   /* The logo's apostrophe. Sparingly, never as a fill */
+
+  /* Grounds and surfaces */
+  --page:      #F3EBDF;   /* the single page ground */
+  --paper:     #FBF7F1;   /* cards sitting on the ground */
+
+  /* Rules */
+  --line:      #D8C4AC;   /* input borders, visible hairlines */
+  --line-soft: #E3D5C2;   /* dividers between rows */
+
+  /* Ink */
+  --ink:       #3A332C;   /* body copy */
+  --ink-mid:   #6B4A33;   /* secondary copy */
+  --ink-soft:  #8A6A4F;   /* dish descriptions */
+  --ink-faint: #9A7D68;   /* captions, subtitles, meta */
+
+  /* Signals — semantic only, never decoration */
+  --ok:        #2E6B34;
+  --ok-bg:     #E7F0E4;
+  --olive:     #8A9A5B;
+  --gold:      #C9A84C;
+  --warn:      #B99C03;
+  --err:       #B00020;
+
+  /* Lettering */
+  --font-display: 'Forum', Georgia, serif;
+  --font-body:    'Outfit', Arial, sans-serif;
+}

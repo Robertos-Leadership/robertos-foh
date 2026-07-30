@@ -5,25 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Roberto's — Menus for your occasion</title>
+<link rel="stylesheet" href="client-brand.css">
 <style>
-  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  body{margin:0;background:var(--page);font-family:var(--font-display);color:var(--ink)}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
-  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden}
   .brand{text-align:center;padding:26px 20px 20px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
-  .sub{font-size:14px;color:#8A6A4F;text-align:center}
-  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
-  .sect{border-top:1px solid #E3D5C2;margin:18px 22px 0;padding-top:14px}
-  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;margin-bottom:10px;font-family:Arial,sans-serif}
+  .sub{font-size:14px;color:var(--ink-soft);text-align:center}
+  .sub2{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:3px;font-family:var(--font-body)}
+  .sect{border-top:1px solid var(--line-soft);margin:18px 22px 0;padding-top:14px}
+  .sect-t{text-align:center;font-size:11px;letter-spacing:3px;color:var(--warn);text-transform:uppercase;margin-bottom:10px;font-family:var(--font-body)}
   .item{padding:9px 0}
-  .item + .item{border-top:1px solid #EFE4D4}
-  .nm{font-size:14.5px;color:#400207}
-  .pr{font-size:12px;color:#8A6A4F;font-family:Arial,sans-serif;margin-top:2px}
-  .ds{font-size:11.5px;color:#8A6A4F;display:block;margin-top:4px;line-height:1.55}
-  .open{display:inline-block;background:#400207;color:#E8D9C7;padding:8px 22px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px;margin-top:9px}
+  .item + .item{border-top:1px solid var(--page)}
+  .nm{font-size:14.5px;color:var(--vino)}
+  .pr{font-size:12px;color:var(--ink-soft);font-family:var(--font-body);margin-top:2px}
+  .ds{font-size:11.5px;color:var(--ink-soft);display:block;margin-top:4px;line-height:1.55}
+  .open{display:inline-block;background:var(--vino);color:var(--sabbia);padding:8px 22px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px;margin-top:9px}
   .btnrow{padding:20px 22px 26px}
-  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
-  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
+  .ft{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:12px;line-height:1.7;font-family:var(--font-body)}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:var(--ink-mid)}
 </style>
 </head>
 <body>
@@ -102,10 +103,10 @@ async function sendPicks(){
     });
     if(!r.ok) throw new Error(r.status);
     if(btn) btn.style.display='none';
-    if(msg){ msg.style.color='#2E6B34'; msg.innerHTML='Grazie! Your choices are with us.<br>Valentina will come back to you shortly.'; }
+    if(msg){ msg.style.color='var(--ok)'; msg.innerHTML='Grazie! Your choices are with us.<br>Valentina will come back to you shortly.'; }
   }catch(e){
     if(btn){ btn.disabled=false; btn.textContent='Send my choices to Roberto’s'; }
-    if(msg){ msg.style.color='#B00020'; msg.textContent='That did not send — please try once more, or simply reply to Valentina.'; }
+    if(msg){ msg.style.color='var(--err)'; msg.textContent='That did not send — please try once more, or simply reply to Valentina.'; }
   }
 }
 
@@ -185,15 +186,15 @@ function render(menus, bevs, alc){
     var secs = [];
     alc.forEach(function(a){ if(secs.indexOf(a.section)<0) secs.push(a.section); });
     h += '<div class="sect">'+(both||menus.length ? '<div class="sect-t">À la carte</div>' : '')+
-      '<div class="hint" style="text-align:center;font-size:12px;color:#8A6A4F;margin-bottom:8px">Tick anything you would like and send it back to us.</div>'+
+      '<div class="hint" style="text-align:center;font-size:12px;color:var(--ink-soft);margin-bottom:8px">Tick anything you would like and send it back to us.</div>'+
       secs.map(function(sname){
         return '<div class="sect-t" style="margin-top:14px">'+esc(secLabel(sname))+'</div>'+
           alc.filter(function(a){ return a.section===sname; }).map(function(a){
             var pr = noPrice ? '' : priceText(a);
             return '<label class="item" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">'+
-              '<input type="checkbox" data-alc="'+esc(a.id)+'" onchange="tick(this)" style="accent-color:#400207;margin-top:4px">'+
+              '<input type="checkbox" data-alc="'+esc(a.id)+'" onchange="tick(this)" style="accent-color:var(--vino);margin-top:4px">'+
               '<span style="flex:1"><span class="nm">'+esc(a.name)+
-                ((a.allergens&&a.allergens.length)?' <span class="codes" style="font-size:10px;color:#A5876B">('+a.allergens.join(')(')+')</span>':'')+'</span>'+
+                ((a.allergens&&a.allergens.length)?' <span class="codes" style="font-size:10px;color:var(--ink-faint)">('+a.allergens.join(')(')+')</span>':'')+'</span>'+
               (pr?'<div class="pr">'+esc(pr)+'</div>':'')+
               (a.description?'<span class="ds">'+esc(a.description)+'</span>':'')+'</span></label>';
           }).join('');
@@ -201,10 +202,10 @@ function render(menus, bevs, alc){
       // Without this the choices arrive as "A guest" and nobody can tell whose
       // they are -- the name only ever came from an &n= in the link, and the
       // a la carte link is copied without one.
-      '<div style="margin-top:14px"><input id="alc-who" value="'+esc(who||'')+'" placeholder="Your name, so we know whose choices these are" style="width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:10px;font-family:Arial,sans-serif;font-size:13px"></div>'+
-      '<div style="margin-top:10px"><textarea id="alc-note" placeholder="Anything we should know? Allergies, the occasion, a dish you cannot see here…" style="width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:60px"></textarea></div>'+
-      '<div style="margin-top:10px"><button id="alc-send" onclick="sendPicks()" style="width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:13px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer" disabled>Send my choices to Roberto’s</button>'+
-      '<div id="alc-msg" style="font-size:11.5px;color:#8A6A4F;text-align:center;margin-top:7px">Tick a dish to send your choices.</div></div>'+
+      '<div style="margin-top:14px"><input id="alc-who" value="'+esc(who||'')+'" placeholder="Your name, so we know whose choices these are" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;font-family:var(--font-body);font-size:13px"></div>'+
+      '<div style="margin-top:10px"><textarea id="alc-note" placeholder="Anything we should know? Allergies, the occasion, a dish you cannot see here…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px;font-family:var(--font-body);font-size:13px;min-height:60px"></textarea></div>'+
+      '<div style="margin-top:10px"><button id="alc-send" onclick="sendPicks()" style="width:100%;background:var(--vino);color:var(--sabbia);border:none;border-radius:9px;padding:13px;font-size:14px;font-family:var(--font-display);letter-spacing:1px;cursor:pointer" disabled>Send my choices to Roberto’s</button>'+
+      '<div id="alc-msg" style="font-size:11.5px;color:var(--ink-soft);text-align:center;margin-top:7px">Tick a dish to send your choices.</div></div>'+
       '</div>';
   }
 
@@ -221,7 +222,7 @@ function render(menus, bevs, alc){
   }
 
   h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
-    '<a href="mailto:reservations@robertos.ae" style="color:#400207">reservations@robertos.ae</a>.<br><br>'+
+    '<a href="mailto:reservations@robertos.ae" style="color:var(--vino)">reservations@robertos.ae</a>.<br><br>'+
     (noPrice ? '' : 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>')+
     'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
   el('card').innerHTML = h;

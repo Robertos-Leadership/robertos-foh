@@ -5,36 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Roberto's — Your Event Agreement</title>
+<link rel="stylesheet" href="client-brand.css">
 <style>
-  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  body{margin:0;background:var(--page);font-family:var(--font-display);color:var(--ink)}
   .wrap{max-width:640px;margin:0 auto;padding:18px 14px 40px}
-  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden;padding-bottom:26px}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;padding-bottom:26px}
   .brand{text-align:center;padding:26px 20px 20px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
-  .rule{width:70px;height:1px;background:#C9A84C;margin:10px auto}
-  .h2{font-size:15px;letter-spacing:2px;color:#7A8B4A;text-align:center;font-weight:normal;text-transform:uppercase}
-  .sub{font-size:13px;color:#8A6A4F;text-align:center;margin-top:4px}
-  .sect{border-top:1px solid #E3D5C2;margin:18px 22px 0;padding-top:14px}
-  .sect-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7A8B4A;margin-bottom:6px}
-  .cath{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8A9A5B;margin:12px 0 2px;text-align:center;font-family:Arial,sans-serif}
+  .rule{width:70px;height:1px;background:var(--gold);margin:10px auto}
+  .h2{font-size:15px;letter-spacing:2px;color:var(--olive);text-align:center;font-weight:normal;text-transform:uppercase}
+  .sub{font-size:13px;color:var(--ink-soft);text-align:center;margin-top:4px}
+  .sect{border-top:1px solid var(--line-soft);margin:18px 22px 0;padding-top:14px}
+  .sect-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);margin-bottom:6px}
+  .cath{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--olive);margin:12px 0 2px;text-align:center;font-family:var(--font-body)}
   .dish{text-align:center;font-size:13.5px;margin:7px 0}
-  .dish .cd{font-size:10.5px;color:#A5876B}
-  .dish .ds{font-size:12px;color:#8A6A4F}
-  .facts td{padding:5px 8px;border:1px solid #E3D5C2;font-size:12.5px}
-  .facts td.l{width:38%;color:#8B7355;font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:Arial,sans-serif}
+  .dish .cd{font-size:10.5px;color:var(--ink-faint)}
+  .dish .ds{font-size:12px;color:var(--ink-soft)}
+  .facts td{padding:5px 8px;border:1px solid var(--line-soft);font-size:12.5px}
+  .facts td.l{width:38%;color:var(--ink-faint);font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:var(--font-body)}
   .facts{width:100%;border-collapse:collapse}
-  .total{background:#F3E9DA;border-radius:10px;padding:14px;text-align:center;margin-top:14px}
-  .total b{font-size:17px;color:#400207}
-  .total .d{font-size:11.5px;color:#8A6A4F;margin-top:3px}
-  .fld{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:10px 11px;font-family:Arial,sans-serif;font-size:13px;margin-bottom:9px}
-  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer;margin-top:6px}
+  .total{background:var(--page);border-radius:10px;padding:14px;text-align:center;margin-top:14px}
+  .total b{font-size:17px;color:var(--vino)}
+  .total .d{font-size:11.5px;color:var(--ink-soft);margin-top:3px}
+  .fld{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 11px;font-family:var(--font-body);font-size:13px;margin-bottom:9px}
+  .btn{width:100%;background:var(--vino);color:var(--sabbia);border:none;border-radius:9px;padding:14px;font-size:14px;font-family:var(--font-display);letter-spacing:1px;cursor:pointer;margin-top:6px}
   .btn:disabled{opacity:.5}
-  .tick{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:#3A2A1E;margin:6px 0 10px;cursor:pointer;font-family:Arial,sans-serif}
-  .tick input{width:17px;height:17px;accent-color:#400207;flex-shrink:0;margin-top:1px}
-  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin:16px 22px 0;line-height:1.7;font-family:Arial,sans-serif}
-  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
-  .ok{background:#E7F0E4;color:#2E6B34;border-radius:10px;padding:14px;text-align:center;font-size:13.5px;margin-top:10px}
-  .err{color:#B00020;font-size:12.5px;margin-top:8px;text-align:center;font-family:Arial,sans-serif}
+  .tick{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--ink);margin:6px 0 10px;cursor:pointer;font-family:var(--font-body)}
+  .tick input{width:17px;height:17px;accent-color:var(--vino);flex-shrink:0;margin-top:1px}
+  .ft{text-align:center;font-size:10.5px;color:var(--ink-faint);margin:16px 22px 0;line-height:1.7;font-family:var(--font-body)}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:var(--ink-mid)}
+  .ok{background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:14px;text-align:center;font-size:13.5px;margin-top:10px}
+  .err{color:var(--err);font-size:12.5px;margin-top:8px;text-align:center;font-family:var(--font-body)}
 </style>
 </head>
 <body>

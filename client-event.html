@@ -5,42 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Roberto's — Canapé selection</title>
+<link rel="stylesheet" href="client-brand.css">
 <style>
-  body{margin:0;background:#F3EBDF;font-family:Georgia,'Times New Roman',serif;color:#3A2A1E}
+  body{margin:0;background:var(--page);font-family:var(--font-display);color:var(--ink)}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
-  .card{background:#FBF7F1;border:1px solid #E3D5C2;border-radius:16px;overflow:hidden}
+  .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden}
   .brand{text-align:center;padding:26px 20px 20px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
-  .sub{font-size:14px;color:#8A6A4F;text-align:center}
-  .sub2{font-size:12px;color:#A5876B;text-align:center;margin-top:3px;font-family:Arial,sans-serif}
-  .sect{border-top:1px solid #E3D5C2;margin:16px 22px 0;padding-top:13px}
+  .sub{font-size:14px;color:var(--ink-soft);text-align:center}
+  .sub2{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:3px;font-family:var(--font-body)}
+  .sect{border-top:1px solid var(--line-soft);margin:16px 22px 0;padding-top:13px}
   .sect-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-  .sect-h b{font-size:15px;color:#400207;font-weight:normal}
-  .cnt{font-size:11px;color:#A5876B;font-family:Arial,sans-serif}
-  .cath{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8A9A5B;margin:10px 0 2px;font-family:Arial,sans-serif}
+  .sect-h b{font-size:15px;color:var(--vino);font-weight:normal}
+  .cnt{font-size:11px;color:var(--ink-faint);font-family:var(--font-body)}
+  .cath{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--olive);margin:10px 0 2px;font-family:var(--font-body)}
   .dish{display:flex;gap:11px;align-items:flex-start;padding:8px 0;cursor:pointer}
-  .box{width:17px;height:17px;border-radius:4px;border:1px solid #C9AD96;background:#FBF7F1;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:background .15s}
-  .dish.on .box{background:#400207;border-color:#400207}
-  .box svg{width:11px;height:11px;stroke:#E8D9C7;stroke-width:3;fill:none;opacity:0}
+  .box{width:17px;height:17px;border-radius:4px;border:1px solid var(--line);background:var(--paper);flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+  .dish.on .box{background:var(--vino);border-color:var(--vino)}
+  .box svg{width:11px;height:11px;stroke:var(--sabbia);stroke-width:3;fill:none;opacity:0}
   .dish.on .box svg{opacity:1}
-  .nm{font-size:13.5px}.nm .cd{font-size:10.5px;color:#A5876B}
-  .ds{font-size:12px;color:#8A6A4F}
+  .nm{font-size:13.5px}.nm .cd{font-size:10.5px;color:var(--ink-faint)}
+  .ds{font-size:12px;color:var(--ink-soft)}
   .note{margin:18px 22px 0}
-  .note textarea{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;min-height:64px;resize:vertical}
-  .fld{width:100%;box-sizing:border-box;border:1px solid #C9AD96;border-radius:8px;background:#fff;padding:9px 10px;font-family:Arial,sans-serif;font-size:13px;margin-bottom:8px}
+  .note textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px;font-family:var(--font-body);font-size:13px;min-height:64px;resize:vertical}
+  .fld{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px;font-family:var(--font-body);font-size:13px;margin-bottom:8px}
   .btnrow{padding:20px 22px 26px}
-  .btn{width:100%;background:#400207;color:#E8D9C7;border:none;border-radius:9px;padding:14px;font-size:14px;font-family:Georgia,serif;letter-spacing:1px;cursor:pointer}
+  .btn{width:100%;background:var(--vino);color:var(--sabbia);border:none;border-radius:9px;padding:14px;font-size:14px;font-family:var(--font-display);letter-spacing:1px;cursor:pointer}
   .btn:disabled{opacity:.55}
-  .ft{text-align:center;font-size:10.5px;color:#A5876B;margin-top:12px;line-height:1.7;font-family:Arial,sans-serif}
-  .msg{text-align:center;padding:60px 24px;font-size:14px;color:#6B4A33}
-  .gbox{margin:16px 22px 0;background:#F3E9DA;border-radius:10px;padding:12px 14px}
-  .pr{font-size:11px;color:#400207;font-family:Arial,sans-serif;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.3}
+  .ft{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:12px;line-height:1.7;font-family:var(--font-body)}
+  .msg{text-align:center;padding:60px 24px;font-size:14px;color:var(--ink-mid)}
+  .gbox{margin:16px 22px 0;background:var(--page);border-radius:10px;padding:12px 14px}
+  .pr{font-size:11px;color:var(--vino);font-family:var(--font-body);text-align:right;flex-shrink:0;margin-left:8px;line-height:1.3}
   .qbox{flex-shrink:0;margin-left:8px;text-align:center}
-  .qin{width:58px;border:1px solid #C9AD96;border-radius:7px;background:#fff;padding:6px 4px;font-family:Arial,sans-serif;font-size:13px;text-align:center}
+  .qin{width:58px;border:1px solid var(--line);border-radius:7px;background:#fff;padding:6px 4px;font-family:var(--font-body);font-size:13px;text-align:center}
   body.nogc .sect{opacity:.4}
-  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:#400207;color:#F3E7D8;border-radius:10px;padding:11px 14px;font-family:Arial,sans-serif;font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
-  .smallnote{margin:8px 22px 0;font-size:12px;color:#8A6A4F;font-family:Arial,sans-serif;line-height:1.5}
-  .smallnote a{color:#400207}
+  .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:var(--vino);color:var(--page);border-radius:10px;padding:11px 14px;font-family:var(--font-body);font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
+  .smallnote{margin:8px 22px 0;font-size:12px;color:var(--ink-soft);font-family:var(--font-body);line-height:1.5}
+  .smallnote a{color:var(--vino)}
 </style>
 </head>
 <body>
@@ -99,11 +100,11 @@ function render(data){
     (open ? '<div class="sub2">Tick what you like and send it to us — Valentina will take care of the rest.</div>'
           : '<div class="sub2">'+esc([ev.client_name||ev.company, dt, ev.area].filter(Boolean).join(' · '))+(ev.guests?' · '+ev.guests+' guests':'')+'</div>');
   if(!open && ev.guests) guestCount = Number(ev.guests)||0;
-  h += '<div class="gbox"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">How many guests will you be? <span style="color:#A5876B">(canapé events start from 15)</span></div>'+
+  h += '<div class="gbox"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">How many guests will you be? <span style="color:var(--ink-faint)">(canapé events start from 15)</span></div>'+
     '<input class="fld" id="cl-gcount" type="number" min="15" placeholder="Number of guests" value="'+(guestCount||'')+'" oninput="onGuests(this.value)" style="margin-bottom:4px">'+
-    '<div id="cl-allow" style="font-size:12.5px;color:#400207;font-family:Arial,sans-serif;min-height:17px"></div>'+
-    '<div id="cl-total" style="font-size:12.5px;color:#400207;font-family:Arial,sans-serif;margin-top:4px"></div></div>';
-  h += '<div class="smallnote" style="font-size:11px;color:#A5876B">The letters after each dish are allergens: A alcohol · D dairy · E egg · G gluten · H homemade · N nuts · R raw · S shellfish · V vegetarian.</div>';
+    '<div id="cl-allow" style="font-size:12.5px;color:var(--vino);font-family:var(--font-body);min-height:17px"></div>'+
+    '<div id="cl-total" style="font-size:12.5px;color:var(--vino);font-family:var(--font-body);margin-top:4px"></div></div>';
+  h += '<div class="smallnote" style="font-size:11px;color:var(--ink-faint)">The letters after each dish are allergens: A alcohol · D dairy · E egg · G gluten · H homemade · N nuts · R raw · S shellfish · V vegetarian.</div>';
   var catOrder = ['Vegetarian','Fish','Beef','Chicken','Dessert'];
   groups.forEach(function(g){
     var list = (data.dishes||[]).filter(function(d){ return d.serve===g[0]; });
@@ -119,22 +120,22 @@ function render(data){
           '<span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'+
           '<span style="flex:1"><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
           (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span>'+
-          (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+' <span style="font-size:9px">each</span><br><span style="font-size:9px;color:#A5876B">min '+(d.min_order||10)+' pieces</span></span>':'')+
-          (picked[d.id]?'<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+d.id+'" min="'+(d.min_order||10)+'" value="'+(qty[d.id]||defaultQty(d))+'" oninput="setQty(\''+d.id+'\',this.value)"><br><span style="font-size:9px;color:#A5876B">pieces</span></span>':'')+'</div>';
+          (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+' <span style="font-size:9px">each</span><br><span style="font-size:9px;color:var(--ink-faint)">min '+(d.min_order||10)+' pieces</span></span>':'')+
+          (picked[d.id]?'<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+d.id+'" min="'+(d.min_order||10)+'" value="'+(qty[d.id]||defaultQty(d))+'" oninput="setQty(\''+d.id+'\',this.value)"><br><span style="font-size:9px;color:var(--ink-faint)">pieces</span></span>':'')+'</div>';
         })();
       }).join('')+'</div>';
   });
   if(open){
-    h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">So we can come back to you</div>'+
+    h += '<div class="note"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">So we can come back to you</div>'+
       '<input class="fld" id="cl-name" placeholder="Your name" maxlength="120">'+
       '<div style="display:flex;gap:8px"><input class="fld" id="cl-phone" placeholder="Phone" maxlength="40" style="flex:1">'+
       '<input class="fld" id="cl-email" placeholder="Email" maxlength="120" style="flex:1.4"></div>'+
-      '<div style="font-size:12px;color:#8A6A4F;margin:2px 0 5px">When is your event?</div>'+
+      '<div style="font-size:12px;color:var(--ink-soft);margin:2px 0 5px">When is your event?</div>'+
       '<div style="display:flex;gap:8px"><input class="fld" id="cl-date" type="date" style="flex:1.2">'+
       '<input class="fld" id="cl-time" type="time" title="Preferred start time" style="flex:1"></div>'+
-      '<div style="font-size:10.5px;color:#A5876B;margin-top:-2px">Canap\u00e9 receptions run up to 3 hours from your start time.</div></div>';
+      '<div style="font-size:10.5px;color:var(--ink-faint);margin-top:-2px">Canap\u00e9 receptions run up to 3 hours from your start time.</div></div>';
   }
-  h += '<div class="note"><div style="font-size:12px;color:#8A6A4F;margin-bottom:5px">Anything we should know? Allergies, favourites, the occasion…</div>'+
+  h += '<div class="note"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Anything we should know? Allergies, favourites, the occasion…</div>'+
        '<textarea id="cl-note" maxlength="900">'+esc(data.selection&&data.selection.note||'')+'</textarea></div>';
   h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send selection to Roberto’s</button>'+
        '<div class="ft">Valentina will come back to you to confirm availability and final details.<br>'+
@@ -160,7 +161,7 @@ function toggle(node){
   if(qb) qb.remove();
   if(picked[id] && d){
     node.insertAdjacentHTML('beforeend',
-      '<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+id+'" min="'+(d.min_order||10)+'" value="'+qty[id]+'" oninput="setQty(\''+id+'\',this.value)"><br><span style="font-size:9px;color:#A5876B">pieces</span></span>');
+      '<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+id+'" min="'+(d.min_order||10)+'" value="'+qty[id]+'" oninput="setQty(\''+id+'\',this.value)"><br><span style="font-size:9px;color:var(--ink-faint)">pieces</span></span>');
   }
   counts();
 }
@@ -170,7 +171,7 @@ function setQty(id, v){
   qty[id] = n;
   var inp = el('q-'+id);
   var low = n < (Number(d.min_order)||10);
-  if(inp) inp.style.borderColor = low ? '#B00020' : '#C9AD96';
+  if(inp) inp.style.borderColor = low ? 'var(--err)' : 'var(--line)';
   counts();
 }
 function onGuests(v){
@@ -179,7 +180,7 @@ function onGuests(v){
   var cap = allowedDishes(guestCount);
   if(al){
     if(!guestCount) al.innerHTML = '';
-    else if(guestCount < 15) al.innerHTML = 'Canapé receptions start from 15 guests. For a more intimate gathering we’d still love to host you — email <a href="mailto:'+CONTACT_EMAIL+'" style="color:#400207">'+CONTACT_EMAIL+'</a> and we’ll tailor something to you.';
+    else if(guestCount < 15) al.innerHTML = 'Canapé receptions start from 15 guests. For a more intimate gathering we’d still love to host you — email <a href="mailto:'+CONTACT_EMAIL+'" style="color:var(--vino)">'+CONTACT_EMAIL+'</a> and we’ll tailor something to you.';
     else al.textContent = 'Lovely — with '+guestCount+' guests you can pick up to '+cap+' different canapés.';
   }
   document.body.classList.toggle('nogc', guestCount < 15);
@@ -218,8 +219,8 @@ function counts(){
     });
     if(any && guestCount >= 15){
       tl.innerHTML = '<b>Estimated total: AED '+Math.round(total).toLocaleString('en-US')+'</b> · about AED '+Math.round(total/guestCount).toLocaleString('en-US')+' per guest'+
-        (lowMin.length?'<br><span style="font-size:10.5px;color:#B00020">Please check quantities — below the minimum for: '+esc(lowMin.join(', '))+'</span>':'')+
-        '<br><span style="font-size:10.5px;color:#A5876B">Adjust the pieces of each canapé as you like — Valentina will confirm your final quote.</span>';
+        (lowMin.length?'<br><span style="font-size:10.5px;color:var(--err)">Please check quantities — below the minimum for: '+esc(lowMin.join(', '))+'</span>':'')+
+        '<br><span style="font-size:10.5px;color:var(--ink-faint)">Adjust the pieces of each canapé as you like — Valentina will confirm your final quote.</span>';
     } else tl.innerHTML = '';
   }
 }
