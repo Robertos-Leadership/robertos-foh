@@ -226,6 +226,25 @@ Deno.serve(async (req) => {
       const bs = await bR.json();
       bev = Array.isArray(bs) && bs.length ? bs[0] : null;
     }
+    // A set-menu booking carries its food in events_desk.set_menu, NOT in
+    // event_items — every set-menu event in the database has zero items. This
+    // function only ever read event_items, so those clients were being shown an
+    // agreement with no food on it at all, and one has already been sent.
+    // deno-lint-ignore no-explicit-any
+    let setMenu: any = null;
+    if (ev.set_menu && ev.set_menu.key) {
+      const smR = await sb("event_set_menus?key=eq." + encodeURIComponent(ev.set_menu.key) + "&select=key,name,courses&limit=1");
+      const sms = await smR.json();
+      const sm = Array.isArray(sms) && sms.length ? sms[0] : null;
+      if (sm) {
+        setMenu = {
+          name: ev.package_label || sm.name,
+          courses: Array.isArray(sm.courses) ? sm.courses : [],
+          // What the guest chose per course, when they have already told us.
+          choices: (ev.set_menu && ev.set_menu.choices) || null,
+        };
+      }
+    }
     const totals = calcTotals(ev, items, dishById, bev);
     const nums = agreementNumbers(ev, totals);
 
@@ -242,6 +261,7 @@ Deno.serve(async (req) => {
           package_label: ev.package_label, bev_mode: ev.bev_mode || null,
         },
         menu,
+        setMenu,
         bev: bev ? { name: bev.name, duration_hours: bev.duration_hours, includes: bev.includes } : null,
         quoted: nums.quoted, pricing_type: nums.pricingType, deposit_pct: nums.pct, deposit: nums.deposit,
         termsHtml: termsHtml(ev, bev, totals),

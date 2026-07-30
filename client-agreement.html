@@ -114,10 +114,26 @@ function render(data){
     })()+
     '</table></div>';
 
-  // menu
+  // menu — a set-menu booking carries its food in set_menu, not in event_items, so
+  // this used to print the heading "The food — <menu name>" with nothing under it.
   var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
   var menu = data.menu||[];
-  if(menu.length || ev.package_label){
+  var sm = data.setMenu;
+  if(sm && (sm.courses||[]).length){
+    h += '<div class="sect"><div class="sect-h">The food'+(sm.name?' — '+esc(sm.name):'')+'</div>';
+    (sm.courses||[]).forEach(function(c){
+      var list = c.items || c.options || [];
+      if(!list.length) return;
+      h += '<div class="cath">'+esc(c.name||'')+(c.choose?' — choose '+c.choose:'')+'</div>';
+      list.forEach(function(nm){
+        var d = (c.desc||{})[nm] || '';
+        var a = (c.allg||{})[nm] || [];
+        h += '<div class="dish">'+esc(nm)+(a.length?' <span class="cd">('+a.map(esc).join(')(')+')</span>':'')+
+          (d?'<br><span class="ds">'+esc(d)+'</span>':'')+'</div>';
+      });
+    });
+    h += '</div>';
+  } else if(menu.length || ev.package_label){
     h += '<div class="sect"><div class="sect-h">The food'+(ev.package_label?' — '+esc(ev.package_label):'')+'</div>';
     groups.forEach(function(g){
       var list = menu.filter(function(d){ return d.serve===g[0]; });
@@ -144,7 +160,7 @@ function render(data){
   // the one figure
   if(data.quoted!=null){
     // Name only what's actually on the event — a beverage-only booking has no food.
-    var hasFoodDoc = (data.menu && data.menu.length) || ev.package_label;
+    var hasFoodDoc = (data.menu && data.menu.length) || (sm && (sm.courses||[]).length) || ev.package_label;
     var incl = hasFoodDoc ? (data.bev ? 'food and beverage package' : 'food') : (data.bev ? 'beverage package' : 'everything');
     h += '<div class="sect"><div class="total"><b>'+
       (data.pricing_type==='min_spend' ? 'Minimum spend — AED '+money(data.quoted) : (ev.guests?ev.guests+' guests · ':'')+'AED '+money(data.quoted))+

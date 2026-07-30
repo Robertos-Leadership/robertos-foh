@@ -2288,6 +2288,10 @@ function peRenderEvent(){
     '<button class="pe-btn"'+dim(hasMail)+' onclick="'+mailClick('peEmailAgreement')+'">'+
       (peProposalSent(e)?'Re-send the full proposal (client signs online)':'Send full proposal (client signs online)')+'</button>'+
     (peProposalSent(e)?'<div style="font-size:11.5px;color:#2E5B30;margin:-3px 2px 2px">Sent '+peDLabel(String(peProposalSent(e)).slice(0,10))+' ✓</div>':'')+
+    // The actual page the client opens, not a mock-up of it and not the Print
+    // version, which is a different document built by different code. She had no
+    // way to see what she was sending before sending it.
+    '<button class="pe-btn sec" onclick="pePreviewClient(\''+e.id+'\')">Preview what the client sees</button>'+
     (hasMail?'':'<div style="font-size:11px;color:#8A2A1A;margin:-3px 2px 2px">Add the client email above to send.</div>')+
     // Once signed AND a Telr link is pasted on the Agreement card, one named,
     // confirmed, logged send to collect the deposit. (Deposit-paid stays a manual flip.)
@@ -4035,6 +4039,16 @@ function peCopyClientLink(id){
     peToast('Client link copied — paste it into your email/WhatsApp to the client');
   }).catch(function(){ prompt('Copy this link:', url); });
   sb.from('event_log').insert({event_id:id, action:'client_link', detail:'link copied', actor:peActor()});
+}
+// Open the real guest page in a new tab. Deliberately the live URL rather than a
+// rendered copy — a preview that is built by different code to the thing being
+// sent is how the Print version and the client's page drifted apart.
+function pePreviewClient(id){
+  var e = peEvById(id); if(!e) return;
+  if(!e.client_token){ peToast('This booking has no guest link yet — save it first', true); return; }
+  var w = window.open(peAgreementUrl(e), '_blank');
+  if(!w){ peToast('Popup blocked — allow popups to preview the guest page', true); return; }
+  peToast('Opened the page exactly as the client sees it');
 }
 function peAgreementUrl(e){
   return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'client-agreement.html?t=' + e.client_token;
