@@ -6168,17 +6168,31 @@ async function peWizCreate(){
   var w = peWizCalc();
   if(!w.ready){ peToast('Fill guests, budget and beverage first', true); return; }
   if(peWiz.busy) return;
+  var timeTo = null;
+  if(peWiz.time){
+    var hrs0 = (w.bev && w.bev.duration_hours) ? Number(w.bev.duration_hours) : 3;
+    timeTo = peAddHoursTime(peWiz.time, hrs0);
+  }
+  // Is the space already taken? Every client-facing send is already gated on this,
+  // but she can promise a date on the phone long before a send — so ask here too.
+  // A warning, not a stop: two things in one room can be deliberate.
+  var wClash = peClashPairs({ id:'__wizard__', event_date:peWiz.date||null, area:peWiz.area||null,
+                              time_from:peWiz.time||null, time_to:timeTo, guests:w.guests });
+  if(wClash.length){
+    var names = wClash.map(function(p){
+      return (p.ev.client_name||p.ev.company||'another booking')+(p.buyout?' (full venue)':'')+' — '+peDLabel(p.date)+(p.area?', '+p.area:'');
+    });
+    if(!(await peConfirm({title:'That space is already booked',
+      html:'This date and area already hold:<br><br><b>'+peEsc(names.join('</b><br><b>'))+'</b>'+
+        '<br><br>Create this booking anyway?',
+      ok:'Create it anyway', cancel:'Change the date or area', danger:true}))) return;
+  }
   peWiz.busy = true; peWizPaint();
   // The booking is written first and the dishes after. If the dishes fail, the
   // booking still exists — so the catch must not tell her nothing was created,
   // which is how the same event got built twice.
   var created = null;
   try{
-    var timeTo = null;
-    if(peWiz.time){
-      var hrs = (w.bev && w.bev.duration_hours) ? Number(w.bev.duration_hours) : 3;
-      timeTo = peAddHoursTime(peWiz.time, hrs);
-    }
     var dietParts = [];
     if(w.excl&&w.excl.length) dietParts.push('Guest requests: '+w.excl.join(', '));
     if(peWiz.dietaryNote && peWiz.dietaryNote.trim()) dietParts.push(peWiz.dietaryNote.trim());
