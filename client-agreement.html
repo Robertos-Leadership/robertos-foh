@@ -65,6 +65,29 @@ async function load(){
 
 function render(data){
   var ev = data.event || {};
+  // Already signed? Show the frozen document they signed, not a live re-render.
+  // Everything below rebuilds from the event's CURRENT values, so an edit on the
+  // events desk after signing would silently change what sits under the client's
+  // signature. signed_doc is the snapshot taken at the moment of signing.
+  //
+  // It is a COMPLETE html document (built for the emailed copy), so it goes in an
+  // iframe — innerHTML would drop <body> and lose all of its styling.
+  if(data.signed_doc){
+    var fr = document.createElement('iframe');
+    fr.setAttribute('title', 'Your signed agreement');
+    fr.style.cssText = 'width:100%;border:0;display:block;min-height:60vh';
+    fr.srcdoc = data.signed_doc;
+    fr.onload = function(){
+      try{
+        var d = fr.contentDocument;
+        if(d && d.body) fr.style.height = (d.body.scrollHeight + 24) + 'px';
+      }catch(e){ /* keep min-height if the frame is not readable */ }
+    };
+    var card = el('card');
+    card.innerHTML = '';
+    card.appendChild(fr);
+    return;
+  }
   var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="rule"></div>'+
     '<div class="h2">Your Event Proposal &amp; Agreement</div>'+
     '<div class="sub">'+(ev.client_name?'Prepared for '+esc(ev.client_name)+' · ':'')+esc(dLabel(ev.event_date))+(ev.area?' · '+esc(ev.area):'')+'</div>';
@@ -160,6 +183,9 @@ async function sign(){
     var data = await r.json();
     if(!r.ok || data.error) throw new Error(data.error || 'Could not sign — please try again.');
     state.signed = data.signed;
+    // Switch to the frozen document the moment they sign, so what they read back is
+    // the same bytes we stored — never a live re-render.
+    if(data.signed_doc) state.signed_doc = data.signed_doc;
     render(state);
     window.scrollTo(0, document.body.scrollHeight);
   }catch(e){
