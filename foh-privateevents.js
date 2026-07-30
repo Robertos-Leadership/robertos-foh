@@ -720,7 +720,12 @@ function peHeader(active){
       '<div style="'+secLbl+'">Tools</div>'+
       '<span class="pe-snav" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</span>'+
       '<span class="pe-snav'+(active==='wizard'?' on':'')+'" onclick="peWizReset();peGo(\'wizard\')">New quote from a budget</span>'+
-      '<span class="pe-snav" onclick="peCopyGuestLink()">Guest link</span>'+
+      // "Guest link" used to copy the standing CANAPÉ link with no choice and
+      // no explanation, so there was no way to send a set menu or the à la
+      // carte from here — and no sign that those existed. It now opens the one
+      // screen where she picks what to send; the standing canapé link is a card
+      // on that screen, so nothing was taken away.
+      '<span class="pe-snav'+(active==='packs'?' on':'')+'" onclick="peGo(\'packs\')">Send a menu to a guest</span>'+
       snav('packs','Menu packages')+
     '</div>'+
     '<div class="pe-main">';
@@ -3725,7 +3730,13 @@ function peRenderPacksView(){
   }
   if(tab==='alacarte'){ h += peRenderAlaCarte(); return h+PE_FOOT; }
   if(tab==='custom'){ h += peRenderCustomise(); return h+PE_FOOT; }
-  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick anything from either section — one set menu, a few beverage packages, or a mix — the guest receives it all in ONE branded email.</div>';
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick anything below — a set menu, dishes from the à la carte, beverage packages, or a mix — and the guest receives it all in ONE branded email, or one WhatsApp with one link.</div>';
+  // The standing canapé link lives here now, next to everything else she can
+  // send, instead of being a nav item that copied it with no choice.
+  h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<span><b style="color:#400207">The standing canapé link</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin-top:2px">One fixed link, no booking needed: any guest picks canapés and it arrives here as a new draft. Nothing to tick.</div></span>'+
+    '<button class="pe-btn sec sm" onclick="peCopyGuestLink()">Copy the link</button></div></div>';
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Food packages — the set menus</b>'+peSelLinks('food')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF — the email carries a button to each ticked menu.</div>'+
     peSetMenusPickInc().map(function(m){
