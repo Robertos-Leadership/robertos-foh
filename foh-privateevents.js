@@ -4093,7 +4093,9 @@ function peCmStart(basedOnKey, eventId){
     priceMode: base && base.price!=null ? 'supplement' : 'sum',
     eventId: eventId || null,
     guests: ev && ev.guests!=null ? ev.guests : null,
-    note: '',
+    // Start from the note the booking already carries — usually the guest's own
+    // "need 3 vegan". Opening blank is how it got retyped, or lost.
+    note: (ev && ev.set_menu && ev.set_menu.note) ? String(ev.set_menu.note) : '',
     priceOverride: null,
     courses: (base ? base.courses : []).map(function(c){
       // Carry the base menu's OWN descriptions. They are authored for that menu
@@ -4720,6 +4722,25 @@ async function peCmDelete(key){
 async function peCmSave(){
   var cm = peState.cm; if(!cm) return;
   if(peCmProblems().length) return;
+  // Saving a customised menu REPLACES the booking's set_menu. If the guest has
+  // already sent their per-course numbers, those cannot survive — a customised
+  // menu has different courses — and this used to happen silently, leaving the
+  // prep sheet and the kitchen email printing "—" against every option.
+  // Asked BEFORE the menu row is written, so cancelling leaves nothing behind.
+  var prevEv = cm.eventId ? peEvById(cm.eventId) : null;
+  var prevSm = (prevEv && prevEv.set_menu) || null;
+  var prevChoices = (prevSm && prevSm.choices) ? Object.keys(prevSm.choices).length : 0;
+  if(prevChoices){
+    if(!(await peConfirm({
+      title:'The guest has already sent their numbers',
+      html:'This booking holds <b>'+prevChoices+'</b> course choice'+(prevChoices>1?'s':'')+
+        ' the guest sent in. A customised menu has different courses, so those numbers cannot carry over — they will be cleared.'+
+        '<br><br>Their note is kept. You can pull the numbers back in afterwards with <b>“Check for the guest’s numbers”</b>.'+
+        '<br><br>Build the customised menu anyway?',
+      ok:'Yes, customise', cancel:'Keep their numbers', danger:true}))){
+      return;
+    }
+  }
   var t = peCmTotals();
   peState.cmBusy = true; renderMain();
   try{
@@ -4759,7 +4780,11 @@ async function peCmSave(){
     // "Special arrangements" and the kitchen brief prints in red.
     if(cm.eventId){
       var sm = { key:key, choices:{} };
-      if(cm.note) sm.note = cm.note;
+      // The note is the one thing that MUST survive — it is usually the guest's
+      // allergy, and it is what the kitchen brief prints in red. Fall back to the
+      // note already on the booking if she cleared the box.
+      var carriedNote = cm.note || (prevSm && prevSm.note) || '';
+      if(carriedNote) sm.note = carriedNote;
       var patch = { set_menu:sm, package_label:row.name, food_price_pp:t.price,
                     updated_at:new Date().toISOString() };
       var u = await sb.from('events_desk').update(patch).eq('id', cm.eventId);
