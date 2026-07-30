@@ -10,6 +10,7 @@
 
 var peState = {
   loaded:false, loading:false,
+  lastLoad:0,             // when the data was last read, so the screen can say how fresh it is
   view:'list',            // list | calendar | event | library | report | packs | packlib | wizard
   libTab:'dishes',        // dishes | bev | packages
   filter:'open',          // open | all | draft | sent | confirmed | deposit | done
@@ -546,12 +547,47 @@ async function peLoadAll(force){
       ? { spaces:('spaces' in probe), options:('options' in probe), alt_dates:('alt_dates' in probe), actual_revenue:('actual_revenue' in probe) }
       : { spaces:true, options:true, alt_dates:true, actual_revenue:true };
     peState.loaded = true;
+    peState.lastLoad = Date.now();
   }catch(e){
     console.warn('[peLoadAll]', e);
     peToast('Events data did NOT load — check connection and try again.', true);
   }
   peState.loading = false;
   renderMain();
+}
+
+// The module used to read the database exactly once per page load and never again:
+// peLoadAll took a `force` flag that nothing ever passed. So a client could sign, or
+// send their menu choices, and her screen would still be telling her to chase them —
+// for as long as the tab stayed open. These three give her fresh data on returning to
+// the tab, and a refresh she can see and tap.
+var peSyncAttached = false;
+function peAttachSync(){
+  if(peSyncAttached) return;
+  peSyncAttached = true;
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) peMaybeRefresh(); });
+  window.addEventListener('focus', peMaybeRefresh);
+}
+function peMaybeRefresh(){
+  if(!peState.loaded || peState.loading) return;
+  if(Date.now() - (peState.lastLoad||0) < 15000) return;      // same throttle as the core app
+  // Never wipe the screen while she is typing or has something open.
+  if(typeof safeToRefresh === 'function' && !safeToRefresh()) return;
+  peLoadAll(true);
+}
+function peRefreshNow(){
+  if(peState.loading){ peToast('Already refreshing…'); return; }
+  peLoadAll(true);
+  peToast('Refreshed ✓');
+}
+// "just now" / "4 min ago" / "14:32" — she should be able to see how old the screen is.
+function peFreshLabel(){
+  var ms = peState.lastLoad ? Date.now() - peState.lastLoad : null;
+  if(ms == null) return '';
+  if(ms < 60000) return 'just now';
+  var mins = Math.floor(ms/60000);
+  if(mins < 60) return mins+' min ago';
+  return new Date(peState.lastLoad).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
 }
 async function peLoadLog(eventId){
   try{
@@ -697,6 +733,7 @@ function peScrollTop(){
 
 // ── main render ──────────────────────────────────────────────────────────────
 function renderPrivateEvents(){
+  peAttachSync();   // once, so returning to the tab re-reads instead of showing stale events
   if(!peState.loaded){ peLoadAll(); return '<div class="loading">Loading events…</div>'; }
   var v = peState.view;
   if(v==='event')    return peRenderEvent();
@@ -736,6 +773,14 @@ function peHeader(active){
       // it just asks WHICH link now. Two choices, nothing else.
       '<span class="pe-snav" onclick="peGuestLinkChoose()">Guest link</span>'+
       snav('packs','Menu packages')+
+      // How fresh the screen is, and a way to force it. Signatures and guest menu
+      // choices are written server-side, so nothing in her session can know they
+      // happened until the data is read again.
+      '<div class="pe-slbl" style="margin-top:14px">This screen</div>'+
+      '<span class="pe-snav" onclick="peRefreshNow()" title="Read the latest bookings, replies and signatures">'+
+        (peState.loading ? 'Refreshing…' : 'Refresh')+
+        '<span style="display:block;font-size:10.5px;color:#8B7355;letter-spacing:0">Updated '+peFreshLabel()+'</span>'+
+      '</span>'+
     '</div>'+
     '<div class="pe-main">';
 }
