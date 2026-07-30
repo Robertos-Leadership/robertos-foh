@@ -21,6 +21,10 @@ var peState = {
   month:null,             // YYYY-MM shown in calendar/report
   events:[], items:{},    // items: event_id -> [{id,dish_id,pcs_per_guest}]
   dishes:[], bevs:[], packs:[], setMenus:[],
+  alacarte:[],            // event_alacarte — the printed à la carte, with prices
+  alcQ:'', alcSec:'',     // à la carte search box + section filter
+  cm:null,                // the "Customise a menu" draft (see peCmStart)
+  cmBusy:false,
   log:{},                 // event_id -> log rows (loaded per event)
   aiDesc:null, aiBusy:false,
   editDishId:null, editBevId:null, editPackId:null,
@@ -123,12 +127,22 @@ function peNormSM(m){
            price:(m.price!=null ? m.price : (m.price_pp!=null ? m.price_pp : null)),
            cost:(m.cost!=null ? m.cost : (m.cost_pp!=null ? m.cost_pp : null)),
            line:(m.line||''), courses:(m.courses||[]), pdf:(m.pdf||null),
+           custom:!!m.is_custom, basedOn:(m.based_on||null),
+           eventId:(m.event_id||null), priceMode:(m.price_mode||'supplement'),
+           detail:(m.detail||null),
            active:(m.active!==false) };
 }
 function peSetMenusRaw(){ return (peState.setMenus && peState.setMenus.length) ? peState.setMenus : PE_SET_MENUS; }
 function peSetMenusAll(){ return peSetMenusRaw().map(peNormSM); }
+// A customised menu (built in "Customise a menu") is a normal event_set_menus
+// row flagged is_custom, so every document resolves it through peSetMenuByKey
+// with no special case. It is hidden from the chef's library and from the
+// booking dropdown — those are for the designed menus.
+function peSmIsCustom(m){ return !!(m && m.custom); }
+// The designed menus only — the chef's library and the pickers.
+function peSetMenusDesigned(){ return peSetMenusAll().filter(function(m){ return !peSmIsCustom(m); }); }
 // Only active, priced menus can be picked into a quote.
-function peSetMenusSel(){ return peSetMenusAll().filter(function(m){ return m.active!==false && m.price!=null; }); }
+function peSetMenusSel(){ return peSetMenusDesigned().filter(function(m){ return m.active!==false && m.price!=null; }); }
 function peSetMenuByKey(k){
   // peSetMenusAll() already falls back to PE_SET_MENUS via peSetMenusRaw() when
   // the DB table hasn't loaded yet — no separate fallback needed here. Adding
@@ -161,7 +175,7 @@ function peSetMenusPick(){
 // a menu with "price pending" (e.g. a bespoke confidential-price menu) must still
 // be tickable there. The per-guest price never appears — the send hides it.
 function peSetMenusPickInc(){
-  return peSetMenusAll().filter(function(m){
+  return peSetMenusDesigned().filter(function(m){
     return m.active!==false && !(/-sharing$/.test(m.key) && peSmFamily(m.key));
   });
 }
@@ -454,7 +468,11 @@ async function peLoadAll(force){
       sb.from('event_menu_choices').select('token,created_at').eq('applied', false).order('created_at',{ascending:false}),
       sb.from('event_log').select('event_id,created_at').eq('action','email').like('detail','event brief%').order('created_at',{ascending:true}),
       sb.from('event_targets').select('*'),
-      sb.from('event_log').select('event_id,actor,created_at').eq('action','email').like('detail','proposal%').order('created_at',{ascending:true})
+      sb.from('event_log').select('event_id,actor,created_at').eq('action','email').like('detail','proposal%').order('created_at',{ascending:true}),
+      // res[10] — the printed à la carte. Loaded the same non-fatal way as the
+      // set menus: if foh-events-alacarte.sql hasn't been run the module still
+      // works, the À la carte tab simply says the menu isn't loaded yet.
+      peFetchAllPaged(function(){ return sb.from('event_alacarte').select('*').order('sort_order').order('name'); })
     ]);
     // event_set_menus (res[5]) is loaded non-fatally: if the table isn't there
     // yet (SQL not run), the module still works on the built-in PE_SET_MENUS.
@@ -467,6 +485,11 @@ async function peLoadAll(force){
     peState.bevs   = res[3].data||[];
     peState.packs  = res[4].data||[];
     peState.setMenus = (res[5] && !res[5].error && res[5].data && res[5].data.length) ? res[5].data : PE_SET_MENUS.map(peNormSM);
+    // res[10] (non-fatal): the à la carte. alacarteOk is what the screen reads
+    // to tell "the table isn't there yet" apart from "the menu is empty" —
+    // two different things to put in front of Valentina mid-quote.
+    peState.alacarteOk = !!(res[10] && !res[10].error);
+    peState.alacarte = (res[10] && !res[10].error) ? (res[10].data||[]) : [];
     // res[6] (non-fatal): guest menu-number submissions not yet applied, so
     // Valentina is told the moment she's in the app — token → newest arrival.
     peState.menuChoicesPending = {};
@@ -2849,6 +2872,10 @@ function peFoodSetMenuHTML(e){
   var custPP = (m && evPP!=null && Math.round(evPP)!==Math.round(Number(m.price)));
   h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
     '<b style="color:#400207">'+(m?peEsc(m.name):'Set menu')+(m?' · AED '+peMoney(evPP!=null?evPP:m.price)+'/guest'+(custPP?' <span style="font-weight:normal;font-size:11px;color:#7A5500">(agreed — list AED '+m.price+')</span>':''):'')+'</b>'+
+    // The guest is happy with this menu but wants dishes from the à la carte:
+    // this is the door to the builder, pre-loaded with THIS menu and THIS
+    // booking, so she never re-picks either.
+    (ce && !m.custom ? '<button class="pe-btn sec sm" onclick="peCmStart(\''+peSmEsc(sm.key)+'\',\''+e.id+'\')">Customise this menu</button>' : '')+
     (ce?'<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peClearSetMenu(\''+e.id+'\')">Remove set menu</button>':'')+'</div>';
   // Serving style — when this menu has an individual + sharing version, pick
   // here; the price and the guest/kitchen documents follow the picked version.
@@ -3260,10 +3287,26 @@ function peSetMenuPrepHTML(e){
     }
   });
   h += '</table>';
+  h += peCmSwapsHTML(m);   // a customised menu: what was swapped for what
   if(sm.note) h += '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Menu changes agreed with the guest — read before prep:</b> '+peEsc(sm.note)+'</div>';
   h += peOffMenuHTML(e);   // #17 — à la carte additions reach the set-menu prep too
   if(e.dietary) h += '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Dietary — read before prep:</b> '+peEsc(e.dietary)+'</div>';
   return h;
+}
+// A customised menu prints its courses like any other, so the kitchen already
+// sees the RIGHT dishes. What it must also see is what changed: a chef who
+// knows this menu will otherwise plate the dish that used to be there.
+function peCmSwapsHTML(m){
+  var d = m && m.custom ? m.detail : null;
+  if(!d || ((!d.swaps || !d.swaps.length) && (!d.adds || !d.adds.length))) return '';
+  var h = '<div style="font-family:Arial,sans-serif;font-size:12px;color:#B00020;margin-top:6px"><b>Customised for this booking — read before prep:</b><ul style="margin:4px 0 0 18px;padding:0">';
+  (d.swaps||[]).forEach(function(s){
+    h += '<li>'+peEsc(s.course||'')+' — <b>'+peEsc(s.name)+'</b>'+(s.out?' instead of '+peEsc(s.out):'')+'</li>';
+  });
+  (d.adds||[]).forEach(function(a){
+    h += '<li>'+peEsc(a.course||'')+' — <b>'+peEsc(a.name)+'</b> added to the menu</li>';
+  });
+  return h+'</ul></div>';
 }
 function peCoordSetMenuHTML(e){
   var sm = e.set_menu; if(!sm) return '';
@@ -3651,7 +3694,7 @@ function peRenderPacksView(){
   // #15 — canapé packages are now a first-class tab (not a grey footer link).
   // Set menus + beverage stay on ONE screen so the guest still gets everything
   // ticked — a set menu, a few beverage packages, or a mix — in ONE email, one tap.
-  var tabs = [['menus','Set menus & beverage'],['canape','Canapé packages']];
+  var tabs = [['menus','Set menus & beverage'],['canape','Canapé packages'],['alacarte','À la carte'],['custom','Customise a menu']];
   h += '<div class="pe-tabs" style="margin-bottom:12px">'+tabs.map(function(t){
     return '<span class="pe-tab'+(tab===t[0]?' on':'')+'" onclick="peState.packsTab=\''+t[0]+'\';renderMain()">'+t[1]+'</span>';
   }).join('')+'</div>';
@@ -3660,6 +3703,8 @@ function peRenderPacksView(){
     h += peRenderPackLib();
     return h+PE_FOOT;
   }
+  if(tab==='alacarte'){ h += peRenderAlaCarte(); return h+PE_FOOT; }
+  if(tab==='custom'){ h += peRenderCustomise(); return h+PE_FOOT; }
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick anything from either section — one set menu, a few beverage packages, or a mix — the guest receives it all in ONE branded email.</div>';
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Food packages — the set menus</b>'+peSelLinks('food')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF — the email carries a button to each ticked menu.</div>'+
@@ -3681,6 +3726,576 @@ function peRenderPacksView(){
     }).join(''):'<div style="font-size:12px;color:#8B7355">No packages yet — Manuel adds them in the Beverage corner.</div>')+'</div>';
   h += peMenuPackEmailForm();
   return h+PE_FOOT;
+}
+// ── à la carte ───────────────────────────────────────────────────────────────
+// The printed menu (event_alacarte, seeded from the June 2026 PDF and price-
+// checked against Simphony) inside the app, for two reasons: Valentina can
+// quote a dish without hunting for the PDF, and "Customise a menu" has a real
+// priced dish list to swap from instead of a free-text note.
+var PE_ALC_ORDER = ['CRUDO BAR','ROBERTO’S SELECTION','INSALATE','ANTIPASTI','PIZZE','PASTE E RISO',
+  'SECONDI DI PESCE','LA VIA DEL SALE','DAL BANCO','SECONDI DI CARNE','DALLA NOSTRA GRIGLIA JOSPER','CONTORNI CALDI'];
+function peAlcAll(){
+  return (peState.alacarte||[]).filter(function(a){ return a.active!==false; });
+}
+function peAlcById(id){
+  var all = peAlcAll();
+  for(var i=0;i<all.length;i++) if(String(all[i].id)===String(id)) return all[i];
+  return null;
+}
+// The number to quote. A caviar row is priced by weight (tiers) and a market-
+// price row has no number at all — both return null, so nothing downstream can
+// silently treat "no price" as zero.
+function peAlcPrice(a){
+  if(!a) return null;
+  if(a.price!=null && a.price!=='') return Number(a.price);
+  return null;
+}
+function peAlcPriceText(a){
+  if(!a) return '';
+  if(a.tiers && a.tiers.length) return a.tiers.map(function(t){ return t.size+' AED '+peMoney(t.price); }).join(' · ');
+  if(a.market_price) return 'Market price';
+  var p = peAlcPrice(a);
+  if(p==null) return 'no price';
+  return 'AED '+peMoney(p)+(a.unit==='per piece' ? ' per piece' : '');
+}
+function peAlcSections(){
+  var seen = {}, out = [];
+  peAlcAll().forEach(function(a){ if(!seen[a.section]){ seen[a.section]=1; out.push(a.section); } });
+  return out.sort(function(x,y){
+    var i = PE_ALC_ORDER.indexOf(x), j = PE_ALC_ORDER.indexOf(y);
+    return (i<0?99:i)-(j<0?99:j);
+  });
+}
+function peAlcFiltered(){
+  var q = String(peState.alcQ||'').trim().toLowerCase();
+  var sec = peState.alcSec||'';
+  return peAlcAll().filter(function(a){
+    if(sec && a.section!==sec) return false;
+    if(!q) return true;
+    return (a.name+' '+(a.description||'')+' '+a.section).toLowerCase().indexOf(q)>=0;
+  });
+}
+function peAlcQ(v){ peState.alcQ = v; renderMain(); var el=document.getElementById('pe-alc-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+function peAlcSec(v){ peState.alcSec = v; renderMain(); }
+function peRenderAlaCarte(){
+  if(!peState.alacarteOk){
+    return '<div class="pe-card"><b style="color:#400207">À la carte</b>'+
+      '<div style="font-size:12.5px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:10px 12px;margin-top:8px">'+
+      'The à la carte isn’t loaded yet — <b>foh-events-alacarte.sql</b> still needs to be run on the FOH database. '+
+      'Nothing else is affected: set menus, canapés and beverage all work as normal.</div></div>';
+  }
+  var rows = peAlcFiltered();
+  var secs = peAlcSections();
+  var h = '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Roberto’s à la carte, June 2026 — every price checked against the POS. '+
+    'This is the list “Customise a menu” swaps from, so a dish added to a menu carries its real price.</div>';
+  h += '<div class="pe-card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+    '<input class="pe-in" id="pe-alc-q" style="flex:1;min-width:180px" placeholder="Search a dish — e.g. burrata, branzino, truffle" value="'+peEsc(peState.alcQ||'')+'" oninput="peAlcQ(this.value)">'+
+    '<select class="pe-in" style="width:auto" onchange="peAlcSec(this.value)"><option value="">Every section</option>'+
+      secs.map(function(s){ return '<option value="'+peEsc(s)+'"'+(peState.alcSec===s?' selected':'')+'>'+peEsc(peAlcSecLabel(s))+'</option>'; }).join('')+
+    '</select>'+
+    '<span style="font-size:11.5px;color:#8B7355">'+rows.length+' of '+peAlcAll().length+' dishes</span>'+
+  '</div></div>';
+  if(!rows.length){
+    h += '<div class="pe-card"><div style="font-size:12px;color:#8B7355">No dish matches that. Clear the search to see the whole menu.</div></div>';
+    return h;
+  }
+  var cur = null;
+  h += '<div class="pe-card">';
+  secs.forEach(function(s){
+    var inSec = rows.filter(function(a){ return a.section===s; });
+    if(!inSec.length) return;
+    h += '<div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#B99C03;margin:12px 0 4px">'+peEsc(peAlcSecLabel(s))+'</div>';
+    inSec.forEach(function(a){
+      h += '<div class="pe-dishrow"><span><b style="font-weight:600;color:#400207">'+peEsc(a.name)+'</b>'+
+        (a.sub?' <span style="font-size:10px;color:#A5876B">'+peEsc(a.sub)+'</span>':'')+
+        ((a.allergens&&a.allergens.length)?' <span style="color:#A5876B;font-size:10px">('+a.allergens.join(')(')+')</span>':'')+
+        '<br><span style="font-size:11px;color:#8B7355">'+peEsc(a.description||'')+'</span>'+
+        (a.price_note?'<br><span style="font-size:11px;color:#B00020">'+peEsc(a.price_note)+'</span>':'')+
+        '</span>'+
+        '<span style="flex-shrink:0;text-align:right"><b style="font-size:12.5px;color:'+(peAlcPrice(a)==null?'#8A6A4F':'#400207')+'">'+peEsc(peAlcPriceText(a))+'</b></span></div>';
+    });
+  });
+  h += '</div>';
+  return h;
+}
+// "DALLA NOSTRA GRIGLIA JOSPER" shouted in a dropdown is not how anyone reads a
+// menu — Title Case it for the screen, leave the stored value alone. Italian
+// connectives stay lowercase the way the printed menu sets them, and a letter
+// after an apostrophe is never capitalised (Roberto’s, not Roberto’S).
+var PE_ALC_MINOR = {e:1, di:1, del:1, della:1, la:1, le:1, il:1, al:1, alla:1, allo:1,
+                    con:1, da:1, dal:1, nostra:1, nostro:1, in:1, a:1};
+function peAlcSecLabel(s){
+  return String(s||'').toLowerCase().split(/\s+/).map(function(w, i){
+    if(i && PE_ALC_MINOR[w]) return w;
+    return w.replace(/^([a-zà-ÿ])/, function(m,c){ return c.toUpperCase(); });
+  }).join(' ');
+}
+
+// ── customise a menu ─────────────────────────────────────────────────────────
+// Valentina, 30 Jul 2026: a guest takes the Mare set menu but wants two dishes
+// from the à la carte instead. Until now the only channel was a free-text note,
+// so she typed the dish from memory, priced the difference by hand, and the swap
+// reached the guest as prose at the bottom of the proposal.
+//
+// This builder starts from ANY set menu (or from nothing), swaps and adds from
+// the priced à la carte, and saves the result as a normal event_set_menus row
+// flagged is_custom. That flag is the whole trick: the proposal, the kitchen
+// brief, the coordination email, the guest menu page and the per-guest price
+// override all resolve it through peSetMenuByKey and need no change at all.
+//
+// A line remembers where it came from (from:'set' | 'alacarte'), what it
+// replaced (out), and its supplement — so the price is never a mystery number
+// and the kitchen brief can say "instead of".
+function peCmStart(basedOnKey, eventId){
+  var ev = eventId ? peEvById(eventId) : null;
+  var base = basedOnKey ? peSetMenuByKey(basedOnKey) : null;
+  peState.cm = {
+    basedOn: base ? base.key : null,
+    basePrice: base ? base.price : null,
+    baseName: base ? base.name : '',
+    name: base ? (base.name+' — customised') : 'Customised menu',
+    priceMode: base && base.price!=null ? 'supplement' : 'sum',
+    eventId: eventId || null,
+    guests: ev && ev.guests!=null ? ev.guests : null,
+    note: '',
+    priceOverride: null,
+    courses: (base ? base.courses : []).map(function(c){
+      return {
+        name: c.name||'Course',
+        choose: !!c.choose,
+        lines: ((c.choose ? c.options : c.items)||[]).map(function(n){
+          return { name:n, from:'set', price:null, supplement:0, out:null, alcId:null };
+        })
+      };
+    })
+  };
+  if(!peState.cm.courses.length) peCmAddCourse(true);
+  peState.packsTab = 'custom';
+  renderMain();
+}
+function peCmAddCourse(quiet){
+  if(!peState.cm) return;
+  peState.cm.courses.push({ name:'', choose:false, lines:[] });
+  if(!quiet) renderMain();
+}
+function peCmRemoveCourse(i){
+  if(!peState.cm) return;
+  peState.cm.courses.splice(i,1); renderMain();
+}
+function peCmSet(field, v){
+  if(!peState.cm) return;
+  if(field==='guests' || field==='priceOverride') v = (v===''||v==null) ? null : Number(v);
+  peState.cm[field] = v;
+  renderMain();
+}
+function peCmCourse(i, field, v){
+  if(!peState.cm || !peState.cm.courses[i]) return;
+  peState.cm.courses[i][field] = (field==='choose') ? !!v : v;
+  renderMain();
+}
+function peCmRemoveLine(ci, li){
+  if(!peState.cm || !peState.cm.courses[ci]) return;
+  peState.cm.courses[ci].lines.splice(li,1); renderMain();
+}
+function peCmSupp(ci, li, v){
+  var l = peState.cm && peState.cm.courses[ci] && peState.cm.courses[ci].lines[li];
+  if(!l) return;
+  l.supplement = (v===''||v==null) ? 0 : Number(v);
+  renderMain();
+}
+// Swap a line for an à la carte dish. The supplement is SUGGESTED as the price
+// difference against the dish going out — and only when both numbers are real.
+// Guessing a supplement from a dish with no price is how a menu goes out
+// underpriced, so an unpriced swap suggests nothing and says so.
+function peCmSwap(ci, li, alcId){
+  var l = peState.cm && peState.cm.courses[ci] && peState.cm.courses[ci].lines[li];
+  var a = peAlcById(alcId);
+  if(!l || !a) return;
+  var outName = l.out || l.name;
+  var kind = peCmCourseKind(peState.cm.courses[ci]);
+  var outMatch = l.from==='alacarte' ? null : peCmMatchAlc(outName, kind);
+  var outPrice = l.from==='alacarte' ? l.price : (outMatch ? peAlcPrice(outMatch) : null);
+  var inPrice = peAlcPrice(a);
+  l.out = outName;
+  l.name = a.name;
+  l.from = 'alacarte';
+  l.alcId = a.id;
+  l.price = inPrice;
+  l.diff = (inPrice!=null && outPrice!=null) ? Math.max(0, inPrice-outPrice) : null;
+  l.forGuests = null;
+  l.supplement = l.diff!=null ? l.diff : 0;
+  l.suggested = (l.diff!=null);
+  // Name what the difference was worked out against, so she can sanity-check
+  // the supplement instead of trusting it.
+  l.outPricedAs = outMatch ? (outMatch.name+' AED '+peMoney(peAlcPrice(outMatch))) : null;
+  renderMain();
+}
+// The price on an event is ONE number per guest, so a supplement typed against
+// a "guests choose one" course is charged to everybody. If a wagyu is taken by
+// 4 of 20 guests, charging all 20 the full AED 327 difference overcharges the
+// bill by a factor of five. She tells the app how many take it and the app does
+// the division — she never does the arithmetic herself.
+function peCmForGuests(ci, li, v){
+  var cm = peState.cm;
+  var l = cm && cm.courses[ci] && cm.courses[ci].lines[li];
+  if(!l) return;
+  var n = (v===''||v==null) ? null : Number(v);
+  l.forGuests = n;
+  if(l.diff!=null){
+    l.supplement = (n!=null && cm.guests)
+      ? Math.round(l.diff * n / Number(cm.guests))
+      : l.diff;
+  }
+  renderMain();
+}
+function peCmAddDish(ci, alcId){
+  var c = peState.cm && peState.cm.courses[ci];
+  var a = peAlcById(alcId);
+  if(!c || !a) return;
+  c.lines.push({ name:a.name, from:'alacarte', price:peAlcPrice(a), alcId:a.id,
+                 supplement:(peAlcPrice(a)!=null?peAlcPrice(a):0), out:null, added:true,
+                 suggested:(peAlcPrice(a)!=null) });
+  renderMain();
+}
+function peCmAddLine(ci){
+  var c = peState.cm && peState.cm.courses[ci];
+  if(!c) return;
+  c.lines.push({ name:'', from:'set', price:null, supplement:0, out:null, alcId:null });
+  renderMain();
+}
+function peCmLineName(ci, li, v){
+  var l = peState.cm && peState.cm.courses[ci] && peState.cm.courses[ci].lines[li];
+  if(!l) return;
+  l.name = v;
+}
+// A set menu prices the whole menu, never a dish — so to suggest a supplement
+// we have to value the dish going OUT, and the only honest source for that is
+// the à la carte. The catch: the set menus name dishes short ("Ribeye di
+// Angus", "Il Bosco truffle risotto") and the à la carte names them long
+// ("Costata di Angus (300g)", "Il Bosco"). An exact match therefore almost
+// never fires, which made every suggested supplement come out as zero.
+//
+// peCmMatchAlc matches on distinctive words, and prefers a dish that can
+// actually fill this course, so a "Branzino" secondo values against the
+// AED 220 secondo and not the AED 115 carpaccio. It returns the ROW, so the
+// screen can name the dish it priced from — a suggestion the user can check is
+// worth far more than a number that appears from nowhere.
+var PE_CM_STOP = {di:1,de:1,del:1,della:1,dello:1,al:1,alla:1,allo:1,con:1,e:1,la:1,le:1,il:1,
+                  su:1,in:1,a:1,and:1,the:1,of:1,con2:1,una:1,come:1,'nostra':1};
+function peCmNorm(s){
+  return String(s||'')
+    .replace(/[’']/g,'')
+    .normalize ? String(s||'').replace(/[’']/g,'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+               : String(s||'').toLowerCase();
+}
+function peCmTokens(s){
+  return peCmNorm(s).replace(/\([^)]*\)/g,' ').replace(/[0-9]+\s*(g|kg|gr)\b/g,' ')
+    .split(/[^a-z]+/).filter(function(w){ return w.length>2 && !PE_CM_STOP[w]; });
+}
+function peCmMatchAlc(name, courseKind){
+  var want = peCmTokens(name);
+  if(!want.length) return null;
+  var wantKey = want.join(' ');
+  var best = null, bestScore = 0;
+  peAlcAll().forEach(function(a){
+    var got = peCmTokens(a.name);
+    if(!got.length) return;
+    var score = 0;
+    if(got.join(' ')===wantKey) score = 100;
+    else {
+      var shared = want.filter(function(w){ return got.indexOf(w)>=0; });
+      if(!shared.length) return;
+      var subset = shared.length===want.length || shared.length===got.length;
+      // A single shared word is only convincing when it is the distinctive one
+      // (angus, branzino, melanzane) — not a generic one like "pasta".
+      var longest = shared.reduce(function(m,w){ return Math.max(m,w.length); }, 0);
+      if(shared.length===1 && longest<5 && !subset) return;
+      score = (subset?50:0) + shared.length*10 + longest;
+    }
+    if(courseKind && a.course===courseKind) score += 25;
+    if(score>bestScore){ bestScore = score; best = a; }
+  });
+  return bestScore>=20 ? best : null;
+}
+function peCmSetDishPrice(name, courseKind){
+  var hit = peCmMatchAlc(name, courseKind);
+  return hit ? peAlcPrice(hit) : null;
+}
+function peCmTotals(){
+  var cm = peState.cm;
+  if(!cm) return null;
+  var supp = 0, sum = 0, unpriced = [], swaps = [], adds = [];
+  cm.courses.forEach(function(c){
+    var kind = peCmCourseKind(c);
+    c.lines.forEach(function(l){
+      if(!String(l.name||'').trim()) return;
+      supp += Number(l.supplement)||0;
+      if(l.from==='alacarte'){
+        if(l.price==null) unpriced.push(l.name); else sum += Number(l.price);
+        (l.added ? adds : swaps).push({ course:c.name, name:l.name, out:l.out||null,
+          price:(l.price==null?null:Number(l.price)), supplement:Number(l.supplement)||0 });
+      } else {
+        var p = peCmSetDishPrice(l.name, kind);
+        if(p==null) unpriced.push(l.name); else sum += p;
+      }
+    });
+  });
+  var base = cm.basePrice!=null ? Number(cm.basePrice) : null;
+  var computed = cm.priceMode==='supplement'
+    ? (base!=null ? base+supp : null)
+    : (unpriced.length ? null : sum);
+  var price = cm.priceOverride!=null ? Number(cm.priceOverride) : computed;
+  return { base:base, supp:supp, sum:sum, unpriced:unpriced, computed:computed,
+           price:price, swaps:swaps, adds:adds };
+}
+function peRenderCustomise(){
+  var ce = peCanEdit();
+  var h = '';
+  if(!peState.alacarteOk){
+    return '<div class="pe-card"><b style="color:#400207">Customise a menu</b>'+
+      '<div style="font-size:12.5px;color:#8A2A1A;background:#FBE9E7;border-radius:8px;padding:10px 12px;margin-top:8px">'+
+      'This needs the à la carte, and it isn’t loaded yet — <b>foh-events-alacarte.sql</b> still needs to be run on the FOH database. '+
+      'Until then, use the “Menu changes agreed with the guest” note on the event’s Food card: it already reaches the proposal and the kitchen brief.</div></div>';
+  }
+  if(!ce){
+    return '<div class="pe-card"><b style="color:#400207">Customise a menu</b>'+
+      '<div style="font-size:12px;color:#8B7355;margin-top:8px">Building menus is for the events desk — you can browse the à la carte and the set menus.</div></div>';
+  }
+  var cm = peState.cm;
+  if(!cm){
+    h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">A guest takes a set menu but wants dishes from the à la carte instead — start from that menu, swap what they asked for, and the price, the proposal and the kitchen brief all follow.</div>';
+    h += '<div class="pe-card"><b style="color:#400207">Start a customised menu</b>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">Pick the menu the guest is happy with — you can change every course afterwards.</div>'+
+      peSetMenusPickInc().map(function(m){
+        return '<div class="pe-dishrow"><span><b style="color:#400207">'+peEsc(m.name)+'</b>'+
+          (m.price!=null?' · AED '+peMoney(m.price)+' / guest':' · <span style="background:#FAEEDA;color:#854F0B;font-size:10.5px;padding:1px 8px;border-radius:20px">price on the proposal</span>')+
+          '<br><span style="font-size:11px;color:#8B7355">'+peEsc(m.line||peSmSummary(m.courses))+'</span></span>'+
+          '<button class="pe-btn sec sm" onclick="peCmStart(\''+peSmEsc(m.key)+'\',null)">Start from this</button></div>';
+      }).join('')+
+      '<div style="margin-top:10px"><button class="pe-btn sec" onclick="peCmStart(null,null)">Start from nothing — build it course by course</button></div>'+
+      '</div>';
+    var mine = peSetMenusAll().filter(function(m){ return peSmIsCustom(m) && m.active!==false; });
+    if(mine.length){
+      h += '<div class="pe-card"><b style="color:#400207">Menus you have customised</b>'+
+        '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Already on their booking. Open the event’s Food card to change the price or the guests’ choice.</div>'+
+        mine.map(function(m){
+          var ev = m.eventId ? peEvById(m.eventId) : null;
+          return '<div class="pe-dishrow"><span><b style="color:#400207">'+peEsc(m.name)+'</b>'+
+            (m.price!=null?' · AED '+peMoney(m.price)+' / guest':'')+
+            '<br><span style="font-size:11px;color:#8B7355">'+
+            (m.basedOn?'from '+peEsc((peSetMenuByKey(m.basedOn)||{name:m.basedOn}).name)+' · ':'')+
+            (ev?peEsc(ev.client_name||'event')+(ev.event_date?' · '+peEsc(ev.event_date):''):'not on a booking')+
+            '</span></span>'+
+            (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+m.eventId+'\')">Open booking</button>':'')+
+            '</div>';
+        }).join('')+'</div>';
+    }
+    return h;
+  }
+  // ── the builder ──
+  var t = peCmTotals();
+  var alc = peAlcAll();
+  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px;cursor:pointer" onclick="peState.cm=null;renderMain()">← Start a different menu</div>';
+  h += '<div class="pe-card"><div class="pe-lbl">What this menu is called on the proposal</div>'+
+    '<input class="pe-in" value="'+peEsc(cm.name)+'" placeholder="e.g. Mare set menu — Sara’s dinner" onchange="peCmSet(\'name\',this.value)">'+
+    (cm.basedOn?'<div style="font-size:11px;color:#8B7355;margin-top:5px">Started from <b>'+peEsc(cm.baseName)+'</b>'+(cm.basePrice!=null?' at AED '+peMoney(cm.basePrice)+'/guest':'')+' — the designed menu is untouched.</div>':'')+
+    '<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap"><div><div class="pe-lbl">Guests (optional — for the kitchen’s portions)</div>'+
+    '<input class="pe-in" style="max-width:120px" type="number" min="0" value="'+(cm.guests!=null?peEsc(cm.guests):'')+'" onchange="peCmSet(\'guests\',this.value)"></div></div>'+
+    '</div>';
+  cm.courses.forEach(function(c, ci){
+    h += '<div class="pe-card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+      '<input class="pe-in" style="flex:1;min-width:140px" value="'+peEsc(c.name)+'" placeholder="Course name — e.g. Secondi" onchange="peCmCourse('+ci+',\'name\',this.value)">'+
+      '<label style="font-size:11.5px;color:#6B4A33;display:inline-flex;align-items:center;gap:6px;cursor:pointer">'+
+        '<input type="checkbox" '+(c.choose?'checked':'')+' onchange="peCmCourse('+ci+',\'choose\',this.checked)" style="accent-color:#400207"> guests choose one</label>'+
+      '<span class="pe-x" onclick="peCmRemoveCourse('+ci+')" title="Remove this course">✕</span></div>';
+    if(!c.lines.length) h += '<div style="font-size:11.5px;color:#8B7355;margin-top:8px">No dishes in this course yet — add one from the à la carte below.</div>';
+    c.lines.forEach(function(l, li){
+      var isAlc = l.from==='alacarte';
+      h += '<div class="pe-dishrow"><span>'+
+        (isAlc
+          ? '<b style="font-weight:600;color:#400207">'+peEsc(l.name)+'</b>'+
+            ' <span class="pe-pill" style="font-size:10px;background:#F4EEE1;color:#8A6A4F;border:1px solid #C9B48E">'+(l.added?'added from the à la carte':'from the à la carte')+'</span>'+
+            (l.out?'<br><span style="font-size:11px;color:#8B7355">instead of <b>'+peEsc(l.out)+'</b></span>':'')+
+            '<br><span style="font-size:11px;color:'+(l.price==null?'#B00020':'#6B4A33')+'">'+
+              (l.price==null
+                ? 'this dish has no fixed price — set the supplement yourself'
+                : 'à la carte AED '+peMoney(l.price)+
+                  (l.suggested
+                    ? ' · supplement is the difference against '+peEsc(l.outPricedAs||'the dish it replaced')
+                    : ' · nothing to compare it to — set the supplement yourself'))+'</span>'
+          : '<input class="pe-in" style="width:100%;max-width:320px" value="'+peEsc(l.name)+'" placeholder="Dish name" oninput="peCmLineName('+ci+','+li+',this.value)">'+
+            '<br><span style="font-size:11px;color:#8B7355">from the set menu — no supplement</span>')+
+        '<div style="margin-top:6px"><select class="pe-in" style="width:auto;max-width:100%;font-size:11.5px" onchange="peCmSwap('+ci+','+li+',this.value);this.selectedIndex=0">'+
+          '<option value="">Swap for an à la carte dish…</option>'+
+          peCmAlcOptions(alc, c)+
+        '</select></div>'+
+        // On a "guests choose one" course the supplement still lands on every
+        // guest's price, so she is offered the division instead of doing it.
+        (c.choose && isAlc && l.diff!=null
+          ? '<div style="margin-top:6px;font-size:11px;color:#6B4A33">Taken by '+
+            '<input class="pe-in" style="width:56px;padding:3px 5px;text-align:center;display:inline-block" type="number" min="0"'+
+              (cm.guests?'':' disabled title="Add the guest count above first"')+
+              ' value="'+(l.forGuests!=null?l.forGuests:'')+'" onchange="peCmForGuests('+ci+','+li+',this.value)">'+
+            ' of '+(cm.guests||'?')+' guests'+
+            (l.forGuests!=null && cm.guests
+              ? ' — the AED '+peMoney(l.diff)+' difference spread over everyone is <b>AED '+peMoney(l.supplement)+' / guest</b>'
+              : ' — leave blank to charge every guest the full AED '+peMoney(l.diff))+'</div>'
+          : '')+
+        '</span>'+
+        '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">'+
+          '<span style="display:flex;flex-direction:column;align-items:center;line-height:1.1">'+
+            '<input class="pe-in" style="width:74px;padding:4px 6px;text-align:center" type="number" min="0" value="'+(Number(l.supplement)||0)+'" onchange="peCmSupp('+ci+','+li+',this.value)">'+
+            '<span style="font-size:9.5px;color:#8B7355;margin-top:2px">supplement<br>AED / guest</span></span>'+
+          '<span class="pe-x" onclick="peCmRemoveLine('+ci+','+li+')">✕</span></span></div>';
+    });
+    h += '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+      '<select class="pe-in" style="width:auto;max-width:100%" onchange="peCmAddDish('+ci+',this.value);this.selectedIndex=0">'+
+        '<option value="">+ Add a dish from the à la carte…</option>'+peCmAlcOptions(alc, c)+'</select>'+
+      '<button class="pe-btn sec sm" onclick="peCmAddLine('+ci+')">+ Add a dish by name</button></div>';
+    h += '</div>';
+  });
+  h += '<div style="margin-bottom:12px"><button class="pe-btn sec" onclick="peCmAddCourse()">+ Add a course</button></div>';
+  // ── price ──
+  h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Price per guest</b>';
+  h += '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
+    ['supplement','sum'].map(function(mode){
+      var on = cm.priceMode===mode;
+      var lbl = mode==='supplement' ? 'Keep the set price + supplements' : 'Reprice from every dish';
+      var dis = (mode==='supplement' && cm.basePrice==null);
+      return '<button class="pe-btn '+(on?'':'sec')+' sm"'+(dis?' disabled title="This menu didn’t start from a priced set menu, so there is no set price to keep"':' onclick="peCmSet(\'priceMode\',\''+mode+'\')"')+'>'+lbl+'</button>';
+    }).join('')+'</div>';
+  if(cm.priceMode==='supplement'){
+    h += '<div class="pe-tot-row" style="margin-top:8px"><span>'+peEsc(cm.baseName||'Set menu')+'</span><b>AED '+peMoney(t.base||0)+'</b></div>'+
+      '<div class="pe-tot-row"><span>Supplements on this menu</span><b>'+(t.supp?'+ AED '+peMoney(t.supp):'none')+'</b></div>';
+  } else {
+    h += '<div class="pe-tot-row" style="margin-top:8px"><span>Every dish added up</span><b>'+(t.unpriced.length?'—':'AED '+peMoney(t.sum))+'</b></div>';
+    if(t.unpriced.length) h += '<div class="pe-flag" style="color:#B00020">▲ Can’t add up: no price for '+peEsc(t.unpriced.slice(0,4).join(', '))+(t.unpriced.length>4?' and '+(t.unpriced.length-4)+' more':'')+' — set the price yourself below.</div>';
+  }
+  h += '<div class="pe-tot-row" style="border-top:1px solid #E3D5C2;margin-top:4px;padding-top:6px"><span><b>What the guest is charged</b></span><b style="color:#400207;font-size:15px">'+
+    (t.price==null?'not set yet':'AED '+peMoney(t.price)+' / guest')+'</b></div>';
+  h += '<div style="margin-top:8px"><div class="pe-lbl">Override the price (optional — leave blank to use the number above)</div>'+
+    '<input class="pe-in" style="max-width:170px" type="number" min="0" value="'+(cm.priceOverride!=null?peEsc(cm.priceOverride):'')+'" placeholder="'+(t.computed!=null?peMoney(t.computed):'e.g. 480')+'" onchange="peCmSet(\'priceOverride\',this.value)"></div>';
+  if(cm.guests && t.price!=null) h += '<div style="font-size:11.5px;color:#8B7355;margin-top:6px">'+cm.guests+' guests × AED '+peMoney(t.price)+' = <b>AED '+peMoney(t.price*cm.guests)+'</b> of food.</div>';
+  h += '<div style="margin-top:10px"><div class="pe-lbl">Anything the kitchen must read (optional)</div>'+
+    '<textarea class="pe-in" rows="2" placeholder="e.g. the two vegetarian guests take the melanzane as their secondo" onchange="peCmSet(\'note\',this.value)">'+peEsc(cm.note||'')+'</textarea></div>';
+  h += '</div>';
+  // ── save ──
+  var problems = peCmProblems();
+  h += '<div class="pe-card"><b style="color:#400207">Save it</b>'+
+    '<div style="font-size:11px;color:#8B7355;margin:2px 0 10px">Saved, it behaves like any other menu: the proposal prints the courses, the kitchen brief prints the portions and what was swapped, and the guest can be sent it.</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+      '<select class="pe-in" style="width:auto;max-width:100%" onchange="peCmSet(\'eventId\',this.value)">'+
+        '<option value="">Save to the library — not on a booking yet</option>'+
+        peCmEventOptions()+
+      '</select>'+
+      '<button class="pe-btn"'+(problems.length||peState.cmBusy?' disabled':'')+' onclick="peCmSave()">'+(peState.cmBusy?'Saving…':'Save this menu')+'</button>'+
+    '</div>'+
+    (problems.length
+      ? '<div style="font-size:11.5px;color:#B00020;margin-top:8px">Can’t save yet — '+peEsc(problems.join(' · '))+'</div>'
+      : '<div style="font-size:11.5px;color:#8B7355;margin-top:8px">'+(cm.eventId?'This will become the food on that booking, at AED '+peMoney(t.price)+'/guest.':'Pick a booking above to put it straight onto an event.')+'</div>')+
+    '</div>';
+  return h;
+}
+// One dish list, used by both the swap picker and the add picker. The course's
+// own kind comes first so a Secondi swap doesn't open on the caviar, but every
+// dish stays reachable — she is the one talking to the guest.
+function peCmAlcOptions(alc, course){
+  var kind = peCmCourseKind(course);
+  var pri = alc.filter(function(a){ return kind && a.course===kind; });
+  var rest = alc.filter(function(a){ return pri.indexOf(a)<0; });
+  function opt(a){
+    return '<option value="'+a.id+'">'+peEsc(a.name)+' — '+peEsc(peAlcPriceText(a))+'</option>';
+  }
+  var h = '';
+  if(pri.length) h += '<optgroup label="'+peEsc(peAlcSecLabel(kind))+' — the usual choice here">'+pri.map(opt).join('')+'</optgroup>';
+  h += '<optgroup label="Everything else on the à la carte">'+rest.map(opt).join('')+'</optgroup>';
+  return h;
+}
+// Guess what kind of course this is from its name, so the picker can lead with
+// the right dishes. A guess only — it never restricts what she can pick.
+function peCmCourseKind(course){
+  var n = String((course&&course.name)||'').toLowerCase();
+  if(/pasta|primo|primi|riso|risotto/.test(n)) return 'pasta';
+  if(/second|main|pesce|carne/.test(n)) return 'secondi';
+  if(/antipast|starter|crudo|insalat|salad/.test(n)) return 'antipasti';
+  if(/contorn|side/.test(n)) return 'contorni';
+  return '';
+}
+function peCmProblems(){
+  var cm = peState.cm; if(!cm) return ['nothing to save'];
+  var t = peCmTotals();
+  var out = [];
+  if(!String(cm.name||'').trim()) out.push('the menu needs a name');
+  var dishes = 0;
+  cm.courses.forEach(function(c){ c.lines.forEach(function(l){ if(String(l.name||'').trim()) dishes++; }); });
+  if(!dishes) out.push('add at least one dish');
+  if(t.price==null) out.push('set the price per guest');
+  return out;
+}
+function peCmEventOptions(){
+  var cm = peState.cm;
+  var evs = (peState.events||[]).filter(function(e){ return e.status!=='cancelled' && e.status!=='done'; })
+    .sort(function(a,b){ return String(a.event_date||'').localeCompare(String(b.event_date||'')); });
+  return evs.map(function(e){
+    return '<option value="'+e.id+'"'+(cm&&cm.eventId===e.id?' selected':'')+'>'+
+      peEsc(e.client_name||'(no name)')+(e.event_date?' · '+peEsc(e.event_date):'')+(e.guests?' · '+e.guests+' guests':'')+'</option>';
+  }).join('');
+}
+// Save as a normal event_set_menus row flagged is_custom — see the SQL header
+// for why that beats a table of its own.
+async function peCmSave(){
+  var cm = peState.cm; if(!cm) return;
+  if(peCmProblems().length) return;
+  var t = peCmTotals();
+  peState.cmBusy = true; renderMain();
+  try{
+    var courses = cm.courses.map(function(c){
+      var names = c.lines.map(function(l){ return String(l.name||'').trim(); }).filter(Boolean);
+      if(!names.length) return null;
+      return c.choose ? { name:(c.name||'Choice'), choose:1, options:names }
+                      : { name:(c.name||'Course'), items:names };
+    }).filter(Boolean);
+    var key = 'custom-'+String(cm.basedOn||'menu')+'-'+Math.random().toString(36).slice(2,8);
+    var row = {
+      key: key,
+      name: String(cm.name).trim(),
+      price_pp: t.price,
+      courses: courses,
+      line: peSmSummary(courses),
+      is_custom: true,
+      based_on: cm.basedOn || null,
+      event_id: cm.eventId || null,
+      price_mode: cm.priceMode,
+      detail: { swaps:t.swaps, adds:t.adds, base:t.base, supplements:t.supp, note:cm.note||'' },
+      created_by: peActor()
+    };
+    var r = await sb.from('event_set_menus').insert(row).select().single();
+    if(r.error) throw r.error;
+    peState.setMenus = (peState.setMenus||[]).concat([r.data]);
+    // On a booking: this becomes the food, exactly as applying a set menu does.
+    // The guest's note travels in set_menu.note, which the proposal prints as
+    // "Special arrangements" and the kitchen brief prints in red.
+    if(cm.eventId){
+      var sm = { key:key, choices:{} };
+      if(cm.note) sm.note = cm.note;
+      var patch = { set_menu:sm, package_label:row.name, food_price_pp:t.price,
+                    updated_at:new Date().toISOString() };
+      var u = await sb.from('events_desk').update(patch).eq('id', cm.eventId);
+      if(u.error) throw u.error;
+      var ev = peEvById(cm.eventId);
+      if(ev){ ev.set_menu = sm; ev.package_label = row.name; ev.food_price_pp = t.price; }
+      await sb.from('event_log').insert({ event_id:cm.eventId, action:'edited', actor:peActor(),
+        detail:('customised menu applied — '+row.name+' at AED '+t.price+'/guest'+
+                (t.swaps.length?', '+t.swaps.length+' swap'+(t.swaps.length>1?'s':''):'')+
+                (t.adds.length?', '+t.adds.length+' addition'+(t.adds.length>1?'s':''):'')).slice(0,400) });
+    }
+    peState.cm = null; peState.cmBusy = false;
+    peToast(cm.eventId ? 'Saved ✓ — it’s the food on that booking now' : 'Saved ✓');
+    if(cm.eventId) peGo('event', cm.eventId); else renderMain();
+  }catch(err){
+    peState.cmBusy = false; renderMain();
+    peToast('NOT saved — '+String(err&&err.message||err).slice(0,120), true);
+  }
 }
 function peSelLinks(kind){
   return '<span style="font-size:11px;color:#8B7355">tick <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peMpSelectAll(\''+kind+'\',true)">all</span> · <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peMpSelectAll(\''+kind+'\',false)">none</span></span>';
@@ -4261,7 +4876,9 @@ function peRenderSetMenuLib(){
   } else {
     h += '<div style="margin-bottom:10px"><button class="pe-btn" onclick="peSmNew()">+ Add set menu</button></div>';
   }
-  var list = peSetMenusRaw();
+  // The chef's library shows the DESIGNED menus only — a menu Valentina
+  // customised for one booking is hers, and lives on that booking.
+  var list = peSetMenusRaw().filter(function(m){ return !m.is_custom; });
   h += '<div class="pe-card">'+(list.length?list.map(function(m){
     var mm=peNormSM(m); var pending=mm.price==null;
     var costPct = (mm.cost!=null && mm.price) ? Math.round((mm.cost/(mm.price/PE_GROSS))*100) : null;
