@@ -482,7 +482,10 @@ async function peLoadAll(force){
       peFetchAllPaged(function(){ return sb.from('event_bev_packages').select('*').order('name').order('id'); }),
       peFetchAllPaged(function(){ return sb.from('event_packages').select('*').order('name').order('id'); }),
       peFetchAllPaged(function(){ return sb.from('event_set_menus').select('*').order('name').order('id'); }),
-      sb.from('event_menu_choices').select('token,created_at').eq('applied', false).order('created_at',{ascending:false}),
+      // Set-menu replies only. Without the menu_key filter an unapplied à la carte
+      // pick sharing the same token lit up the set-menu banner, which then had no
+      // matching numbers to review.
+      sb.from('event_menu_choices').select('token,created_at,menu_key').eq('applied', false).neq('menu_key','alacarte').order('created_at',{ascending:false}),
       sb.from('event_log').select('event_id,created_at').eq('action','email').like('detail','event brief%').order('created_at',{ascending:true}),
       sb.from('event_targets').select('*'),
       sb.from('event_log').select('event_id,actor,created_at').eq('action','email').like('detail','proposal%').order('created_at',{ascending:true}),
@@ -787,6 +790,47 @@ function peHeader(active){
 var PE_FOOT = '</div></div></div>';
 
 // ── list view ────────────────────────────────────────────────────────────────
+// A booking that is lost or has moved on can leave this banner asserting forever,
+// because applying was the only thing that cleared it. Same idea as "Done with it"
+// on the à la carte card: the guest's reply stays saved, it just stops asking.
+async function peDismissMenuChoices(id){
+  var e = peEvById(id); if(!e) return;
+  if(!(await peConfirm({title:'Clear this from the screen?',
+    html:'The guest’s reply stays saved — this only stops the reminder.'+
+      '<br><br>You can still pull their numbers in later with <b>“Check for the guest’s numbers”</b>.',
+    ok:'Clear it', cancel:'Keep it'}))) return;
+  var r = await sb.from('event_menu_choices').update({applied:true})
+    .eq('token', e.client_token).eq('applied', false).neq('menu_key','alacarte');
+  if(r.error){ peToast('NOT cleared — '+String(r.error.message||'').slice(0,80), true); return; }
+  if(peState.menuChoicesPending) delete peState.menuChoicesPending[e.client_token];
+  peToast('Cleared ✓');
+  renderMain();
+}
+// The log used to print the database's own column values at her — "email", "status",
+// "unsigned". These are the same events in the words she would use.
+var PE_LOG_WORDS = {
+  followup:'', email:'Email sent', status:'Status', edited:'Changed', created:'Created',
+  signed:'Client signed the agreement', unsigned:'Signature voided',
+  whatsapp:'WhatsApp sent', client_link:'Guest link copied',
+  agreement_link:'Signing link copied', payment_link:'Payment link sent'
+};
+function peLogLine(l){
+  var d = l.detail || '';
+  if(l.action === 'followup') return d;                 // her own note, as typed
+  var w = PE_LOG_WORDS[l.action];
+  if(w == null) w = l.action;                           // an action we haven't named yet
+  return w ? (d ? w + ' — ' + d : w) : d;
+}
+// renderMain() replaces the input, so the caret has to be put back by hand. It used
+// to be forced to the end of the text, which meant correcting a typo mid-word threw
+// her cursor to the end on every single keystroke.
+function peSearchInput(el){
+  var pos = el.selectionStart;
+  peState.q = el.value;
+  renderMain();
+  var n = document.querySelector('input[placeholder^="Search"]');
+  if(n){ n.focus(); try{ n.setSelectionRange(pos, pos); }catch(err){} }
+}
 function peEventMatchesQuery(e, q){
   if(!q) return true;
   var hay = [e.client_name||'', e.company||'', e.contact_name||'', e.area||'', e.event_date||'', peDLabel(e.event_date)].join(' ').toLowerCase();
@@ -1033,7 +1077,7 @@ function peRenderList(){
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(107,31,42,0.1);padding-bottom:10px;margin-bottom:4px">'+filters.map(function(f){
     return '<span class="pe-tab'+(peState.filter===f[0]?' on':'')+'" style="font-size:11px;padding:4px 11px" onclick="peState.filter=\''+f[0]+'\';peState.focus=null;renderMain()">'+f[1]+' <span style="opacity:.55;font-weight:400">'+_fcount[f[0]]+'</span></span>';
   }).join('')+
-  '<input class="pe-in" style="width:210px;margin-left:auto" placeholder="Search name, company, date or area\u2026" value="'+peEsc(peState.q||'')+'" oninput="peState.q=this.value;renderMain();var el=document.querySelectorAll(\'input[placeholder^=Search]\')[0];if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}">'+
+  '<input class="pe-in" style="width:210px;margin-left:auto" placeholder="Search name, company, date or area\u2026" value="'+peEsc(peState.q||'')+'" oninput="peSearchInput(this)">'+
   '</div>';
   // ── Lead filter — only when more than one person has taken a lead, so a
   // single-handler desk never grows a chip row that just says "Everyone". ──
@@ -1073,7 +1117,9 @@ function peRenderList(){
   if(evs.length){
     var byBucket = {};
     evs.forEach(function(e){ var b = peTimeBucket(e); (byBucket[b]=byBucket[b]||[]).push(e); });
-    var groups = [['past','Earlier — still open'],['week','This week'],['later','Later'],['nodate','No date yet']];
+    // Just "Earlier" — the group carries finished and lost bookings too, so
+    // "still open" was telling her to chase events that are already done.
+    var groups = [['past','Earlier'],['week','This week'],['later','Later'],['nodate','No date yet']];
     groups.forEach(function(g){
       var list = (byBucket[g[0]]||[]).sort(function(a,b){ return String(a.event_date||'9999').localeCompare(String(b.event_date||'9999')); });
       if(!list.length) return;
@@ -1713,7 +1759,11 @@ function peRenderEvent(){
   if(ce && e.set_menu && peState.menuChoicesPending && peState.menuChoicesPending[e.client_token]){
     h += '<div style="background:#EEF3E4;border:1px solid #B9C99A;border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#3F5222;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span><b>✓ The guest sent their menu numbers</b> — review them and they go straight onto the kitchen brief.</span>'+
-      '<button class="pe-btn sm" onclick="peFetchMenuChoices(\''+e.id+'\')">Review &amp; apply</button></div>';
+      '<span style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button class="pe-btn sm" onclick="peFetchMenuChoices(\''+e.id+'\')">Review &amp; apply</button>'+
+      // Applying was the only thing that cleared this, which is meaningless on a
+      // booking that has since been lost — so the banner asserted forever.
+      '<button class="pe-btn sec sm" onclick="peDismissMenuChoices(\''+e.id+'\')">Not needed</button></span></div>';
   }
 
   // P0/#6 — persistent banner when an edit voided the signed agreement (stays
@@ -1918,7 +1968,7 @@ function peRenderEvent(){
     (ce?'<div style="display:flex;gap:6px;margin:8px 0"><input class="pe-in" id="pe-fu-note" placeholder="e.g. Called Ramona — waiting on final guest count"><button class="pe-btn sm" onclick="peAddFollowup(\''+e.id+'\')">Add</button></div>':'<div style="margin:8px 0"></div>')+
     (log.length ? log.map(function(l){
       var d = new Date(l.created_at);
-      return '<div class="pe-log"><span class="t">'+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · '+peEsc(l.actor||'')+'</span><br>'+peEsc(l.action==='followup'?(l.detail||''):(l.action+(l.detail?' — '+l.detail:'')))+'</div>';
+      return '<div class="pe-log"><span class="t">'+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · '+peEsc(l.actor||'')+'</span><br>'+peEsc(peLogLine(l))+'</div>';
     }).join('') : '<div style="font-size:12px;color:#8B7355">Nothing logged yet.</div>')+'</div>';
   h += '</div><div>';
   // totals
@@ -3993,7 +4043,12 @@ function peAlcFiltered(){
     return (a.name+' '+(a.description||'')+' '+a.section).toLowerCase().indexOf(q)>=0;
   });
 }
-function peAlcQ(v){ peState.alcQ = v; renderMain(); var el=document.getElementById('pe-alc-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+// Same caret rule as the events search — keep her cursor where she put it.
+function peAlcQ(v, pos){
+  peState.alcQ = v; renderMain();
+  var el = document.getElementById('pe-alc-q');
+  if(el){ el.focus(); try{ var p = (pos==null?el.value.length:pos); el.setSelectionRange(p,p); }catch(e){} }
+}
 function peAlcSec(v){ peState.alcSec = v; renderMain(); }
 // What guests have ticked on an à la carte link. A reply that lands nowhere is
 // worse than no reply, so it sits at the top of the screen the dishes live on.
@@ -4057,7 +4112,7 @@ function peRenderAlaCarte(){
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Roberto’s à la carte, June 2026 — every price checked against the POS. '+
     'This is the list “Customise a menu” swaps from, so a dish added to a menu carries its real price.</div>';
   h += '<div class="pe-card"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
-    '<input class="pe-in" id="pe-alc-q" style="flex:1;min-width:180px" placeholder="Search a dish — e.g. burrata, branzino, truffle" value="'+peEsc(peState.alcQ||'')+'" oninput="peAlcQ(this.value)">'+
+    '<input class="pe-in" id="pe-alc-q" style="flex:1;min-width:180px" placeholder="Search a dish — e.g. burrata, branzino, truffle" value="'+peEsc(peState.alcQ||'')+'" oninput="peAlcQ(this.value, this.selectionStart)">'+
     '<select class="pe-in" style="width:auto" onchange="peAlcSec(this.value)"><option value="">Every section</option>'+
       secs.map(function(s){ return '<option value="'+peEsc(s)+'"'+(peState.alcSec===s?' selected':'')+'>'+peEsc(peAlcSecLabel(s))+'</option>'; }).join('')+
     '</select>'+
@@ -5718,10 +5773,22 @@ async function peSaveBev(id){
   peState.editBevId = null; peState.bevPdf = null; peToast('Beverage package saved ✓'); renderMain();
 }
 async function peToggleBev(id, active){
-  var r = await sb.from('event_bev_packages').update({active:active==='true'||active===true}).eq('id', id);
+  var on = (active==='true'||active===true);
+  // Retiring is destructive and client-facing \u2014 it pulls the package out of every
+  // future quote. It used to happen on one tap with no confirm and no check-mark.
+  if(!on){
+    var b0 = (peState.bevs||[]).filter(function(b){ return b.id===id; })[0];
+    if(!(await peConfirm({title:'Retire this beverage package?',
+      html:'<b>'+peEsc((b0&&b0.name)||'This package')+'</b> will stop appearing when you build a quote.'+
+        '<br><br>Bookings that already use it keep it. You can bring it back from this same screen.',
+      ok:'Retire it', cancel:'Keep it', danger:true}))) { renderMain(); return; }
+  }
+  var r = await sb.from('event_bev_packages').update({active:on}).eq('id', id);
   if(r.error){ peToast('NOT changed \u2014 check connection', true); return; }
-  peState.bevs.forEach(function(b){ if(b.id===id) b.active = (active==='true'||active===true); });
-  peState.editBevId = null; renderMain();
+  peState.bevs.forEach(function(b){ if(b.id===id) b.active = on; });
+  peState.editBevId = null;
+  peToast(on ? 'Back in use \u2713' : 'Retired \u2713');
+  renderMain();
 }
 function peRenderPackLib(){
   var ed = peState.editPackId==='new' ? {dish_ids:[]} : (peState.editPackId ? (peState.packs.filter(function(p){return p.id===peState.editPackId;})[0]||{dish_ids:[]}) : null);
