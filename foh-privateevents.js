@@ -3243,7 +3243,7 @@ function peProposalHTML(e){
   }
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
     'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
-    'D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
   return peDocShell('Roberto\'s proposal', body);
 }
 function pePrintProposal(id){ var e = peEvById(id); if(e) pePrintHTML(peProposalHTML(e)); }
@@ -3773,7 +3773,8 @@ function peRenderPacksView(){
 // quote a dish without hunting for the PDF, and "Customise a menu" has a real
 // priced dish list to swap from instead of a free-text note.
 var PE_ALC_ORDER = ['CRUDO BAR','ROBERTO’S SELECTION','INSALATE','ANTIPASTI','PIZZE','PASTE E RISO',
-  'SECONDI DI PESCE','LA VIA DEL SALE','DAL BANCO','SECONDI DI CARNE','DALLA NOSTRA GRIGLIA JOSPER','CONTORNI CALDI'];
+  'SECONDI DI PESCE','LA VIA DEL SALE','DAL BANCO','SECONDI DI CARNE','DALLA NOSTRA GRIGLIA JOSPER',
+  'CONTORNI CALDI','DOLCI'];
 function peAlcAll(){
   return (peState.alacarte||[]).filter(function(a){ return a.active!==false; });
 }
@@ -4355,6 +4356,9 @@ function peCmAlcOptions(alc, course){
 // the right dishes. A guess only — it never restricts what she can pick.
 function peCmCourseKind(course){
   var n = String((course&&course.name)||'').toLowerCase();
+  // Dolci first: "Dolci" would otherwise never be reached, and a dessert course
+  // offering secondi is exactly the mismatch this function exists to prevent.
+  if(/dolci|dessert|dolce|pudding/.test(n)) return 'dolci';
   if(/pasta|primo|primi|riso|risotto/.test(n)) return 'pasta';
   if(/second|main|pesce|carne/.test(n)) return 'secondi';
   if(/antipast|starter|crudo|insalat|salad/.test(n)) return 'antipasti';
@@ -4402,7 +4406,7 @@ function peCmPrintMenu(key){
   });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
     (m.price!=null?'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>':'')+
-    'D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
   pePrintHTML(peDocShell(m.name, body));
 }
 // Email goes through the one guest-send card that already exists — this ticks
@@ -6448,7 +6452,7 @@ function peQuickPrint(){
   });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
     'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
-    'D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
   pePrintHTML(peDocShell(peQuick.title, body));
 }
 async function peQuickSave(){
