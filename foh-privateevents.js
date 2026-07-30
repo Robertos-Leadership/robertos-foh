@@ -38,7 +38,11 @@ var PE_TARGETS = {
   serve: {Cold:20, Hot:20, Dessert:5},
   tiers: {Classic:10, Elevated:25, Signature:10}
 };
-var peQuick = { qty:{}, title:'Canap\u00e9 selection', guests:'40' };
+// qty  \u2014 canap\u00e9s, by the piece (event_dishes)
+// alc  \u2014 \u00e0 la carte, by the portion (event_alacarte). Kept in its own map so
+//        nothing that already reads peQuick.qty can be confused by an id from
+//        a different table.
+var peQuick = { qty:{}, alc:{}, title:'Canap\u00e9 selection', guests:'40' };
 
 var PE_STATUS = [
   {k:'draft',     n:'Draft',          pill:'pe-p-draft'},
@@ -3873,6 +3877,53 @@ function peCmStart(basedOnKey, eventId){
   peState.packsTab = 'custom';
   renderMain();
 }
+// Carry a quick menu into the builder: the canapés she has already counted
+// become courses grouped the way the kitchen works (cold, hot, dolci), the
+// à la carte portions become their own courses by menu section, and every line
+// keeps its real price — so "reprice from every dish" gives a true number the
+// moment she opens it, and she can then swap, add or overwrite the price.
+function peCmFromQuick(){
+  peQuickRead();
+  var tt = peQuickTotals();
+  var courses = [];
+  var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
+  groups.forEach(function(g){
+    var lines = peState.dishes.filter(function(d){
+      return d.active && d.serve===g[0] && (Number(peQuick.qty[d.id])||0)>0;
+    }).map(function(d){
+      return { name:d.name, from:'canape', price:(Number(d.sell_price)||null),
+               supplement:0, out:null, alcId:null, added:true, suggested:false, diff:null, forGuests:null };
+    });
+    if(lines.length) courses.push({ name:g[1], choose:false, lines:lines });
+  });
+  var bySection = {};
+  peQuickAlcLines().forEach(function(l){
+    (bySection[l.a.section] = bySection[l.a.section] || []).push(l.a);
+  });
+  peAlcSections().forEach(function(s){
+    if(!bySection[s]) return;
+    courses.push({ name: peAlcSecLabel(s), choose:false,
+      lines: bySection[s].map(function(a){
+        return { name:a.name, from:'alacarte', price:peAlcPrice(a), alcId:a.id,
+                 supplement:0, out:null, added:true, suggested:false, diff:null, forGuests:null };
+      }) });
+  });
+  peState.cm = {
+    basedOn:null, basePrice:null, baseName:'',
+    name: peQuick.title || 'Customised menu',
+    priceMode:'sum',
+    eventId:null,
+    guests: tt.guests || null,
+    note:'',
+    // The quick menu already worked out a per-guest price — carry it, so she
+    // starts from the number she was just looking at rather than a blank.
+    priceOverride: (tt.perGuest!=null && tt.guests) ? Math.round(tt.perGuest) : null,
+    courses: courses
+  };
+  if(!courses.length) peCmAddCourse(true);
+  peState.packsTab = 'custom';
+  peGo('packs');
+}
 function peCmAddCourse(quiet){
   if(!peState.cm) return;
   peState.cm.courses.push({ name:'', choose:false, lines:[] });
@@ -4030,7 +4081,10 @@ function peCmTotals(){
     c.lines.forEach(function(l){
       if(!String(l.name||'').trim()) return;
       supp += Number(l.supplement)||0;
-      if(l.from==='alacarte'){
+      // Anything that came from a priced library — the à la carte or the canapé
+      // list — carries its own price. Only a line inherited from the set menu
+      // has to be valued by looking it up.
+      if(l.from!=='set'){
         if(l.price==null) unpriced.push(l.name); else sum += Number(l.price);
         (l.added ? adds : swaps).push({ course:c.name, name:l.name, out:l.out||null,
           price:(l.price==null?null:Number(l.price)), supplement:Number(l.supplement)||0 });
@@ -4110,16 +4164,17 @@ function peRenderCustomise(){
       '<span class="pe-x" onclick="peCmRemoveCourse('+ci+')" title="Remove this course">✕</span></div>';
     if(!c.lines.length) h += '<div style="font-size:11.5px;color:#8B7355;margin-top:8px">No dishes in this course yet — add one from the à la carte below.</div>';
     c.lines.forEach(function(l, li){
-      var isAlc = l.from==='alacarte';
+      var isAlc = l.from!=='set';
+      var src = l.from==='canape' ? 'the canapé list' : 'the à la carte';
       h += '<div class="pe-dishrow"><span>'+
         (isAlc
           ? '<b style="font-weight:600;color:#400207">'+peEsc(l.name)+'</b>'+
-            ' <span class="pe-pill" style="font-size:10px;background:#F4EEE1;color:#8A6A4F;border:1px solid #C9B48E">'+(l.added?'added from the à la carte':'from the à la carte')+'</span>'+
+            ' <span class="pe-pill" style="font-size:10px;background:#F4EEE1;color:#8A6A4F;border:1px solid #C9B48E">'+(l.added?'added from ':'from ')+src+'</span>'+
             (l.out?'<br><span style="font-size:11px;color:#8B7355">instead of <b>'+peEsc(l.out)+'</b></span>':'')+
             '<br><span style="font-size:11px;color:'+(l.price==null?'#B00020':'#6B4A33')+'">'+
               (l.price==null
                 ? 'this dish has no fixed price — set the supplement yourself'
-                : 'à la carte AED '+peMoney(l.price)+
+                : (l.from==='canape' ? 'AED '+peMoney(l.price)+' per piece' : 'à la carte AED '+peMoney(l.price))+
                   (l.suggested
                     ? ' · supplement is the difference against '+peEsc(l.outPricedAs||'the dish it replaced')
                     : ' · nothing to compare it to — set the supplement yourself'))+'</span>'
@@ -6037,6 +6092,12 @@ function peQuickGroups(){
              dishes: peState.dishes.filter(function(d){ return d.active && d.category===o[0] && d.serve===o[1]; }) };
   }).filter(function(g){ return g.dishes.length; });
 }
+// Every à la carte line on the quick menu, in printed-menu order.
+function peQuickAlcLines(){
+  return peAlcAll().filter(function(a){ return (Number(peQuick.alc[a.id])||0) > 0; })
+    .sort(function(x,y){ return (x.sort_order||999)-(y.sort_order||999); })
+    .map(function(a){ return { a:a, qty:Number(peQuick.alc[a.id])||0 }; });
+}
 function peQuickTotals(){
   var pieces=0, price=0, distinct=0, minViol=[];
   peState.dishes.forEach(function(d){
@@ -6045,9 +6106,32 @@ function peQuickTotals(){
     distinct++; pieces += q; price += q*(Number(d.sell_price)||0);
     if(d.min_order && q < d.min_order) minViol.push(d.name+' (min '+d.min_order+')');
   });
+  // À la carte portions. A market-price or by-weight dish can be ON the menu
+  // but has no number to multiply, so it adds nothing to the total and is named
+  // instead — a quoted total must never quietly treat "no price" as zero.
+  var alcPortions=0, alcPrice=0, alcCount=0, alcNoPrice=[];
+  var alcLines = peQuickAlcLines();
+  alcLines.forEach(function(l){
+    alcCount++; alcPortions += l.qty;
+    var p = peAlcPrice(l.a);
+    if(p==null) alcNoPrice.push(l.a.name); else alcPrice += l.qty*p;
+  });
+  price += alcPrice;
+  // The 15-dish cap is a kitchen VARIETY limit, and an à la carte portion is
+  // another dish to prep — counting only canapés would let a 12-canapé menu
+  // with 6 à la carte dishes read as 12 and pass a cap it actually breaks.
+  distinct += alcCount;
   var guests = Number(peQuick.guests)||0;
   return { pieces:pieces, price:price, distinct:distinct, minViol:minViol, guests:guests,
+           alcPortions:alcPortions, alcPrice:alcPrice, alcCount:alcCount, alcNoPrice:alcNoPrice,
+           anything: (pieces>0 || alcPortions>0),
            perGuest: guests?price/guests:null, pcsPerGuest: guests?pieces/guests:null };
+}
+function peQuickSetAlc(id, val){
+  peQuickRead();
+  var n = Number(val)||0;
+  if(n>0) peQuick.alc[id] = n; else delete peQuick.alc[id];
+  renderMain();
 }
 function peRenderQuick(){
   var tt = peQuickTotals();
@@ -6057,6 +6141,25 @@ function peRenderQuick(){
     '<div style="grid-column:1/3"><div class="pe-lbl">Menu title</div><input class="pe-in" id="pe-q-title" value="'+peEsc(peQuick.title)+'" onchange="peQuickRead()"></div>'+
     '<div><div class="pe-lbl">Number of guests</div><input class="pe-in" id="pe-q-guests" type="number" value="'+peEsc(peQuick.guests)+'" onchange="peQuickRead();renderMain()"></div>'+
     '</div></div>';
+  // A quick menu is for counting canapés. The moment the guest wants courses —
+  // a set menu with a dish changed, a plated menu of her own — that is the
+  // customise builder, and it is one tap from here rather than a screen away.
+  if(peCanEdit()){
+    h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><b style="color:#400207">Or build a plated menu she can change</b>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 9px">Courses instead of pieces — start from a set menu and swap or add anything from the à la carte, or start from nothing. You set the price.</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<select class="pe-in" style="width:auto;max-width:100%" onchange="if(this.value)peCmStart(this.value,null)">'+
+          '<option value="">Start from a set menu…</option>'+
+          peSetMenusPickInc().map(function(m){
+            return '<option value="'+peSmEsc(m.key)+'">'+peEsc(m.name)+(m.price!=null?' — AED '+m.price+'/guest':'')+'</option>';
+          }).join('')+
+        '</select>'+
+        '<button class="pe-btn sec sm" onclick="peCmStart(null,null)">Start from nothing</button>'+
+        '<button class="pe-btn sec sm"'+(tt.anything?'':' disabled title="Add some dishes below first"')+' onclick="peCmFromQuick()">Turn what’s below into a menu she can edit</button>'+
+      '</div>'+
+      (peState.alacarteOk?'':'<div style="font-size:11px;color:#B00020;margin-top:8px">The à la carte isn’t loaded yet — run foh-events-alacarte.sql to swap dishes from it.</div>')+
+      '</div>';
+  }
   h += '<div class="pe-2col"><div>';
   peQuickGroups().forEach(function(g){
     var subP=0, subQ=0;
@@ -6079,9 +6182,42 @@ function peRenderQuick(){
     });
     h += '</div>';
   });
+  // The à la carte, by the portion, under the canapés — so one quick menu can
+  // mix canapés with dishes off the printed menu without leaving the screen.
+  if(peState.alacarteOk){
+    h += '<div class="pe-card" style="padding:10px 14px;border-color:rgba(201,168,76,0.5)">'+
+      '<b style="font-size:13px;color:#400207">À la carte</b>'+
+      '<div style="font-size:11px;color:#8B7355;margin-top:2px">By the portion, at menu price. Everything here prints on the menu and counts in the totals.</div></div>';
+    peAlcSections().forEach(function(s){
+      var rows = peAlcAll().filter(function(a){ return a.section===s; })
+        .sort(function(x,y){ return (x.sort_order||999)-(y.sort_order||999); });
+      if(!rows.length) return;
+      var subQ=0, subP=0;
+      rows.forEach(function(a){ var q=Number(peQuick.alc[a.id])||0; if(!q) return; subQ+=q; var p=peAlcPrice(a); if(p!=null) subP+=q*p; });
+      h += '<div class="pe-card" style="padding:10px 14px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:13px;color:#400207">'+peEsc(peAlcSecLabel(s))+'</b>'+
+        (subQ?'<span style="font-size:11px;color:#8A6A4F">'+subQ+' portion'+(subQ>1?'s':'')+(subP?' · AED '+peMoney(subP):'')+'</span>':'')+'</div>';
+      rows.forEach(function(a){
+        var q = Number(peQuick.alc[a.id])||0;
+        var p = peAlcPrice(a);
+        h += '<div class="pe-dishrow"><span><b style="font-weight:600">'+peEsc(a.name)+'</b>'+
+          ((a.allergens&&a.allergens.length)?' <span style="color:#A5876B;font-size:10px">('+a.allergens.join(')(')+')</span>':'')+
+          '<br><span style="font-size:11px;color:#8B7355">'+peEsc(peAlcPriceText(a))+
+          (a.description?' · '+peEsc(a.description):'')+'</span>'+
+          (q>0 && p==null?'<br><span style="font-size:10.5px;color:#B00020">no fixed price — it will be quoted on the night, so it adds nothing to the total below</span>':'')+
+          '</span>'+
+          '<span style="display:flex;align-items:center;gap:5px;flex-shrink:0">'+
+          '<input class="pe-in" style="width:62px;padding:4px 7px;text-align:center" type="number" min="0" placeholder="qty" value="'+(q||'')+'" onchange="peQuickSetAlc(\''+a.id+'\',this.value)">'+
+          (q&&p!=null?'<span style="font-size:11px;color:#6B4A33;min-width:56px;text-align:right">'+peMoney(q*p)+'</span>':'<span style="min-width:56px"></span>')+
+          '</span></div>';
+      });
+      h += '</div>';
+    });
+  }
   h += '</div><div><div class="pe-tot" style="position:sticky;top:10px">'+
     '<div class="pe-lbl" style="color:#8A6A4F">Live totals</div>'+
     '<div class="pe-tot-row"><span>Total pieces</span><b>'+tt.pieces+'</b></div>'+
+    (tt.alcPortions?'<div class="pe-tot-row"><span>À la carte portions</span><b>'+tt.alcPortions+' · AED '+peMoney(tt.alcPrice)+'</b></div>':'')+
     '<div class="pe-tot-row"><span>Total price</span><b>AED '+peMoney(tt.price)+'</b></div>'+
     '<div class="pe-tot-row" style="border-top:1px solid #DCC9B2;margin-top:4px;padding-top:7px"><span>Price / guest</span><b>'+(tt.perGuest!=null&&tt.guests?('AED '+peMoney(tt.perGuest)):'\u2014')+'</b></div>'+
     '<div class="pe-tot-row"><span>Different dishes on the menu</span><b>'+tt.distinct+'</b></div>';
@@ -6093,8 +6229,8 @@ function peRenderQuick(){
   }
   if(tt.minViol.length) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Below minimum order: '+peEsc(tt.minViol.join(', '))+'</div>';
   h += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">'+
-    '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.pieces?'':'disabled')+'>Print / PDF menu</button>'+
-    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.pieces?'':'disabled')+'>Save as event draft</button>':'')+
+    '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Print / PDF menu</button>'+
+    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Save as event draft</button>':'')+
     '</div></div></div></div>';
   return h+'</div>';
 }
@@ -6115,7 +6251,8 @@ function peQuickDishes(){
 function peQuickPrint(){
   peQuickRead();
   var dishes = peQuickDishes();
-  if(!dishes.length) return;
+  var alcLines = peQuickAlcLines();
+  if(!dishes.length && !alcLines.length) return;
   var tt = peQuickTotals();
   var groups = [{k:'Cold',n:'Cold'},{k:'Hot',n:'Hot'},{k:'Dessert',n:'Dolci'}];
   var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
@@ -6133,6 +6270,18 @@ function peQuickPrint(){
         (d.description?'<br><span class="d">'+peEsc(d.description)+'</span>':'')+'</div>';
     });
   });
+  // À la carte portions print under their own menu headings, after the
+  // canapés — the guest reads one document, not two.
+  peAlcSections().forEach(function(s){
+    var list = alcLines.filter(function(l){ return l.a.section===s; });
+    if(!list.length) return;
+    body += '<div class="sec">'+peEsc(peAlcSecLabel(s))+'</div>';
+    list.forEach(function(l){
+      var a = l.a;
+      body += '<div class="dish">'+peEsc(a.name)+((a.allergens||[]).length?' <span class="codes">('+(a.allergens||[]).join(')(')+')</span>':'')+
+        (a.description?'<br><span class="d">'+peEsc(a.description)+'</span>':'')+'</div>';
+    });
+  });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
     'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
     'D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
@@ -6142,12 +6291,20 @@ async function peQuickSave(){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   peQuickRead();
   var dishes = peQuickDishes();
-  if(!dishes.length) return;
+  var alcLines = peQuickAlcLines();
+  if(!dishes.length && !alcLines.length) return;
   var tt = peQuickTotals();
   var row = { venue_id:'robertos-difc', status:'draft', updated_by:peActor(),
               package_label:peQuick.title,
               guests: tt.guests||null,
               food_price_pp: (tt.perGuest!=null && tt.guests) ? Math.round(tt.perGuest*100)/100 : null,
+              // À la carte portions have no dish_id to live in event_items, so
+              // they travel in off_menu — the one field that already reaches
+              // EVERY kitchen document (#17). Their money is already in the
+              // price above, so the quote and the prep list agree.
+              off_menu: alcLines.length
+                ? alcLines.map(function(l){ return l.qty+'× '+l.a.name; }).join(', ')
+                : null,
               payment_terms:'50% deposit to confirm, balance on the day' };
   var r = await sb.from('events_desk').insert(row).select().single();
   if(r.error || !r.data){ peToast('Could not save \u2014 check connection', true); return; }
@@ -6157,10 +6314,19 @@ async function peQuickSave(){
     var q = Number(peQuick.qty[d.id])||0;
     return {event_id:r.data.id, dish_id:d.id, pcs_per_guest: g ? Math.round(q/g*100)/100 : q};
   });
-  var ir = await sb.from('event_items').insert(items).select();
-  if(!ir.error) peState.items[r.data.id] = ir.data||[];
-  sb.from('event_log').insert({event_id:r.data.id, action:'created', detail:'from quick menu', actor:peActor()});
-  peQuick.qty = {};
+  // A quick menu can now be à la carte only, in which case there is nothing to
+  // put in event_items — inserting an empty array is a pointless round trip
+  // that some clients treat as an error.
+  if(items.length){
+    var ir = await sb.from('event_items').insert(items).select();
+    if(!ir.error) peState.items[r.data.id] = ir.data||[];
+  } else {
+    peState.items[r.data.id] = [];
+  }
+  sb.from('event_log').insert({event_id:r.data.id, action:'created',
+    detail:('from quick menu'+(alcLines.length?' — including '+alcLines.length+' à la carte dish'+(alcLines.length>1?'es':''):'')).slice(0,400),
+    actor:peActor()});
+  peQuick.qty = {}; peQuick.alc = {};
   peToast('Saved as a draft event \u2014 add the client details when ready');
   peGo('event', r.data.id);
 }
