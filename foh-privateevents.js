@@ -1826,10 +1826,12 @@ function peRenderEvent(){
           (comp?' <span class="pe-pill" style="font-size:10px;background:#EAF0E4;color:#4A6B2E;border:1px solid #C6D6AE">on the house</span>':'')+
           ' <span style="color:#A5876B;font-size:10px">'+peEsc(peAllergenText(d.allergens))+'</span>'+
           ((d.allergens||[]).length||d.category==='Dessert'?'':' <span class="pe-pill pe-p-sent" style="font-size:10px">no allergens set</span>')+
-          '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+(d.tier?' · ':'')+'AED '+peMoney(d.sell_price)+'/pc · min '+(d.min_order||10)+' pcs</span>'+
+          '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+(d.tier?' · ':'')+'AED '+peMoney(d.sell_price)+' each · min '+(d.min_order||10)+' pieces</span>'+
           '<br><span style="font-size:11px;color:'+(minv?'#B00020':'#6B4A33')+'">'+
             (absPcs!=null?'× '+peEsc(e.guests)+' guests = '+absPcs+' pcs':'add the guest count for total pieces')+
-            ' · '+(comp?'<span style="color:#4A6B2E">with our compliments — not charged</span>':'<b>AED '+peMoney(lineTotal)+'</b>'+(absPcs!=null?'':'/guest'))+
+            // "the kitchen still prepares it" used to exist only as a hover tooltip,
+            // on a control that changes what the client pays. Say it on the screen.
+            ' · '+(comp?'<span style="color:#4A6B2E">with our compliments — not charged, the kitchen still prepares it</span>':'<b>AED '+peMoney(lineTotal)+'</b>'+(absPcs!=null?'':'/guest'))+
             (minv?' — below the minimum order of '+d.min_order+' pcs':'')+'</span></span>'+
           '<span style="display:flex;align-items:center;gap:5px;flex-shrink:0">'+
             (ce?'<label style="display:flex;flex-direction:column;align-items:center;line-height:1.1;cursor:pointer" title="Give this dish for free — the kitchen still prepares it">'+
@@ -1837,7 +1839,7 @@ function peRenderEvent(){
               '<span style="font-size:9px;color:#8B7355;margin-top:2px">on the<br>house</span></label>':'')+
             '<span style="display:flex;flex-direction:column;align-items:center;line-height:1.1">'+
               '<input class="pe-in" style="width:56px;padding:4px 6px;text-align:center'+(minv?';border-color:#B00020;color:#B00020':'')+'" type="number" step="0.5" min="0" value="'+it.pcs_per_guest+'" onchange="peSetPcs(\''+it.id+'\',this.value)"'+(ce?'':' disabled')+'>'+
-              '<span style="font-size:9.5px;color:#8B7355;margin-top:2px">pc / guest</span></span>'+
+              '<span style="font-size:9.5px;color:#8B7355;margin-top:2px">pieces / guest</span></span>'+
             (ce?'<span class="pe-x" onclick="peRemoveItem(\''+it.id+'\')">✕</span>':'')+'</span></div>';
       }).join('') : '<div style="font-size:12px;color:#8B7355;padding:6px 0">'+(ce?'No dishes yet — apply a package or add from the library.':'No dishes on this event yet.')+'</div>');
     if(ce) h += '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="pe-btn sec sm" onclick="peOpenDishPicker(\''+e.id+'\')">+ Add dish from library</button>'+
@@ -2824,11 +2826,11 @@ function peOpenDishPicker(eventId){
         '<span><b style="font-weight:600">'+peEsc(d.name)+'</b>'+
         ' <span style="color:#A5876B;font-size:10px">'+peEsc(peAllergenText(d.allergens))+'</span>'+
         (d.description?'<br><span style="color:#A5876B;font-size:10.5px">'+peEsc(d.description)+'</span>':'')+
-        '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+(d.tier?' · ':'')+'AED '+peMoney(d.sell_price)+'/pc · min '+(d.min_order||10)+' pcs</span></span>'+
+        '<br><span style="font-size:11px;color:#8B7355">'+peEsc(d.tier||'')+(d.tier?' · ':'')+'AED '+peMoney(d.sell_price)+' each · min '+(d.min_order||10)+' pieces</span></span>'+
         '<span style="display:flex;align-items:center;gap:5px;flex-shrink:0">'+
           '<span style="display:flex;flex-direction:column;align-items:center;line-height:1.1">'+
             '<input class="pe-in pe-dp-qty" style="width:56px;padding:4px 6px;text-align:center" type="number" step="0.5" min="0" value="1" data-price="'+(Number(d.sell_price)||0)+'" oninput="peDishPickerQty(this,'+g+')">'+
-            '<span style="font-size:9.5px;color:#8B7355;margin-top:2px">pc / guest</span></span>'+
+            '<span style="font-size:9.5px;color:#8B7355;margin-top:2px">pieces / guest</span></span>'+
           '<button class="pe-btn sm" onclick="peAddItemQty(this,\''+eventId+'\',\''+d.id+'\')">Add</button>'+
         '</span></div>'+
         '<div class="pe-dp-help" style="font-size:10.5px;color:#8A6A4F;text-align:right;margin:-3px 0 5px">'+absPcs+'AED '+peMoney(Number(d.sell_price)||0)+'/guest</div>'+
@@ -3108,7 +3110,10 @@ async function peFetchMenuChoices(id){
     (row.note ? '<br><b>Their note:</b> '+peEsc(row.note) : '')+
     (warn.length ? '<br><span style="color:#B00020">▲ '+warn.join(' · ')+'</span>' : '')+
     '<br><br>Applying replaces the numbers on this event'+(row.note?' and adds their note to the menu changes':'')+'.';
-  if(!(await peConfirm({title:'Use the guest’s numbers?', body:body, ok:'Apply to the event', cancel:'Not now'}))) return;
+  // `body` is escaped by peConfirm; this text is already built with peEsc around
+  // every guest-supplied value and carries its own <b>/<br> markup, so it belongs
+  // in `html`. Passing it as `body` printed the raw tags at her.
+  if(!(await peConfirm({title:'Use the guest’s numbers?', html:body, ok:'Apply to the event', cancel:'Not now'}))) return;
   if(!(await peConfirmSignedEdit(id, 'the menu'))){ renderMain(); return; }
   var sm = JSON.parse(JSON.stringify(e.set_menu));
   sm.choices = row.choices||{};
@@ -3234,7 +3239,12 @@ function peLogoImg(w){
          'font-family:Georgia,serif;font-size:22px;letter-spacing:7px;color:#410207;text-align:center">';
 }
 function peDocShell(title, inner){
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+peEsc(title)+'</title>'+
+  // Without this the brief, the proposal and the signed copy all render at 720px
+  // zoomed out on a phone. showBrief() rewrites the whole document, so the viewport
+  // meta on print-brief.html is thrown away — it has to live here.
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">'+
+  '<meta name="viewport" content="width=device-width, initial-scale=1">'+
+  '<title>'+peEsc(title)+'</title>'+
   '<style>@page{margin:18mm}body{font-family:Georgia,\'Times New Roman\',serif;color:#2C1810;margin:0;padding:24px;max-width:720px;margin:0 auto}'+
   /* bottom margin keeps the designer's clear space (~0.9x the logo height) */
   '.brand{text-align:center;margin:10px 0 24px}'+
@@ -3248,6 +3258,10 @@ function peDocShell(title, inner){
   'table{width:100%;border-collapse:collapse;font-size:12px}td{padding:6px 8px;border:1px solid #E3D5C2;vertical-align:top}'+
   'td.l{width:32%;color:#8B7355;font-size:10.5px;text-transform:uppercase;letter-spacing:1px}'+
   '.fs-h{background:#400207;color:#E8D9C7;text-align:center;padding:8px;font-size:13px;letter-spacing:2px}'+
+  // Phone only — never print. The kitchen table is three columns wide, so on a
+  // phone it has to be allowed to scroll on its own rather than push the page.
+  '@media screen and (max-width:600px){body{padding:14px}'+
+  'table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}'+
   '</style></head><body>'+inner+'</body></html>';
 }
 function pePrintHTML(html){
@@ -3460,11 +3474,20 @@ function peProposalSetMenuHTML(e){
     // Every menu we send names the dish, what it is in English, and its
     // allergens. The proposal printed the name alone.
     var dishLine = function(o){
-      // Same order as the printed menu: the menu's own text first.
+      // Same order as the printed menu: the menu's own text first, and the
+      // a la carte only fills a gap. Allergens come from the structured field
+      // where the menu has one, otherwise out of its own prose.
       var info = stored[o] ? null : peCmDishInfo(o, kind);
-      var codes = info ? peCmAlgCodes(info.allergens) : '';
-      var txt = stored[o] || (info && info.desc ? info.desc : '');
-      return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
+      var alg  = peAlgOf(c, o);
+      if(!alg.known && info && info.allergens && info.allergens.length){
+        alg = { known:true, list:info.allergens };
+      }
+      var txt = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
+      // On a document a guest reads, a dish nobody has recorded must say so.
+      var codes = alg.known
+        ? (alg.list.length ? '('+alg.list.join(')(')+')' : '')
+        : 'allergens not recorded — please ask us';
+      return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes)+'</span>':'')+
         (txt?'<br><span class="d">'+peEsc(txt)+'</span>':'')+'</div>';
     };
     if(c.choose){
@@ -3996,10 +4019,19 @@ function peAlcPicksHTML(){
 }
 async function peAlcLoadPicks(force){
   if(peState.alcPicksLoaded && !force) return;
-  peState.alcPicksLoaded = true;
   var r = await sb.from('event_menu_choices').select('*').eq('menu_key','alacarte').eq('applied', false)
     .order('created_at',{ascending:false}).limit(30);
-  if(!r.error){ peState.alcPicks = r.data||[]; renderMain(); }
+  // supabase-js does NOT throw — a failure comes back as r.error. This used to set
+  // the loaded flag BEFORE the query and had no else, so a failed read looked
+  // exactly like "no guest has replied yet", and the flag then blocked every retry
+  // for the rest of the session. Only mark it loaded once it actually worked.
+  if(r.error){
+    peToast('Could not check for guest picks — ' + String(r.error.message||'').slice(0,80), true);
+    return;
+  }
+  peState.alcPicksLoaded = true;
+  peState.alcPicks = r.data||[];
+  renderMain();
 }
 // "Done with it" clears the card — applied=true is the same flag the set-menu
 // choices already use, so nothing new had to be invented to track it.
@@ -4635,6 +4667,33 @@ function peCmDishInfo(name, courseKind){
 function peCmAlgCodes(al){
   return (al && al.length) ? ' (' + al.join(')(') + ')' : '';
 }
+// ── Set-menu allergens ──────────────────────────────────────────────────────
+// They used to live inside the description prose — "…cartoccio style (R)(S)" —
+// so nothing could cross-check them and they drifted permanently: the same
+// Tonno Battuto said egg on the canapé list and dairy on the Mare menu, and an
+// oven-baked seabass was flagged raw and shellfish on two menus at once.
+//
+// A course now carries a real field alongside the text:
+//     courses[].allg = { "Tonno Battuto": ["D","E","N","R"] }
+// Menus written before that still carry the codes in the prose, so both are
+// read and the structured field wins. That means this code is correct before
+// AND after the migration — there is no window where a menu renders wrong.
+var PE_ALG_RE = /\s*\(([A-Za-z]{1,3})\)/g;
+// known:false means nobody has recorded them. known:true with an empty list
+// means someone checked and there are none. Those must never look alike.
+function peAlgOf(c, dish){
+  if(c && c.allg && Object.prototype.hasOwnProperty.call(c.allg, dish)){
+    return { known:true, list:(c.allg[dish] || []) };
+  }
+  var t = (c && c.desc && c.desc[dish]) || '', out = [], m;
+  PE_ALG_RE.lastIndex = 0;
+  while((m = PE_ALG_RE.exec(t))) out.push(m[1].toUpperCase());
+  return { known: out.length > 0, list: out };
+}
+function peDescOf(c, dish){
+  var t = (c && c.desc && c.desc[dish]) || '';
+  return t.replace(PE_ALG_RE, '').trim();
+}
 // The desc map a course carries to the guest page and the documents, in the
 // shape they already read: { "Dish name": "what it is (D)(E)" }.
 // inherited = what the menu she started from says about that dish. It wins:
@@ -5104,7 +5163,7 @@ function peRenderDishLib(){
       '</div><div class="pe-grid3" style="margin-top:8px">'+
       '<div><div class="pe-lbl">Category</div><select class="pe-in" id="pe-d-category">'+['Vegetarian','Fish','Beef','Chicken','Dessert'].map(function(c){ return '<option'+(ed.category===c?' selected':'')+'>'+c+'</option>'; }).join('')+'</select></div>'+
       '<div><div class="pe-lbl">Served</div><select class="pe-in" id="pe-d-serve">'+['Cold','Hot','Dessert'].map(function(c){ return '<option'+(ed.serve===c?' selected':'')+'>'+c+'</option>'; }).join('')+'</select></div>'+
-      '<div><div class="pe-lbl">Min order (pcs)</div><input class="pe-in" id="pe-d-min_order" type="number" value="'+peEsc(ed.min_order!=null?ed.min_order:10)+'"></div>'+
+      '<div><div class="pe-lbl">Minimum order (pieces)</div><input class="pe-in" id="pe-d-min_order" type="number" value="'+peEsc(ed.min_order!=null?ed.min_order:10)+'"></div>'+
       '</div>'+
       '<div style="margin-top:8px"><div class="pe-lbl">Allergens</div>'+PE_ALL_CODES.map(function(c){
         return '<span class="pe-chip'+(alg.indexOf(c)>=0?' on':'')+'" data-code="'+c+'" onclick="this.classList.toggle(\'on\')">'+c+'</span>';
