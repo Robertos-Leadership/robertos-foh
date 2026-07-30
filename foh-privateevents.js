@@ -301,6 +301,20 @@ function peSendTo(field, sender){
   if(sender && l.indexOf(sender)<0) l.push(sender);
   return l;
 }
+// WhatsApp messages were signed "Valentina" whoever sent them, so a guest could get
+// a message from Katarina signed by someone else. Sign with whoever is actually
+// logged in; fall back to the desk if we somehow have no name.
+function peSignOff(){
+  var n = peSenderName();
+  return n ? String(n).split(' ')[0] : 'Roberto’s Events';
+}
+// Every client send also copies the sender and sets reply-to. The confirms used to
+// name only the client, so she had no way to know a second copy was going out.
+function peCopyLine(sender){
+  if(!sender) return '';
+  return '<br><br><span style="font-size:11.5px;color:#8B7355">A copy goes to you (<b>'+peEsc(sender)+
+    '</b>), and their reply comes back to you.</span>';
+}
 // Show / clear a small red message right under a facts-card input (el). Passing an
 // empty message removes it. Used so a bad email is flagged inline, not just a toast.
 function peInlineErr(el, msg){
@@ -811,7 +825,9 @@ async function peDismissMenuChoices(id){
 var PE_LOG_WORDS = {
   followup:'', email:'Email sent', status:'Status', edited:'Changed', created:'Created',
   signed:'Client signed the agreement', unsigned:'Signature voided',
-  whatsapp:'WhatsApp sent', client_link:'Guest link copied',
+  // "opened", not "sent" — WhatsApp opens with the message written and she still
+  // has to press send there, so the app can never know it actually went.
+  whatsapp:'WhatsApp opened', client_link:'Guest link copied',
   agreement_link:'Signing link copied', payment_link:'Payment link sent'
 };
 function peLogLine(l){
@@ -1598,7 +1614,7 @@ function peDaysSince(iso){ if(!iso) return null; var d = Math.floor((Date.now()-
 function peGuideReminder(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e) return;
-  if(e.contact_phone){ peWhatsApp(id); }
+  if(e.contact_phone){ peWhatsApp(id, 'remind'); }
   else if(e.contact_email){ peEmailAgreement(id); }
   else { peToast('Add a phone or email first', true); peGo('event', id); }
 }
@@ -3120,9 +3136,9 @@ function peWaMenuChoicesLink(id){
   if(digits.length <= 9) digits = '971'+digits;
   var m = peSetMenuByKey(e.set_menu.key);
   var msg = 'Ciao'+(e.contact_name?' '+e.contact_name.split(' ')[0]:'')+'! Here is the menu for your event at Roberto’s'+
-    (m?' — '+m.name:'')+'. Tap to see every dish and tell us your choices:\n'+peMenuChoicesUrl(e)+'\nGrazie — Valentina';
+    (m?' — '+m.name:'')+'. Tap to see every dish and tell us your choices:\n'+peMenuChoicesUrl(e)+'\nGrazie — '+peSignOff();
   window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(msg), '_blank');
-  sb.from('event_log').insert({event_id:id, action:'whatsapp', detail:'set-menu choices link → '+e.contact_phone, actor:peActor()});
+  sb.from('event_log').insert({event_id:id, action:'whatsapp', detail:'WhatsApp opened — set-menu choices link → '+e.contact_phone, actor:peActor()});
 }
 // Share ANY menu as a read-only page (no event needed) — WhatsApp opens with
 // the contact picker, so it works for any number.
@@ -3756,10 +3772,15 @@ async function peEmailProposal(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.contact_email) return;
   if(!(await peConfirmSend(e))) return;
-  if(!(await peConfirm({title:'Send the proposal?', html:'Send the branded proposal to <b>'+peEsc(e.contact_email)+'</b> now?', ok:'Send proposal', cancel:'Not yet'}))) return;
   // The sender is copied (her inbox record of exactly what the client got)
   // and set as reply-to, so the client's answer reaches a person.
   var sender = state.userEmail || 'vdetoni@robertos.ae';
+  // Say that the copy exists. The confirm used to name one recipient while the
+  // email quietly went to two.
+  if(!(await peConfirm({title:'Send the proposal?',
+    html:'Send the branded proposal to <b>'+peEsc(e.contact_email)+'</b> now?'+
+      peCopyLine(sender),
+    ok:'Send proposal', cancel:'Not yet'}))) return;
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
       to: peSendTo(e.contact_email, sender),
@@ -3778,18 +3799,28 @@ async function peEmailProposal(id){
     peToast('NOT sent \u2014 '+String(err&&err.message||err).slice(0,120), true);
   }
 }
-async function peWhatsApp(id){
-  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+// mode==='remind' is a FOLLOW-UP, not a first hello. The reminder button reused the
+// enquiry message, so a client who had already been sent everything got "Thank you
+// for your enquiry" all over again.
+async function peWhatsApp(id, mode){
+  if(!peCanEdit()){ peToast('View only \u2014 ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.contact_phone) return;
   if(!(await peConfirmSend(e))) return;
   var digits = String(e.contact_phone).replace(/[^0-9]/g,'');
   if(digits.length && digits[0]==='0') digits = '971'+digits.slice(1);
   if(digits.length <= 9) digits = '971'+digits;
-  var msg = 'Ciao'+(e.contact_name?' '+e.contact_name.split(' ')[0]:'')+'! Thank you for your enquiry with Roberto\u2019s'+
-    (e.event_date?' for '+peDLabel(e.event_date):'')+'. Here is your proposal and event agreement to review and sign at your convenience:\n'+
-    peAgreementUrl(e)+'\nIt will be our pleasure \u2014 Valentina';
+  var first = e.contact_name ? ' '+e.contact_name.split(' ')[0] : '';
+  var msg = mode==='remind'
+    ? 'Ciao'+first+'! Just following up on the proposal for your event with Roberto\u2019s'+
+      (e.event_date?' on '+peDLabel(e.event_date):'')+'. Here is the link again whenever you have a moment:\n'+
+      peAgreementUrl(e)+'\nAny questions at all, just reply here \u2014 '+peSignOff()
+    : 'Ciao'+first+'! Thank you for your enquiry with Roberto\u2019s'+
+      (e.event_date?' for '+peDLabel(e.event_date):'')+'. Here is your proposal and event agreement to review and sign at your convenience:\n'+
+      peAgreementUrl(e)+'\nIt will be our pleasure \u2014 '+peSignOff();
   window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(msg), '_blank');
-  sb.from('event_log').insert({event_id:id, action:'whatsapp', detail:'proposal + agreement link \u2192 '+e.contact_phone, actor:peActor()});
+  sb.from('event_log').insert({event_id:id, action:'whatsapp',
+    detail:'WhatsApp opened \u2014 '+(mode==='remind'?'reminder':'proposal + agreement link')+' \u2192 '+e.contact_phone,
+    actor:peActor()});
 }
 function peCopyClientLink(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
@@ -3823,8 +3854,8 @@ async function peEmailAgreement(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.contact_email) return;
   if(!(await peConfirmSend(e))) return;
-  if(!(await peConfirm({title:'Send proposal + agreement?', html:'Email the proposal + agreement link to <b>'+peEsc(e.contact_email)+'</b> now?<br>The guest reads the menu and terms on one page and signs electronically.', ok:'Send now', cancel:'Not yet'}))) return;
   var sender = state.userEmail || 'vdetoni@robertos.ae';
+  if(!(await peConfirm({title:'Send proposal + agreement?', html:'Email the proposal + agreement link to <b>'+peEsc(e.contact_email)+'</b> now?<br>The guest reads the menu and terms on one page and signs electronically.'+peCopyLine(sender), ok:'Send now', cancel:'Not yet'}))) return;
   var url = peAgreementUrl(e);
   var inner = '<div style="text-align:center;margin:24px 0 10px"><a href="'+url+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px">Read your proposal &amp; sign</a></div>'+
     '<p style="font-size:12px;color:#8B7355;text-align:center">The page shows your full proposal and the agreement on one page — signing takes under a minute.</p>';
@@ -3855,10 +3886,10 @@ async function peSendPaymentLink(id){
   if(!e.payment_link){ peScrollToCard('food'); peToast('Paste the Telr payment link on the Agreement card first', true); return; }
   if(!e.contact_email){ peScrollToField('contact_email','Add the client email to send the payment link'); return; }
   var dep = peDepositAmt(e);
-  if(!(await peConfirm({title:'Send the payment link?',
-      html:'Email the secure Telr payment link to <b>'+peEsc(e.contact_email)+'</b> to settle the <b>AED '+peMoney(dep)+'</b> deposit?<br><br>Marking the deposit as <b>paid</b> stays a manual step once the money lands.',
-      ok:'Send the link', cancel:'Not yet'}))) return;
   var sender = state.userEmail || 'vdetoni@robertos.ae';
+  if(!(await peConfirm({title:'Send the payment link?',
+      html:'Email the secure Telr payment link to <b>'+peEsc(e.contact_email)+'</b> to settle the <b>AED '+peMoney(dep)+'</b> deposit?<br><br>Marking the deposit as <b>paid</b> stays a manual step once the money lands.'+peCopyLine(sender),
+      ok:'Send the link', cancel:'Not yet'}))) return;
   var intro = 'Thank you for confirming your event with Roberto’s'+(e.event_date?' on '+peDLabel(e.event_date):'')+'. To secure your booking, please settle the deposit of AED '+peMoney(dep)+' using the secure link below.';
   var inner = '<div style="text-align:center;margin:24px 0 10px"><a href="'+peEsc(e.payment_link)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:12px 30px;border-radius:22px;text-decoration:none;font-size:13.5px;letter-spacing:1px">Pay the AED '+peMoney(dep)+' deposit</a></div>'+
     '<p style="font-size:12px;color:#8B7355;text-align:center">This opens Roberto’s secure card payment page. Your balance is settled on the day of the event.</p>';
@@ -5078,7 +5109,7 @@ function peSendMenuPackWa(){
     (note?'\n\n'+note:'')+
     '\n\nHere is everything for your occasion ('+peMpSummary(t)+'), on one page:\n'+
     peMenuPackUrl(t, name, noPrice)+
-    '\n\nIt will be our pleasure — Valentina';
+    '\n\nIt will be our pleasure — '+peSignOff();
   window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(msg), '_blank');
   // WhatsApp opens with the message written — she still presses send there, so
   // this never claims it has gone.
