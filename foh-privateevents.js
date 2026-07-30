@@ -3345,10 +3345,21 @@ function peProposalSetMenuHTML(e){
   var h = '';
   m.courses.forEach(function(c){
     h += '<div class="sec">'+peEsc(c.name)+'</div>';
+    var kind = peCmCourseKind(c), stored = c.desc||{};
+    // Every menu we send names the dish, what it is in English, and its
+    // allergens. The proposal printed the name alone.
+    var dishLine = function(o){
+      var info = peCmDishInfo(o, kind);
+      var codes = info ? peCmAlgCodes(info.allergens) : '';
+      var txt = (info && info.desc) ? info.desc : (stored[o]||'');
+      return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
+        (txt?'<br><span class="d">'+peEsc(txt)+'</span>':'')+'</div>';
+    };
     if(c.choose){
-      h += '<div class="dish"><span class="d">Choice of '+c.options.map(function(o){ return o; }).join(', ').replace(/, ([^,]*)$/,' or $1')+'</span></div>';
+      h += '<div class="dish"><span class="d">Each guest chooses one</span></div>'+
+        (c.options||[]).map(dishLine).join('');
     } else {
-      (c.items||[]).forEach(function(it){ h += '<div class="dish">'+it+'</div>'; });
+      (c.items||[]).forEach(function(it){ h += dishLine(it); });
     }
   });
   if(sm.note) h += '<div class="sec">Special arrangements</div><div class="dish">'+peEsc(sm.note)+'</div>';
@@ -4359,9 +4370,13 @@ function peCmCourseKind(course){
   // Dolci first: "Dolci" would otherwise never be reached, and a dessert course
   // offering secondi is exactly the mismatch this function exists to prevent.
   if(/dolci|dessert|dolce|pudding/.test(n)) return 'dolci';
-  if(/pasta|primo|primi|riso|risotto/.test(n)) return 'pasta';
+  // "Primi" is NOT the pasta course here. Terra, Mare and Fuoco all open with a
+  // Primi course of Burrata / Bresaola / Tonno Battuto and carry a separate
+  // Pasta course — so treating Primi as pasta made "Burrata" resolve to the
+  // gnocco with burrata in it, and printed that dish's description on a menu.
+  if(/antipast|starter|crudo|insalat|salad|primo|primi/.test(n)) return 'antipasti';
+  if(/pasta|riso|risotto/.test(n)) return 'pasta';
   if(/second|main|pesce|carne/.test(n)) return 'secondi';
-  if(/antipast|starter|crudo|insalat|salad/.test(n)) return 'antipasti';
   if(/contorn|side/.test(n)) return 'contorni';
   return '';
 }
@@ -4385,6 +4400,60 @@ function peCmEventOptions(){
       peEsc(e.client_name||'(no name)')+(e.event_date?' · '+peEsc(e.event_date):'')+(e.guests?' · '+e.guests+' guests':'')+'</option>';
   }).join('');
 }
+// Every menu we send carries the English description and the allergen codes.
+// A set menu's courses hold plain dish NAMES, so a customised menu had neither
+// — printing a legend of codes underneath dishes that carried none. This finds
+// the dish in the à la carte (or the canapé library) and gives back both, so
+// the documents can say what a dish is and what is in it.
+// Deliberately STRICTER than the price matcher. A supplement she can see and
+// overrule may be suggested on a loose match; a description is printed on a
+// guest's proposal in our name with nobody checking it, so it is only taken on
+// an exact name or a clean subset of words — "Burrata" → "Burrata Pugliese"
+// yes, "Ribeye di Angus" → "Costata di Angus" no. Better a bare dish name than
+// the wrong dish described.
+function peCmDishInfo(name, courseKind){
+  var n = String(name||'').trim();
+  if(!n) return null;
+  var want = peCmTokens(n);
+  var cands = peAlcAll().filter(function(a){
+    if(a.name.toLowerCase()===n.toLowerCase()) return true;
+    if(!want.length) return false;
+    var got = peCmTokens(a.name);
+    if(!got.length) return false;
+    var shared = want.filter(function(w){ return got.indexOf(w)>=0; });
+    return shared.length===want.length || shared.length===got.length;
+  });
+  // Two dishes can legitimately share a name (Branzino the carpaccio and
+  // Branzino the secondo) — the course decides which description is right.
+  var pool = cands.filter(function(a){ return courseKind && a.course===courseKind; });
+  if(!pool.length) pool = cands;
+  // Then the CLOSEST name wins, not the first one found. "Burrata" belongs to
+  // "Burrata Pugliese", not to "Gnocco all'nduja, Peperone Dolce e Burrata"
+  // — both contain the word, only one is the dish.
+  pool = pool.slice().sort(function(a,b){ return peCmTokens(a.name).length - peCmTokens(b.name).length; });
+  var hit = pool[0];
+  if(hit) return { desc:(hit.description||''), allergens:(hit.allergens||[]) };
+  var d = (peState.dishes||[]).filter(function(x){ return String(x.name||'').toLowerCase()===n.toLowerCase(); })[0];
+  if(d) return { desc:(d.description||''), allergens:(d.allergens||[]) };
+  return null;
+}
+function peCmAlgCodes(al){
+  return (al && al.length) ? ' (' + al.join(')(') + ')' : '';
+}
+// The desc map a course carries to the guest page and the documents, in the
+// shape they already read: { "Dish name": "what it is (D)(E)" }.
+function peCmCourseDesc(courseName, names){
+  var kind = peCmCourseKind({name:courseName});
+  var out = {};
+  (names||[]).forEach(function(n){
+    var info = peCmDishInfo(n, kind);
+    if(!info) return;
+    var s = (info.desc||'') + peCmAlgCodes(info.allergens);
+    s = s.trim();
+    if(s) out[n] = s;
+  });
+  return out;
+}
 // ── what she can do with a menu she has built ────────────────────────────────
 // Open it exactly as the guest will see it. "Check the PDF" for a customised
 // menu means this page — there is no designed PDF for a menu invented today.
@@ -4400,8 +4469,15 @@ function peCmPrintMenu(key){
     (m.price!=null ? '<div class="sub">AED '+peMoney(m.price)+' / person</div>' : '');
   (m.courses||[]).forEach(function(c){
     body += '<div class="sec">'+peEsc(c.name)+(c.choose?' — each guest chooses one':'')+'</div>';
+    var stored = c.desc||{};
     ((c.choose ? c.options : c.items)||[]).forEach(function(o){
-      body += '<div class="dish">'+peEsc(o)+'</div>';
+      // Codes after the name, description underneath — the house layout, and
+      // the same shape peQuickPrint uses for canapés.
+      var info = peCmDishInfo(o, peCmCourseKind(c));
+      var codes = info ? peCmAlgCodes(info.allergens) : '';
+      var line = info && info.desc ? info.desc : (stored[o]||'');
+      body += '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes.trim())+'</span>':'')+
+        (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
     });
   });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
@@ -4452,8 +4528,14 @@ async function peCmSave(){
     var courses = cm.courses.map(function(c){
       var names = c.lines.map(function(l){ return String(l.name||'').trim(); }).filter(Boolean);
       if(!names.length) return null;
-      return c.choose ? { name:(c.name||'Choice'), choose:1, options:names }
-                      : { name:(c.name||'Course'), items:names };
+      var out = c.choose ? { name:(c.name||'Choice'), choose:1, options:names }
+                         : { name:(c.name||'Course'), items:names };
+      // The description + allergen codes travel WITH the menu, in the shape
+      // client-setmenu.html already renders — so the guest page shows them
+      // without having to look every dish up again.
+      var desc = peCmCourseDesc(out.name, names);
+      if(Object.keys(desc).length) out.desc = desc;
+      return out;
     }).filter(Boolean);
     var key = 'custom-'+String(cm.basedOn||'menu')+'-'+Math.random().toString(36).slice(2,8);
     var row = {
@@ -4546,15 +4628,17 @@ function peMenuPackEmailForm(){
 // What Valentina has ticked, in the order the screen shows them — read once and
 // used by both doors, so email and WhatsApp can never disagree about what's sent.
 function peMpTicked(){
-  var food = [], bev = [];
+  var food = [], bev = [], alc = [];
   document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){
-    (el.getAttribute('data-kind')==='food' ? food : bev).push(el.getAttribute('data-key'));
+    var k = el.getAttribute('data-kind');
+    (k==='food' ? food : k==='alc' ? alc : bev).push(el.getAttribute('data-key'));
   });
-  return { food:food, bev:bev };
+  return { food:food, bev:bev, alc:alc };
 }
 function peMpSummary(t){
   var parts = [];
   if(t.food.length) parts.push(t.food.length+' set menu'+(t.food.length>1?'s':''));
+  if((t.alc||[]).length) parts.push(t.alc.length+' à la carte dish'+(t.alc.length>1?'es':''));
   if(t.bev.length) parts.push(t.bev.length+' beverage package'+(t.bev.length>1?'s':''));
   return parts.join(' + ');
 }
@@ -4563,10 +4647,23 @@ function peMpSummary(t){
 function peMenuPackUrl(t, name, noPrice){
   var p = [];
   if(t.food.length) p.push('food='+t.food.map(encodeURIComponent).join(','));
+  if((t.alc||[]).length) p.push('alc='+t.alc.map(encodeURIComponent).join(','));
   if(t.bev.length)  p.push('bev='+t.bev.map(encodeURIComponent).join(','));
   if(name) p.push('n='+encodeURIComponent(name));
   if(noPrice) p.push('np=1');
+  // The guest can tick the à la carte dishes they'd like and send them back.
+  // 'pick' carries the reply address: an event's own token when she sent it
+  // from a booking, so the reply lands on that booking; otherwise a fresh one.
+  if((t.alc||[]).length) p.push('pick='+encodeURIComponent(peMpPickToken()));
   return peBaseUrl()+'client-menus.html?'+p.join('&');
+}
+// One reply token per send. Uses the booking's own token when there is one, so
+// the guest's picks arrive against that event rather than floating free.
+function peMpPickToken(){
+  var e = peState.currentId ? peEvById(peState.currentId) : null;
+  if(e && e.client_token) return e.client_token;
+  if(!peState.mpToken) peState.mpToken = 'alc'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
+  return peState.mpToken;
 }
 // A UAE mobile typed the way people actually type it (050…, 00971…, +971…) all
 // reach the same number. Returns '' when it can't be one.
