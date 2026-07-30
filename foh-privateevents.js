@@ -3974,7 +3974,12 @@ function peCmSwap(ci, li, alcId){
   l.price = inPrice;
   l.diff = (inPrice!=null && outPrice!=null) ? Math.max(0, inPrice-outPrice) : null;
   l.forGuests = null;
-  l.supplement = l.diff!=null ? l.diff : 0;
+  // A swap does NOT move the price. Valentina asked for this explicitly: a
+  // guest on the Mare menu who swaps a dish stays on AED 440 unless SHE decides
+  // otherwise. The à la carte difference is worked out and offered — one tap to
+  // apply it — but never imposed, because the price is a commercial decision
+  // and the app does not get to make it.
+  l.supplement = 0;
   l.suggested = (l.diff!=null);
   // Name what the difference was worked out against, so she can sanity-check
   // the supplement instead of trusting it.
@@ -3986,13 +3991,27 @@ function peCmSwap(ci, li, alcId){
 // 4 of 20 guests, charging all 20 the full AED 327 difference overcharges the
 // bill by a factor of five. She tells the app how many take it and the app does
 // the division — she never does the arithmetic herself.
+// Take the offered difference (or drop it again). Nothing else in the builder
+// writes the supplement on its own.
+function peCmApplyDiff(ci, li, on){
+  var cm = peState.cm;
+  var l = cm && cm.courses[ci] && cm.courses[ci].lines[li];
+  if(!l || l.diff==null) return;
+  if(!on){ l.supplement = 0; l.forGuests = null; }
+  else l.supplement = (l.forGuests!=null && cm.guests)
+    ? Math.round(l.diff * l.forGuests / Number(cm.guests))
+    : l.diff;
+  renderMain();
+}
 function peCmForGuests(ci, li, v){
   var cm = peState.cm;
   var l = cm && cm.courses[ci] && cm.courses[ci].lines[li];
   if(!l) return;
   var n = (v===''||v==null) ? null : Number(v);
   l.forGuests = n;
-  if(l.diff!=null){
+  // Only re-divides a supplement she has already chosen to charge. If the swap
+  // is free of charge it stays free of charge.
+  if(l.diff!=null && Number(l.supplement)>0){
     l.supplement = (n!=null && cm.guests)
       ? Math.round(l.diff * n / Number(cm.guests))
       : l.diff;
@@ -4003,8 +4022,10 @@ function peCmAddDish(ci, alcId){
   var c = peState.cm && peState.cm.courses[ci];
   var a = peAlcById(alcId);
   if(!c || !a) return;
+  // Same rule as a swap: adding a dish does not move the price by itself. Its
+  // à la carte price is offered as the supplement, one tap away.
   c.lines.push({ name:a.name, from:'alacarte', price:peAlcPrice(a), alcId:a.id,
-                 supplement:(peAlcPrice(a)!=null?peAlcPrice(a):0), out:null, added:true,
+                 supplement:0, diff:peAlcPrice(a), forGuests:null, out:null, added:true,
                  suggested:(peAlcPrice(a)!=null) });
   renderMain();
 }
@@ -4174,10 +4195,22 @@ function peRenderCustomise(){
             '<br><span style="font-size:11px;color:'+(l.price==null?'#B00020':'#6B4A33')+'">'+
               (l.price==null
                 ? 'this dish has no fixed price — set the supplement yourself'
-                : (l.from==='canape' ? 'AED '+peMoney(l.price)+' per piece' : 'à la carte AED '+peMoney(l.price))+
-                  (l.suggested
-                    ? ' · supplement is the difference against '+peEsc(l.outPricedAs||'the dish it replaced')
-                    : ' · nothing to compare it to — set the supplement yourself'))+'</span>'
+                : (l.from==='canape' ? 'AED '+peMoney(l.price)+' per piece' : 'à la carte AED '+peMoney(l.price)))+'</span>'+
+            // The offer. Charging nothing is the default and is stated as a
+            // choice, not left as an empty box she has to interpret.
+            (l.diff!=null
+              ? '<br><span style="font-size:11px;color:#6B4A33">'+
+                (Number(l.supplement)>0
+                  ? 'Charging <b>AED '+peMoney(l.supplement)+' / guest</b> for this'+
+                    ' · <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peCmApplyDiff('+ci+','+li+',false)">no charge instead</span>'
+                  : 'No change to the price'+
+                    (l.diff>0
+                      ? ' · the à la carte difference'+(l.outPricedAs?' against '+peEsc(l.outPricedAs):'')+' is AED '+peMoney(l.diff)+
+                        ' — <span style="color:#400207;text-decoration:underline;cursor:pointer" onclick="peCmApplyDiff('+ci+','+li+',true)">charge it</span>'
+                      : ' · this dish is not dearer than the one it replaces'))+'</span>'
+              : (l.price!=null && l.from!=='canape'
+                  ? '<br><span style="font-size:11px;color:#6B4A33">No change to the price — nothing to compare it against, so type a supplement if you want one.</span>'
+                  : ''))
           : '<input class="pe-in" style="width:100%;max-width:320px" value="'+peEsc(l.name)+'" placeholder="Dish name" oninput="peCmLineName('+ci+','+li+',this.value)">'+
             '<br><span style="font-size:11px;color:#8B7355">from the set menu — no supplement</span>')+
         '<div style="margin-top:6px"><select class="pe-in" style="width:auto;max-width:100%;font-size:11.5px" onchange="peCmSwap('+ci+','+li+',this.value);this.selectedIndex=0">'+
@@ -4186,7 +4219,7 @@ function peRenderCustomise(){
         '</select></div>'+
         // On a "guests choose one" course the supplement still lands on every
         // guest's price, so she is offered the division instead of doing it.
-        (c.choose && isAlc && l.diff!=null
+        (c.choose && isAlc && l.diff!=null && Number(l.supplement)>0
           ? '<div style="margin-top:6px;font-size:11px;color:#6B4A33">Taken by '+
             '<input class="pe-in" style="width:56px;padding:3px 5px;text-align:center;display:inline-block" type="number" min="0"'+
               (cm.guests?'':' disabled title="Add the guest count above first"')+
