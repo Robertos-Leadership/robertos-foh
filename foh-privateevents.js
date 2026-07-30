@@ -340,6 +340,14 @@ function peDishById(id){ for(var i=0;i<peState.dishes.length;i++) if(peState.dis
 function peBevById(id){ for(var i=0;i<peState.bevs.length;i++) if(peState.bevs[i].id===id) return peState.bevs[i]; return null; }
 function peEvById(id){ for(var i=0;i<peState.events.length;i++) if(peState.events[i].id===id) return peState.events[i]; return null; }
 function peDLabel(ds){ if(!ds) return '—'; var d=new Date(String(ds).slice(0,10)+'T12:00:00'); return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+// A timestamp a person can read. "2026-07-30 14:22" is a database value, not
+// something to put in front of anyone.
+function peWhenLabel(ts){
+  if(!ts) return '';
+  var d = new Date(ts); if(isNaN(d)) return '';
+  return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+
+         ' · '+d.toLocaleTimeString('en-GB',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase();
+}
 
 // ── hospitality time slots ───────────────────────────────────────────────────
 // Times in hospitality land on :00 / :15 / :30 / :45 — never 8:31. A slot picker
@@ -599,11 +607,15 @@ function peScrollTop(){
   '.pe-side{width:168px;flex-shrink:0;display:flex;flex-direction:column;gap:5px}'+
   '.pe-side .pe-btn{width:100%;box-sizing:border-box;text-align:center}'+
   '.pe-sdiv{border-top:1px solid rgba(107,31,42,0.15);margin:9px 6px}'+
+  // Sidebar group labels. A class, not an inline style, so the mobile rule
+  // below can hide them -- on a phone the sidebar becomes a row of pills and
+  // these headings were left stranded between them.
+  '.pe-slbl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#A88930;margin:9px 6px 3px}'+
   '.pe-snav{font-size:12.5px;padding:8px 12px;border-radius:8px;border:1px solid var(--vino);text-align:center;color:var(--vino);cursor:pointer}'+
   '.pe-snav:hover{background:rgba(107,31,42,0.07)}'+
   '.pe-snav.on{background:var(--vino);border-color:var(--vino);color:var(--cream);font-weight:600}'+
   '.pe-main{flex:1;min-width:0}'+
-  '@media(max-width:820px){.pe-shell{display:block}.pe-side{width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;margin-bottom:12px}.pe-side .pe-btn{width:auto}.pe-sdiv{display:none}.pe-snav{border:1px solid rgba(107,31,42,0.3);border-radius:14px;padding:6px 14px;font-size:12px}.pe-snav.on{border-color:var(--vino)}}'+
+  '@media(max-width:820px){.pe-shell{display:block}.pe-side{width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;margin-bottom:12px}.pe-side .pe-btn{width:auto}.pe-sdiv{display:none}.pe-slbl{display:none}.pe-snav{border:1px solid rgba(107,31,42,0.3);border-radius:14px;padding:6px 14px;font-size:12px}.pe-snav.on{border-color:var(--vino)}}'+
   '.pe-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}'+
   '.pe-title{font-family:\'Playfair Display\',serif;font-size:22px;color:var(--vino-dark)}'+
   '.pe-tabs{display:flex;gap:6px;flex-wrap:wrap}'+
@@ -704,7 +716,6 @@ function renderPrivateEvents(){
 function peHeader(active){
   var mine = [['list','Events'],['calendar','Calendar'],['report','Monthly report']];
   var right = [['chef','Chef corner'],['bev','Beverage corner']];
-  var secLbl = 'font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#A88930;margin:9px 6px 3px';
   var snav = function(k, label){ return '<span class="pe-snav'+(active===k?' on':'')+'" onclick="peGo(\''+k+'\')">'+label+'</span>'; };
   return '<div class="pe-wrap">'+
     '<div class="pe-kbar">'+
@@ -715,9 +726,9 @@ function peHeader(active){
     '<div class="pe-shell">'+
     '<div class="pe-side">'+
       (peCanEdit() ? '<button class="pe-btn pe-primary" onclick="peStartGuide()">+ New event</button>' : '')+
-      '<div style="'+secLbl+'">My events</div>'+
+      '<div class="pe-slbl">My events</div>'+
       mine.map(function(t){ return snav(t[0], t[1]); }).join('')+
-      '<div style="'+secLbl+'">Tools</div>'+
+      '<div class="pe-slbl">Tools</div>'+
       '<span class="pe-snav" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</span>'+
       '<span class="pe-snav'+(active==='wizard'?' on':'')+'" onclick="peWizReset();peGo(\'wizard\')">New quote from a budget</span>'+
       // Stays "Guest link" — Valentina uses this every day and renaming it mid-
@@ -3886,7 +3897,7 @@ function peAlcPicksHTML(){
       var c = p.choices||{};
       var ev = (peState.events||[]).filter(function(e){ return e.client_token===p.token; })[0];
       return '<div class="pe-dishrow"><span><b style="color:#400207">'+peEsc((c.guest||(ev&&ev.client_name)||'A guest'))+'</b>'+
-        ' <span style="font-size:11px;color:#8B7355">'+peEsc(String(p.created_at||'').slice(0,16).replace('T',' '))+'</span>'+
+        ' <span style="font-size:11px;color:#8B7355">'+peEsc(peWhenLabel(p.created_at))+'</span>'+
         '<br><span style="font-size:12px;color:#6B4A33">'+peEsc((c.dishes||[]).join(' · '))+'</span>'+
         (p.note?'<br><span style="font-size:11.5px;color:#B00020">“'+peEsc(p.note)+'”</span>':'')+
         '</span>'+
