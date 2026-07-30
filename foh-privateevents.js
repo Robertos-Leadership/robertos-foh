@@ -3875,7 +3875,10 @@ function peCmStart(basedOnKey, eventId){
   };
   if(!peState.cm.courses.length) peCmAddCourse(true);
   peState.packsTab = 'custom';
-  renderMain();
+  // peGo, not renderMain: this is called from the Quick menu and from an
+  // event's Food card, and setting the tab without changing the VIEW just
+  // re-drew the screen she was already on.
+  peGo('packs');
 }
 // Carry a quick menu into the builder: the canapés she has already counted
 // become courses grouped the way the kitchen works (cold, hot, dolci), the
