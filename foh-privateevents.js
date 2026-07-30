@@ -720,12 +720,10 @@ function peHeader(active){
       '<div style="'+secLbl+'">Tools</div>'+
       '<span class="pe-snav" onclick="peQuick.qty={};peGo(\'quick\')">Quick menu</span>'+
       '<span class="pe-snav'+(active==='wizard'?' on':'')+'" onclick="peWizReset();peGo(\'wizard\')">New quote from a budget</span>'+
-      // "Guest link" used to copy the standing CANAPÉ link with no choice and
-      // no explanation, so there was no way to send a set menu or the à la
-      // carte from here — and no sign that those existed. It now opens the one
-      // screen where she picks what to send; the standing canapé link is a card
-      // on that screen, so nothing was taken away.
-      '<span class="pe-snav'+(active==='packs'?' on':'')+'" onclick="peGo(\'packs\')">Send a menu to a guest</span>'+
+      // Stays "Guest link" — Valentina uses this every day and renaming it mid-
+      // flow cost her more than the missing option did. Same name, same place;
+      // it just asks WHICH link now. Two choices, nothing else.
+      '<span class="pe-snav" onclick="peGuestLinkChoose()">Guest link</span>'+
       snav('packs','Menu packages')+
     '</div>'+
     '<div class="pe-main">';
@@ -3731,12 +3729,8 @@ function peRenderPacksView(){
   if(tab==='alacarte'){ h += peRenderAlaCarte(); return h+PE_FOOT; }
   if(tab==='custom'){ h += peRenderCustomise(); return h+PE_FOOT; }
   h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Tick anything below — a set menu, dishes from the à la carte, beverage packages, or a mix — and the guest receives it all in ONE branded email, or one WhatsApp with one link.</div>';
-  // The standing canapé link lives here now, next to everything else she can
-  // send, instead of being a nav item that copied it with no choice.
-  h += '<div class="pe-card" style="border-color:rgba(201,168,76,0.5)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-    '<span><b style="color:#400207">The standing canapé link</b>'+
-    '<div style="font-size:11px;color:#8B7355;margin-top:2px">One fixed link, no booking needed: any guest picks canapés and it arrives here as a new draft. Nothing to tick.</div></span>'+
-    '<button class="pe-btn sec sm" onclick="peCopyGuestLink()">Copy the link</button></div></div>';
+  // The canapé link stays where she has always found it — on Guest link. No
+  // second copy of it here; one thing in one place.
   h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Food packages — the set menus</b>'+peSelLinks('food')+'</div>'+
     '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">Open any menu to see the designed PDF — the email carries a button to each ticked menu.</div>'+
     peSetMenusPickInc().map(function(m){
@@ -6777,6 +6771,33 @@ async function peQuickWhatsApp(){
 
 // the standing guest link: full canape selection, no event needed — a guest
 // enquiry from it arrives as a new draft with the selection attached
+// Guest link, unchanged in name and place. The only new thing is the question:
+// the canapé link she has always sent, or the à la carte. Two buttons, no third
+// option, no new screen to learn.
+function peGuestLinkChoose(){
+  var bg = document.createElement('div'); bg.className='pe-modal-bg';
+  var close = function(){ bg.remove(); };
+  bg.addEventListener('click', function(ev){ if(ev.target===bg) close(); });
+  var m = document.createElement('div'); m.className='pe-modal'; m.style.maxWidth='420px';
+  m.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+    '<b style="color:#400207">Guest link</b><span class="pe-x">✕</span></div>'+
+    '<div style="font-size:12.5px;color:#6B4A33;margin:6px 0 14px;line-height:1.55">Which link would you like to send?</div>'+
+    '<div style="display:flex;flex-direction:column;gap:9px">'+
+      '<button class="pe-btn" data-g="canape" style="text-align:left">Canapé selection'+
+        '<div style="font-size:11px;font-weight:normal;opacity:.85;margin-top:2px">The usual link — the guest picks canapés and it arrives here as a new draft.</div></button>'+
+      '<button class="pe-btn sec" data-g="alc" style="text-align:left">À la carte'+
+        '<div style="font-size:11px;margin-top:2px;color:#8B7355">Choose the dishes to show, with or without prices — the guest ticks what they would like.</div></button>'+
+    '</div>';
+  m.querySelector('.pe-x').addEventListener('click', close);
+  m.querySelector('[data-g="canape"]').addEventListener('click', function(){ close(); peCopyGuestLink(); });
+  m.querySelector('[data-g="alc"]').addEventListener('click', function(){
+    close();
+    peState.packsTab = 'menus';
+    peGo('packs');
+    peToast('Tick the à la carte dishes to show, then send by email or WhatsApp');
+  });
+  bg.appendChild(m); document.body.appendChild(bg);
+}
 function peCopyGuestLink(){
   var base = location.origin + location.pathname.replace(/[^\/]*$/, '');
   var url = base + 'client-event.html';
