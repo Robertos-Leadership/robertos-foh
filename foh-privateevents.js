@@ -6784,19 +6784,39 @@ function peGuestLinkChoose(){
     '<div style="font-size:12.5px;color:#6B4A33;margin:6px 0 14px;line-height:1.55">Which link would you like to send?</div>'+
     '<div style="display:flex;flex-direction:column;gap:9px">'+
       '<button class="pe-btn" data-g="canape" style="text-align:left">Canapé selection'+
-        '<div style="font-size:11px;font-weight:normal;opacity:.85;margin-top:2px">The usual link — the guest picks canapés and it arrives here as a new draft.</div></button>'+
-      '<button class="pe-btn sec" data-g="alc" style="text-align:left">À la carte'+
-        '<div style="font-size:11px;margin-top:2px;color:#8B7355">Choose the dishes to show, with or without prices — the guest ticks what they would like.</div></button>'+
-    '</div>';
+        '<div style="font-size:11px;font-weight:normal;opacity:.85;margin-top:2px">The guest picks canapés — it arrives here as a new draft.</div></button>'+
+      '<button class="pe-btn sec" data-g="alc" style="text-align:left">À la carte — with prices'+
+        '<div style="font-size:11px;margin-top:2px;color:#8B7355">The whole menu, prices shown. The guest ticks what they would like.</div></button>'+
+      '<button class="pe-btn sec" data-g="alcnp" style="text-align:left">À la carte — without prices'+
+        '<div style="font-size:11px;margin-top:2px;color:#8B7355">The same, with no prices — for a minimum-spend guest.</div></button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8B7355;margin-top:12px;text-align:center">'+
+      '<span style="text-decoration:underline;cursor:pointer" data-g="pick">…or pick only certain dishes</span></div>';
   m.querySelector('.pe-x').addEventListener('click', close);
   m.querySelector('[data-g="canape"]').addEventListener('click', function(){ close(); peCopyGuestLink(); });
-  m.querySelector('[data-g="alc"]').addEventListener('click', function(){
+  // Both à la carte buttons behave exactly like the canapé one: copy, paste,
+  // done. No screen, no form, no ticking — that was the whole complaint.
+  m.querySelector('[data-g="alc"]').addEventListener('click', function(){ close(); peCopyAlaCarteLink(false); });
+  m.querySelector('[data-g="alcnp"]').addEventListener('click', function(){ close(); peCopyAlaCarteLink(true); });
+  // Narrowing it down stays possible — it is just no longer compulsory.
+  m.querySelector('[data-g="pick"]').addEventListener('click', function(){
     close();
     peState.packsTab = 'menus';
     peGo('packs');
-    peToast('Tick the à la carte dishes to show, then send by email or WhatsApp');
+    peToast('Tick the dishes you want to show, then send by email or WhatsApp');
   });
   bg.appendChild(m); document.body.appendChild(bg);
+}
+// The à la carte link, copied the same way the canapé one is: one click, in the
+// clipboard, paste it into WhatsApp. alc=all keeps the URL short instead of
+// carrying fifty-five ids, and 'pick' is how the guest's ticks find their way
+// back to her.
+function peCopyAlaCarteLink(noPrice){
+  var url = peBaseUrl()+'client-menus.html?alc=all'+(noPrice?'&np=1':'')+
+            '&pick='+encodeURIComponent(peMpPickToken());
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){
+    peToast('À la carte link copied'+(noPrice?' (no prices)':'')+' — paste it to the guest; what they tick comes back to you');
+  }).catch(function(){ prompt('Copy this link:', url); });
 }
 function peCopyGuestLink(){
   var base = location.origin + location.pathname.replace(/[^\/]*$/, '');

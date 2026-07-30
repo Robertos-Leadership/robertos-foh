@@ -46,6 +46,9 @@ var who      = (q.get('n')||'').slice(0, 40).trim();
 // proposal / contract, not on this page.
 var noPrice  = q.get('np')==='1';
 // À la carte dishes Valentina ticked, and the token their picks come back on.
+// alc=all is the whole à la carte — one short link Valentina can copy and
+// paste, instead of a URL carrying fifty-five ids.
+var alcAll   = (q.get('alc')||'') === 'all';
 var alcIds   = clean(q.get('alc'), /^[0-9a-f-]{36}$/i);
 var pickTok  = (q.get('pick')||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,64);
 var picked   = {};
@@ -112,7 +115,7 @@ async function get(path){
 }
 
 async function load(){
-  if(!foodKeys.length && !bevIds.length && !alcIds.length){
+  if(!foodKeys.length && !bevIds.length && !alcIds.length && !alcAll){
     return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
   }
   // Fetch beverage packages asking for the pdf column, but fall back to the older
@@ -129,7 +132,9 @@ async function load(){
       // included. Our cost per guest lives on the base table and never leaves it.
       foodKeys.length ? get('event_set_menus?key='+inList(foodKeys)+'&active=is.true&select=key,name,price_pp,line,pdf') : [],
       getBevs(),
-      alcIds.length ? get('event_alacarte?id='+inList(alcIds)+'&active=is.true&select=id,section,name,description,price,unit,tiers,market_price,allergens,sort_order') : []
+      (alcAll || alcIds.length)
+        ? get('event_alacarte?'+(alcAll ? '' : 'id='+inList(alcIds)+'&')+'active=is.true&select=id,section,name,description,price,unit,tiers,market_price,allergens,sort_order&order=sort_order')
+        : []
     ]);
     render(res[0]||[], res[1]||[], res[2]||[]);
   }catch(e){
