@@ -42,7 +42,11 @@ var PE_TARGETS = {
 // alc  \u2014 \u00e0 la carte, by the portion (event_alacarte). Kept in its own map so
 //        nothing that already reads peQuick.qty can be confused by an id from
 //        a different table.
-var peQuick = { qty:{}, alc:{}, title:'Canap\u00e9 selection', guests:'40' };
+// savedId/savedToken \u2014 set once this quick menu has been saved as a draft
+// event. The selections are deliberately NOT cleared on save: Valentina's next
+// move is to print it or WhatsApp it, and clearing the screen took that away.
+var peQuick = { qty:{}, alc:{}, title:'Canap\u00e9 selection', guests:'40',
+                savedId:null, savedToken:null, sharedKey:null };
 
 var PE_STATUS = [
   {k:'draft',     n:'Draft',          pill:'pe-p-draft'},
@@ -3904,9 +3908,10 @@ function peCmStart(basedOnKey, eventId){
 // à la carte portions become their own courses by menu section, and every line
 // keeps its real price — so "reprice from every dish" gives a true number the
 // moment she opens it, and she can then swap, add or overwrite the price.
-function peCmFromQuick(){
-  peQuickRead();
-  var tt = peQuickTotals();
+// The quick menu as courses: canapés grouped the way the kitchen works, then
+// the à la carte by menu section. Shared by "turn this into a menu she can
+// edit" and by the WhatsApp send, so the guest sees the same shape either way.
+function peQuickCourses(){
   var courses = [];
   var groups = [['Cold','Cold'],['Hot','Hot'],['Dessert','Dolci']];
   groups.forEach(function(g){
@@ -3930,6 +3935,12 @@ function peCmFromQuick(){
                  supplement:0, out:null, added:true, suggested:false, diff:null, forGuests:null };
       }) });
   });
+  return courses;
+}
+function peCmFromQuick(){
+  peQuickRead();
+  var tt = peQuickTotals();
+  var courses = peQuickCourses();
   peState.cm = {
     basedOn:null, basePrice:null, baseName:'',
     name: peQuick.title || 'Customised menu',
@@ -6205,6 +6216,21 @@ function peRenderQuick(){
     '<div style="grid-column:1/3"><div class="pe-lbl">Menu title</div><input class="pe-in" id="pe-q-title" value="'+peEsc(peQuick.title)+'" onchange="peQuickRead()"></div>'+
     '<div><div class="pe-lbl">Number of guests</div><input class="pe-in" id="pe-q-guests" type="number" value="'+peEsc(peQuick.guests)+'" onchange="peQuickRead();renderMain()"></div>'+
     '</div></div>';
+  // Saved: say so, and keep the three things she does next in one place. The
+  // menu stays on screen so Print and WhatsApp still have something to send.
+  if(peQuick.savedId){
+    var savedEv = peEvById(peQuick.savedId);
+    h += '<div class="pe-card" style="border-color:#2E6B34;background:#F1F6EF"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<b style="color:#2E6B34">Saved ✓ '+peEsc(peQuick.title)+' is a draft booking</b>'+
+      '<span style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="pe-btn sec sm" onclick="peQuickPrint()">Print / PDF menu</button>'+
+        '<button class="pe-btn sec sm" onclick="peQuickWhatsApp()">Send by WhatsApp</button>'+
+        '<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+peQuick.savedId+'\')">Open the booking</button>'+
+        '<button class="pe-btn sec sm" onclick="peQuickReset()">Start a new one</button>'+
+      '</span></div>'+
+      '<div style="font-size:11px;color:#6B4A33;margin-top:6px">The menu below is still here — printing or sending uses exactly what you see. '+
+      (savedEv&&!savedEv.client_name?'Open the booking to add the client’s name and date.':'')+'</div></div>';
+  }
   // A quick menu is for counting canapés. The moment the guest wants courses —
   // a set menu with a dish changed, a plated menu of her own — that is the
   // customise builder, and it is one tap from here rather than a screen away.
@@ -6294,7 +6320,8 @@ function peRenderQuick(){
   if(tt.minViol.length) h += '<div class="pe-flag" style="color:#B00020">\u25b2 Below minimum order: '+peEsc(tt.minViol.join(', '))+'</div>';
   h += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">'+
     '<button class="pe-btn" onclick="peQuickPrint()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Print / PDF menu</button>'+
-    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Save as event draft</button>':'')+
+    (peCanEdit()?'<button class="pe-btn sec" onclick="peQuickWhatsApp()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Send by WhatsApp</button>':'')+
+    (peCanEdit()&&!peQuick.savedId?'<button class="pe-btn sec" onclick="peQuickSave()" '+(tt.anything?'':'disabled title="Add a dish first"')+'>Save as event draft</button>':'')+
     '</div></div></div></div>';
   return h+'</div>';
 }
@@ -6390,9 +6417,64 @@ async function peQuickSave(){
   sb.from('event_log').insert({event_id:r.data.id, action:'created',
     detail:('from quick menu'+(alcLines.length?' — including '+alcLines.length+' à la carte dish'+(alcLines.length>1?'es':''):'')).slice(0,400),
     actor:peActor()});
+  // Keep the selections and stay on the screen \u2014 printing the menu or sending
+  // it is what she does next, and both need the dishes still on the page.
+  peQuick.savedId = r.data.id;
+  peQuick.savedToken = r.data.client_token || null;
+  peToast('Saved as a draft event \u2014 now print it or send it, or open the booking to add the client');
+  renderMain();
+  return r.data;
+}
+// Start a fresh one. The only thing that clears the screen, and it says so.
+function peQuickReset(){
   peQuick.qty = {}; peQuick.alc = {};
-  peToast('Saved as a draft event \u2014 add the client details when ready');
-  peGo('event', r.data.id);
+  peQuick.savedId = null; peQuick.savedToken = null; peQuick.sharedKey = null;
+  peQuick.title = 'Canap\u00e9 selection';
+  renderMain();
+}
+// WhatsApp the quick menu to a guest.
+//
+// NOT client-event.html: that is the canap\u00e9 PICKER, a tick-list of the whole
+// library, and it does not show \u00e0 la carte lines at all \u2014 sending it would put
+// a selection form in front of the guest instead of the menu she just built.
+// Instead the menu is written as a customised menu row and shared through
+// client-setmenu.html, the page that prints a menu's courses in full for any
+// key. The guest sees their menu; she sends one link.
+async function peQuickWhatsApp(){
+  if(!peCanEdit()){ peToast('View only \u2014 ask Valentina, Andrea or Francesco to make changes', true); return; }
+  peQuickRead();
+  var tt = peQuickTotals();
+  if(!tt.anything){ peToast('Add a dish first', true); return; }
+  var courses = peQuickCourses().map(function(c){
+    return { name:c.name, items:c.lines.map(function(l){ return l.name; }).filter(Boolean) };
+  }).filter(function(c){ return c.items.length; });
+  try{
+    // One shareable menu per quick menu \u2014 tapping twice reuses the same link
+    // rather than littering the table with near-identical rows.
+    if(!peQuick.sharedKey){
+      var key = 'custom-quick-'+Math.random().toString(36).slice(2,8);
+      var row = { key:key, name:(peQuick.title||'Your menu'),
+                  price_pp:(tt.perGuest!=null && tt.guests) ? Math.round(tt.perGuest) : null,
+                  courses:courses, line:peSmSummary(courses),
+                  is_custom:true, based_on:null, event_id:peQuick.savedId||null,
+                  price_mode:'sum', created_by:peActor(),
+                  detail:{ from:'quick menu', pieces:tt.pieces, alacarte:tt.alcPortions } };
+      var r = await sb.from('event_set_menus').insert(row).select().single();
+      if(r.error) throw r.error;
+      peState.setMenus = (peState.setMenus||[]).concat([r.data]);
+      peQuick.sharedKey = key;
+    }
+    var url = peBaseUrl() + 'client-setmenu.html?m=' + encodeURIComponent(peQuick.sharedKey);
+    var msg = 'Roberto\u2019s \u2014 ' + (peQuick.title||'your menu') +
+      (tt.perGuest!=null && tt.guests ? ' \u00b7 AED '+peMoney(tt.perGuest)+' per guest' : '') +
+      '. Tap to see it:\n' + url;
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+    if(peQuick.savedId) sb.from('event_log').insert({event_id:peQuick.savedId, action:'whatsapp',
+      detail:'quick menu sent by WhatsApp', actor:peActor()});
+    renderMain();
+  }catch(err){
+    peToast('NOT sent \u2014 '+String(err&&err.message||err).slice(0,120), true);
+  }
 }
 
 
