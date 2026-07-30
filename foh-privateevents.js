@@ -596,8 +596,12 @@ async function peLoadAll(force){
     // res[9] (non-fatal): who sent the proposal, per event — the fallback "lead" when
     // no one is set in Handled by. Ascending order → the last send per event wins.
     peState.proposalBy = {};
+    // Same rows also tell us WHEN it last went, which the send button needs so it
+    // can say "Re-send" and show the date instead of always reading like a first send.
+    peState.proposalSent = {};
     if(res[9] && !res[9].error) (res[9].data||[]).forEach(function(l){
       if(l.actor) peState.proposalBy[l.event_id] = l.actor;
+      peState.proposalSent[l.event_id] = l.created_at;
     });
     // Which of the new columns actually EXIST. select('*') returns a missing
     // column as an absent key and a set-but-empty one as null, so `in` tells the
@@ -658,12 +662,23 @@ async function peLoadLog(eventId){
     if(!r.error){ peState.log[eventId] = r.data||[]; renderMain(); }
   }catch(e){}
 }
+// Every screen an event can honestly be opened FROM, and what to call it.
+var PE_BACK_LABELS = {
+  list:'Events', calendar:'Calendar', report:'Monthly report',
+  packs:'Menu packages', packsfood:'Menu packages', packsbev:'Menu packages',
+  quick:'Quick menu', wizard:'New quote from a budget',
+  chef:'Chef corner', bev:'Beverage corner'
+};
 function peGo(view, id){
-  // Remember the browse screen we opened an event FROM, so "back" returns there
+  // Remember the screen we opened an event FROM, so "back" returns there
   // (calendar → event → back to calendar), not always to the flat list.
   var prev = peState.view;
-  if((view==='event' || view==='guidedevent') && ['list','calendar','report'].indexOf(prev)>=0){
-    peState.backTo = prev;
+  if(view==='event' || view==='guidedevent'){
+    // Always reassign. It used to be set ONLY when coming from list/calendar/report,
+    // so opening a booking from anywhere else (Menu packages, a guest reply card, the
+    // wizard) left the previous journey's value behind and the button then offered to
+    // take her "back" to a screen she had not come from.
+    peState.backTo = PE_BACK_LABELS[prev] ? prev : 'list';
   }
   peState.view = view;
   if(id !== undefined) peState.currentId = id;
@@ -674,9 +689,10 @@ function peGo(view, id){
 // Where a persistent "back" on an event screen should return to.
 function peBackTarget(){
   var b = peState.backTo;
-  if(b==='calendar') return {view:'calendar', label:'Calendar'};
-  if(b==='report') return {view:'report', label:'Monthly report'};
-  return {view:'list', label:'Events'};
+  var label = PE_BACK_LABELS[b];
+  // Anything we cannot name honestly falls back to the events list rather than
+  // guessing — a wrong "Back to Calendar" is worse than a plain "Back to Events".
+  return label ? {view:b, label:label} : {view:'list', label:'Events'};
 }
 function peScrollTopBtn(){
   return '<button class="pe-totop" onclick="peScrollTop()" aria-label="Back to top">↑ Top</button>';
@@ -988,6 +1004,9 @@ var PE_CHIP = {
 // a brief that failed to send must never show as sent, or the kitchen and the
 // hostess team reach the night not knowing about a confirmed event.
 function peBriefSent(e){ return !!(peState.briefSent && peState.briefSent[e.id]); }
+// When the proposal last went to the client, or null. Also updated in-session after
+// a send, so the button flips to "Re-send" without waiting for a reload.
+function peProposalSent(e){ return (e && peState.proposalSent && peState.proposalSent[e.id]) || null; }
 // The brief the team holds is a snapshot frozen at send time — nothing refreshes it.
 // So once it has gone, a change to any of these makes their copy wrong, and only she
 // can put that right by re-sending. Deliberately NOT `updated_at > sent_at`: routine
@@ -2151,7 +2170,12 @@ function peRenderEvent(){
       '</div>'
     : '')+
     '<div style="display:flex;flex-direction:column;gap:7px">'+
-    '<button class="pe-btn"'+dim(hasMail)+' onclick="'+mailClick('peEmailAgreement')+'">Send full proposal (client signs online)</button>'+
+    // "Send" that never becomes "Re-send" left her unable to tell, on a booking she
+    // opened cold, whether the client had been sent anything. The team-brief button
+    // eight lines below already does this properly — same pattern here.
+    '<button class="pe-btn"'+dim(hasMail)+' onclick="'+mailClick('peEmailAgreement')+'">'+
+      (peProposalSent(e)?'Re-send the full proposal (client signs online)':'Send full proposal (client signs online)')+'</button>'+
+    (peProposalSent(e)?'<div style="font-size:11.5px;color:#2E5B30;margin:-3px 2px 2px">Sent '+peDLabel(String(peProposalSent(e)).slice(0,10))+' ✓</div>':'')+
     (hasMail?'':'<div style="font-size:11px;color:#8A2A1A;margin:-3px 2px 2px">Add the client email above to send.</div>')+
     // Once signed AND a Telr link is pasted on the Agreement card, one named,
     // confirmed, logged send to collect the deposit. (Deposit-paid stays a manual flip.)
@@ -3861,6 +3885,7 @@ async function peEmailProposal(id){
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     peToast('Proposal sent to '+e.contact_email+' \u2713');
     if(e.status==='draft') peSetStatus(id, 'sent');
+    (peState.proposalSent = peState.proposalSent || {})[id] = new Date().toISOString();
     sb.from('event_log').insert({event_id:id, action:'email', detail:'proposal \u2192 '+e.contact_email, actor:peActor()}).then(function(){ peLoadLog(id); });
   }catch(err){
     peToast('NOT sent \u2014 '+String(err&&err.message||err).slice(0,120), true);
@@ -3937,6 +3962,7 @@ async function peEmailAgreement(id){
     if(peState.voided) delete peState.voided[id];   // re-sent — clear the void banner
     peToast('Sent to '+e.contact_email+' ✓ — the events desk is emailed the moment they sign');
     if(e.status==='draft') peSetStatus(id, 'sent');
+    (peState.proposalSent = peState.proposalSent || {})[id] = new Date().toISOString();
     sb.from('event_log').insert({event_id:id, action:'email', detail:'proposal + agreement link → '+e.contact_email, actor:peActor()}).then(function(){ peLoadLog(id); });
   }catch(err){
     peToast('NOT sent — '+String(err&&err.message||err).slice(0,120), true);
@@ -4166,9 +4192,39 @@ function peAlcPicksHTML(){
         (p.note?'<br><span style="font-size:11.5px;color:#B00020">“'+peEsc(p.note)+'”</span>':'')+
         '</span>'+
         '<span style="display:flex;gap:6px;flex-shrink:0">'+
+        // A note on an à la carte reply is usually an allergy, and it had no way of
+        // reaching the kitchen — the brief prints e.dietary, and nothing copied it
+        // there, so it depended on her retyping it by hand.
+        (ev && p.note ? '<button class="pe-btn sm" onclick="peAlcNoteToDietary(\''+p.id+'\')">Add note to dietary</button>' : '')+
         (ev?'<button class="pe-btn sec sm" onclick="peGo(\'event\',\''+ev.id+'\')">Open booking</button>':'')+
         '<button class="pe-btn sec sm" onclick="peAlcPickDone(\''+p.id+'\')">Done with it</button></span></div>';
     }).join('')+'</div>';
+}
+// Copy a guest's note into the booking's Dietary requirements, which is the field
+// the kitchen brief prints in red. Appends rather than replaces — she may already
+// have typed something there, and losing it would be worse than the original bug.
+async function peAlcNoteToDietary(pickId){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var p = (peState.alcPicks||[]).filter(function(x){ return x.id===pickId; })[0];
+  if(!p || !p.note) return;
+  var e = (peState.events||[]).filter(function(x){ return x.client_token===p.token; })[0];
+  if(!e){ peToast('No booking matches this reply — open it and pick one first', true); return; }
+  var line = 'Guest: '+String(p.note).trim();
+  var existing = String(e.dietary||'').trim();
+  if(existing.indexOf(line) >= 0){ peToast('Already on the booking ✓'); return; }
+  var merged = existing ? existing+' · '+line : line;
+  if(!(await peConfirm({title:'Add this to the kitchen brief?',
+    html:'This copies the guest’s note into <b>Dietary requirements</b> on <b>'+peEsc(e.client_name||e.company||'this booking')+'</b>, which prints in red on the kitchen brief.'+
+      '<br><br><b>'+peEsc(merged)+'</b>'+
+      (peBriefSent(e) ? '<br><br><span style="color:#7A5500">The team already has a brief for this event — you will need to re-send it.</span>' : ''),
+    ok:'Add it', cancel:'Not now'}))) return;
+  var r = await sb.from('events_desk').update({dietary:merged, updated_at:new Date().toISOString()}).eq('id', e.id);
+  if(r.error){ peToast('NOT saved — '+String(r.error.message||'').slice(0,80), true); return; }
+  e.dietary = merged;
+  sb.from('event_log').insert({event_id:e.id, action:'edited',
+    detail:('Dietary → '+merged).slice(0,400), actor:peActor()});
+  peToast('Added to dietary ✓ — it prints on the kitchen brief');
+  renderMain();
 }
 async function peAlcLoadPicks(force){
   if(peState.alcPicksLoaded && !force) return;
