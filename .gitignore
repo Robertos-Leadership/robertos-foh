@@ -1,0 +1,4 @@
+# Local tool state — never belongs in the repo
+.wrangler/
+supabase/.temp/
+.claude/settings.local.json
