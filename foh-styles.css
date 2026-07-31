@@ -2483,12 +2483,23 @@
   .res-area{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--vino);font-weight:700;
     margin:18px 0 7px;display:flex;align-items:baseline;gap:10px}
   .res-area span{letter-spacing:.04em;text-transform:none;font-weight:500;font-size:11.5px;color:var(--gold-dim)}
-  .res-tbl{background:var(--surface);border:1px solid rgba(107,31,42,.13);border-radius:11px;overflow:hidden}
+  /* overflow-x:auto, NOT hidden. Hidden is what let a column be cut off the
+     right edge with no scrollbar to reveal it — the reader cannot even tell
+     something is missing. If the grid ever cannot fit, it scrolls. */
+  .res-tbl{background:var(--surface);border:1px solid rgba(107,31,42,.13);border-radius:11px;
+    overflow-x:auto;overflow-y:hidden}
   /* The guest column carries three lines now (name, phone, history), so it gets
      the width and the note column gives some back. */
   /* Time · Covers · Guest · Table · Status | Last here · Visits | Note · Booked by */
   .res-r{display:grid;grid-template-columns:56px 66px minmax(180px,1.5fr) 74px 108px 82px 48px minmax(150px,1.3fr) 104px;
-    gap:10px;align-items:center;padding:11px 15px;font-size:13px;color:var(--ink);border-top:1px solid rgba(107,31,42,.08)}
+    gap:10px;align-items:center;padding:11px 15px;font-size:12.5px;color:var(--ink);border-top:1px solid rgba(107,31,42,.08)}
+  /* ONE type size across the row, inherited from .res-r above. It had drifted to
+     five — 11.5 on the note and booked-by, 12 on last here, 12.5 on the money,
+     13 on the name, table and status — which made the row read as ragged bands
+     instead of one line of facts. The per-cell overrides that caused the drift
+     are deleted rather than fought with a child selector: `.res-r > div` would
+     have won against .res-time too and shrunk the one thing that should stay
+     big, the time you scan the column by. */
   /* Spend went from one number to three lines (gross, net, per guest) on 28 Jul,
      so it needs real width -- 92px wrapped "AED 1,234" onto two lines. The note
      column gives it back; a truncated note is recoverable (it has a tooltip and
@@ -2519,17 +2530,15 @@
     .res-r,.res-money .res-r{gap:8px}
     .res-money .res-r{grid-template-columns:50px 56px minmax(148px,1.4fr) 62px 92px 78px 44px 72px 58px 58px minmax(118px,1fr) 88px 96px}
     .res-r{grid-template-columns:50px 56px minmax(148px,1.4fr) 62px 92px 78px 44px minmax(118px,1fr) 88px}
-    .res-note,.res-by{font-size:11px}
-    .res-m1,.res-m2,.res-m3{font-size:12px}
   }
 
   /* ── The history cells ─────────────────────────────────────────────────────
      Tabular numerals so the eye can run down the column, which is the whole
      reason these stopped being one italic line under the guest's name. */
-  .res-lv{font-size:12px;color:#6B5B4A;white-space:nowrap}
-  .res-lv i,.res-vc i{font-style:italic;color:#B0A18F;font-size:11.5px}
+  .res-lv{color:#6B5B4A;white-space:nowrap}
+  .res-lv i,.res-vc i{font-style:italic;color:#B0A18F}
   .res-vc{text-align:right;font-variant-numeric:tabular-nums;color:#6B5B4A}
-  .res-m1,.res-m2,.res-m3{font-variant-numeric:tabular-nums;font-size:12.5px;color:#6B5B4A}
+  .res-m1,.res-m2,.res-m3{font-variant-numeric:tabular-nums;color:#6B5B4A}
   .res-m1{color:var(--ink)}
   .res-m1 i,.res-m2 i,.res-m3 i{font-style:normal;color:#CFC3B2}
   .res-m1 b{font-weight:600}
@@ -2592,7 +2601,7 @@
   .resr-bar i{display:block;height:100%;background:var(--vino);transition:width .25s ease}
   .res-tbls{font-variant-numeric:tabular-nums}
   .res-tbls i{font-style:italic;color:#B0A18F;font-size:11.5px}
-  .res-note,.res-by{font-size:11.5px;color:#6B5B4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .res-note,.res-by{color:#6B5B4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .res-by i{display:block;font-style:normal;font-size:10.5px;color:#A99887}
 
   /* ── The note: flags, then the request, tap to open ────────────────────────
