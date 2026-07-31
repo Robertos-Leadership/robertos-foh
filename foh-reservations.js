@@ -739,6 +739,135 @@ function resBriefNote(s){
   return n;
 }
 
+// ── WHAT THE FLOOR HAS TO SEE ─────────────────────────────────────────────
+// Measured on the live book (150 bookings over 31 / 25 / 18 Jul, 149 guest
+// profiles) before this was written:
+//
+//   * There is NO allergy field in SevenRooms. Across 149 profiles exactly one
+//     diet-related guest tag exists ("Pork") and no guest note mentions an
+//     allergy. Hosts record it inside the booking's own tag list, which reaches
+//     us as `reservation_type` — "Allergy, Birthday, Alcohol-free, Non-smoking
+//     area requested, Confirmed via call" — appended at the END of the note.
+//   * 17 of 150 notes are longer than the old 150-character cut, and that cut
+//     is what destroyed the allergy: on 25 Jul the sheet for Awatif Aljesmi (4
+//     covers) printed the birthday request and dropped BOTH "Allergy" and
+//     "Alcohol-free", because they sat past character 150. One for one of the
+//     allergy bookings in the sample, lost.
+//
+// So the flag is read out of the note and printed FIRST, where it cannot be
+// truncated. The free text is still capped — one long request must not push the
+// sheet onto a second page — but it can only ever cost us wording, never a
+// dietary requirement.
+//
+// Ordered the way a waiter needs them: what they cannot eat, then what we are
+// celebrating, then what the table needs.
+var RES_FLAGS = [
+  [/allerg\w*/i,                            'ALLERGY',         'crit'],
+  [/gluten[- ]?free|coeliac|celiac/i,       'GLUTEN-FREE',     'crit'],
+  [/\bvegan\b/i,                            'VEGAN',           'crit'],
+  [/\bvegetarian\b/i,                       'VEGETARIAN',      'crit'],
+  [/alcohol[- ]?free|no alcohol|non[- ]?alcoholic/i, 'ALCOHOL-FREE', 'crit'],
+  [/\bbirthday\b/i,                         'BIRTHDAY',        'occ'],
+  [/anniversar\w*/i,                        'ANNIVERSARY',     'occ'],
+  [/congratulat\w*/i,                       'CONGRATULATIONS', 'occ'],
+  [/propos\w*|getting married|engagement/i, 'CELEBRATION',     'occ'],
+  [/high ?chair|baby ?seat|\bkids?\b|children/i, 'HIGH CHAIR',  'warn'],
+  [/wheelchair|accessib\w*/i,               'ACCESS',          'warn'],
+  [/do ?n.?.?t move|do not move/i,          'DO NOT MOVE',     'warn'],
+  [/restaurant week/i,                      'SET MENU',        'menu']
+];
+// Internal host codes. They print in bold as "worth knowing" today — the 17:30
+// row on 31 Jul reads "DC INFO, Booked Via call, TH INFO, SEAT INFO" — and they
+// tell a section waiter nothing.
+// NOTE: "DINNER" / "LUNCH" are deliberately NOT stripped as words. They arrive
+// as a whole segment ("Selected: DINNER"), which RES_DEAD_TAG drops below. An
+// earlier version removed them anywhere and turned Fatma Ahmad's 25 Jul note
+// into "bring after immediately" -- the same sentence damage the flag words
+// caused. Only remove a word when the word IS the whole segment.
+var RES_NOISE = [
+  /\bSelected Google Seating Area:[^·]*/ig,   // the area already has its own column
+  // "Selected: DINNER" is the service, and SevenRooms drops it INSIDE the
+  // sentence ("...when they arrive Selected: DINNER Custom question response:
+  // Table on corner..."). Label and value have to come off together, or the
+  // sheet prints a bare "DINNER" in the middle of a guest's request. It is
+  // matched only behind "Selected:", so a guest writing "our first dinner
+  // date" keeps their words.
+  /\bSelected:\s*(?:DINNER|LUNCH|BRUNCH)\b[\s;:·,-]*/ig,
+  /\bSelected:\s*/ig, /\bCustom question response:\s*/ig, /\bClient notes:\s*/ig,
+  /\b(?:DC|TH|SEAT|CC|LO|TA|AGE) INFO\b/ig
+];
+// Whole segments / tags that are internal host bookkeeping. Verified against
+// 150 real bookings: these are the ones that actually occur.
+var RES_DEAD_TAG = /^(?:(?:dc|th|seat|cc|lo|ta|age) info|booked\s*(?:by|via)\b.*|confirmed\s*(?:via call|online)|dinner|lunch|special event|selected|managment booking|management booking|a la carte)$/i;
+
+function resTidy(t){
+  return String(t||'').replace(/\s*[·,;]\s*(?=[·,;])/g, ' ')
+    .replace(/^[\s·,;.-]+|[\s·,;-]+$/g, '').replace(/\s{2,}/g, ' ');
+}
+
+// Splits one SevenRooms note into { flags, text, asked }.
+//
+// The note arrives as ' · '-joined parts and the LAST part is SevenRooms' own
+// comma-separated tag list. Flag words are matched against the WHOLE note but
+// only ever deleted from that tag list or from a segment that holds nothing
+// else — an early version stripped "birthday" wherever it appeared and left the
+// sheet saying "a dessert for the and inform the note", which is worse than the
+// problem it was fixing. A real sentence is never edited.
+function resReadNote(s){
+  var raw = String(s||'');
+  var segs = raw.split('·').map(function(x){ return x.trim(); }).filter(Boolean);
+
+  var taglist = [];
+  var last = segs.length ? segs[segs.length-1] : '';
+  if(last.indexOf(',') !== -1 && last.split(',').every(function(p){ return p.trim().length <= 40; })){
+    taglist = segs.pop().split(',').map(function(p){ return p.trim(); }).filter(Boolean);
+  }
+
+  var flags = [], seen = {};
+  RES_FLAGS.forEach(function(f){
+    if(f[0].test(raw) && !seen[f[1]]){ seen[f[1]] = 1; flags.push({ label:f[1], kind:f[2] }); }
+  });
+  // "Getting married" already reads as a celebration — two chips is noise.
+  if(seen['CELEBRATION'] && flags.filter(function(f){ return f.kind === 'occ'; }).length > 1){
+    flags = flags.filter(function(f){ return f.label !== 'CELEBRATION'; });
+  }
+
+  var strip = function(t){
+    RES_NOISE.forEach(function(re){ t = t.replace(re, ' '); });
+    return t;
+  };
+  var keep = [];
+  segs.forEach(function(sg){
+    var t = strip(sg);
+    if(RES_DEAD_TAG.test(t.trim())) return;                     // "Booked Via call"
+    RES_FLAGS.forEach(function(f){ if(seen[f[1]]) t = t.replace(f[0], ' '); });
+    if(/[A-Za-z0-9]/.test(t)) keep.push(sg);                    // a real sentence survives whole
+  });
+
+  // What is left of the tag list once the flags are chips and the codes are gone
+  // — "Non-smoking · Corner · Window". The word "requested" is dropped: on a
+  // sheet of requests it is on every line.
+  var asked = [];
+  taglist.forEach(function(t){
+    if(RES_DEAD_TAG.test(t)) return;
+    for(var i=0; i<RES_FLAGS.length; i++) if(seen[RES_FLAGS[i][1]] && RES_FLAGS[i][0].test(t)) return;
+    var v = t.replace(/\s*(area\s+)?requested$/i, '').trim();
+    if(v) asked.push(v);
+  });
+
+  return { flags: flags, text: resTidy(strip(keep.join(' · '))), asked: asked };
+}
+
+function resFlagChips(flags){
+  return flags.map(function(f){
+    return '<span class="fl ' + f.kind + '">' + resEsc(f.label) + '</span>';
+  }).join('');
+}
+function resClamp(s, n){
+  s = String(s||'');
+  return s.length > n ? s.slice(0, n-2).replace(/[\s·,;-]+\S*$/, '') + '…' : s;
+}
+
 async function resPrintBrief(){
   // Never print a sheet with the history column silently empty.
   await resEnsureHistory();
@@ -770,19 +899,41 @@ async function resPrintBrief(){
     h += '<table><thead><tr>'
       + '<th class="w1">Time</th><th class="w2">Pax</th><th class="w3">Guest</th><th class="w4">Table</th>'
       + '<th class="w5">Last visit</th><th class="w6">Visits</th>'
-      + (money ? '<th class="w7">Avg/cover</th>' : '')
+      + (money ? '<th class="w7">Spent with us</th><th class="w8">Avg/cover</th>' : '')
       + '<th>Worth knowing</th></tr></thead><tbody>';
     list.forEach(function(r){
       var g = r.client ? RESH.got[r.client] : null;
       var venueScoped = g && g.scope === 'venue';
       var firstTime = venueScoped && (Number(g.visits)||0) <= 1 && !(Number(g.spend) > 0);
       var know = [];
-      var bn = resBriefNote(r.notes);
-      if(bn) know.push('<b>' + resEsc(bn) + '</b>');
-      if(g && g.note) know.push(resEsc(resBriefNote(g.note)));
+      // Flags first — see RES_FLAGS. A dietary requirement can never be cut.
+      var rd = resReadNote(r.notes);
+      var gd = (g && g.note) ? resReadNote(g.note) : null;
+      if(gd) gd.flags.forEach(function(f){
+        for(var i=0;i<rd.flags.length;i++) if(rd.flags[i].label === f.label) return;
+        rd.flags.push(f);
+      });
+      var head = resFlagChips(rd.flags);
+      if(rd.text) head += '<b>' + resEsc(resClamp(rd.text, 115)) + '</b>';
+      if(head) know.push(head);
+      if(rd.asked.length) know.push('<span class="rq">' + rd.asked.map(resEsc).join(' &middot; ') + '</span>');
+      if(gd && gd.text) know.push('<span class="gn">' + resEsc(resClamp(gd.text, 90)) + '</span>');
+      // NOT PRINTED: previous no-shows. 20 of 147 guests carry one, which is
+      // exactly the kind of thing a manager wants before doors -- but 3 of those
+      // 20 have MORE no-shows than visits (one guest: 18 no-shows against 16
+      // visits, 0 cancellations, AED 8,980 spent with us). Whatever that field
+      // counts, it is not "times this guest failed to turn up", and a printed
+      // sheet that tells the team a paying regular is an 18-time no-show is an
+      // accusation we cannot stand behind. It goes on only when we know how the
+      // hosts use the NO_SHOW status.
       // Tags capped so one heavily-tagged regular can't push the row over a
       // page. The count says what was left off rather than hiding it.
-      var tg = resBriefTags(g);
+      // A tag that just repeats a flag chip ("Birthday") is dropped — the same
+      // word twice on one row is noise.
+      var tg = resBriefTags(g).filter(function(t){
+        for(var i=0;i<rd.flags.length;i++) if(String(t).trim().toLowerCase() === rd.flags[i].label.toLowerCase()) return false;
+        return true;
+      });
       if(tg.length){
         var show = tg.slice(0, 6);
         know.push('<span class="tg">' + show.map(resEsc).join(' &middot; ')
@@ -795,7 +946,14 @@ async function resPrintBrief(){
         + '<td class="w4">' + ((r.tables&&r.tables.length) ? resEsc(r.tables.join(', ')) : '') + '</td>'
         + '<td class="w5">' + (firstTime ? '<i>first visit</i>' : (venueScoped && g.last_visit ? resEsc(resVisitShort(g.last_visit)) : '')) + '</td>'
         + '<td class="w6">' + (venueScoped ? resNum(g.visits) : '') + '</td>'
-        + (money ? '<td class="w7">' + (venueScoped && Number(g.per_cover)>0 ? resNum(Math.round(g.per_cover)) : '') + '</td>' : '')
+        // Lifetime spend beside the average, asked for 31 Jul: the average alone
+        // does not tell a manager whether this is a guest who has left AED 190k
+        // in the room or AED 300. Both figures come STRAIGHT from SevenRooms and
+        // neither is computed here -- SevenRooms' own avg/cover x covers does not
+        // reconcile to its own total (top guest: 212,811 vs 193,691), so the two
+        // columns are not meant to tie out and must never be multiplied together.
+        + (money ? '<td class="w7">' + (venueScoped && Number(g.spend)>0 ? '<b>' + resNum(Math.round(g.spend)) + '</b>' : '') + '</td>'
+                 + '<td class="w8">' + (venueScoped && Number(g.per_cover)>0 ? resNum(Math.round(g.per_cover)) : '') + '</td>' : '')
         + '<td>' + know.join('<br>') + '</td>'
         + '</tr>';
     });
@@ -806,6 +964,8 @@ async function resPrintBrief(){
     + resEsc(new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))
     + (money ? '' : ' &middot; spend hidden on this login')
     + '.<br>SevenRooms’ automatic tags (upcoming and recent reservations, group segments, marketing) are left off this sheet. '
+    + 'A red flag is a dietary requirement — check it with the guest before the order goes to the pass. '
+    + '“Spent with us” and “Avg/cover” are SevenRooms’ own lifetime figures for this venue; they do not multiply out against each other. '
     + 'To change a booking, the hosts do it in SevenRooms.</div>';
 
   var css = '@page{size:A4 landscape;margin:8mm}'
@@ -826,11 +986,21 @@ async function resPrintBrief(){
     + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3;'
     +   'word-wrap:break-word;overflow-wrap:break-word}'
     + 'tr{page-break-inside:avoid}'
-    + '.w1{width:34px}.w2{width:26px;text-align:center}.w3{width:118px;font-weight:700}.w4{width:44px}'
-    + '.w5{width:58px}.w6{width:34px;text-align:center}.w7{width:52px;text-align:right}'
-    + 'th.w2,th.w6{text-align:center}th.w7{text-align:right}'
+    + '.w1{width:34px}.w2{width:26px;text-align:center}.w3{width:112px;font-weight:700}.w4{width:40px}'
+    + '.w5{width:54px}.w6{width:32px;text-align:center}.w7{width:62px;text-align:right}.w8{width:50px;text-align:right}'
+    + 'th.w2,th.w6{text-align:center}th.w7,th.w8{text-align:right}'
     + '.vip{background:#6B1F2A;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px;vertical-align:1px}'
     + '.tg{color:#6B1F2A}.more{color:#999}'
+    // The flags. Read at arm's length across a pass, so: colour before words.
+    // Red is only ever a dietary requirement -- if it is red, it goes to the
+    // kitchen. Amber is something the table needs. Cream is a celebration.
+    + '.fl{display:inline-block;font-size:8px;font-weight:700;letter-spacing:.6px;padding:1px 4px;'
+    +   'border-radius:2px;margin:0 4px 2px 0;vertical-align:1px}'
+    + '.fl.crit{background:#B00020;color:#fff}'
+    + '.fl.warn{background:#8a5a00;color:#fff}'
+    + '.fl.occ{background:#f0e6d8;color:#5a4326;border:1px solid #d8c5a8}'
+    + '.fl.menu{background:#26413c;color:#fff}'
+    + '.rq{color:#555}.gn{color:#444;font-style:italic}.ns{color:#B00020;font-weight:700}'
     + '.ft{margin-top:12px;padding-top:6px;border-top:1px solid #ccc;font-size:8px;color:#666;line-height:1.5}';
 
   var doc = '<!doctype html><html><head><meta charset="utf-8"><title>Service brief — '
