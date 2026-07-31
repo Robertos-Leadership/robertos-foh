@@ -2028,6 +2028,12 @@ function renderReservations(){
       // you cannot run your eye down a column that does not exist. It is five
       // columns now, grouped under one band so nobody mistakes a lifetime
       // average for tonight's bill.
+      // Both rows sit in .res-stick so they FREEZE under the topbar while the
+      // list scrolls (asked for 31 Jul: on a 40-booking night you lose track of
+      // which number is which). The band travels with them on purpose -- freezing
+      // "Total / Per guest / Per table" without "Been with us" over it is exactly
+      // how a lifetime average gets read as tonight's bill.
+      h.push('<div class="res-stick">');
       h.push('<div class="res-r res-hdr res-band">'
         + '<div class="rb-skip"></div>'
         // The band names the basis, because the column beside this block
@@ -2049,6 +2055,7 @@ function renderReservations(){
         + '<div>Note</div><div>Booked by</div>'
         + (money?'<div class="res-right">Tonight<i>gross &middot; net</i></div>':'')
         + '</div>');
+      h.push('</div>');
       list.forEach(function(r){
         var st = (r.state==='seated') ? 'seated' : (r.state==='completed' ? 'done' : 'due');
         h.push('<div class="res-r res-'+st+'">'
