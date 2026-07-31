@@ -57,6 +57,32 @@ var guestCount = 0;
 var dishById = {};
 var qty = {};
 function defaultQty(d){ return Math.max(guestCount||0, Number(d.min_order)||10); }
+// A couple of dishes carry a real kitchen minimum well above the usual 10 — Caprese
+// skewer is 70, Pizza Margherita 40. On a small booking that is far more than one
+// per guest, and the page used to fill the number in silently and then refuse to
+// send if the guest reduced it. Say it up front, with the money, before they tick.
+function bigMin(d){
+  var m = Number(d.min_order) || 10;
+  return (guestCount && m > guestCount) ? m : 0;
+}
+function bigMinNote(d){
+  var m = bigMin(d);
+  if(!m) return '';
+  var cost = (Number(d.sell_price) || 0) * m;
+  return 'Minimum ' + m + ' pieces' + (cost ? ' — about AED ' + Math.round(cost).toLocaleString('en-US') : '') +
+         '. That is more than one per guest for your ' + guestCount + '.';
+}
+// Called whenever the guest count changes, because the dish list is rendered once
+// at load — before they have told us how many they are.
+function refreshMinNotes(){
+  Object.keys(dishById).forEach(function(id){
+    var el = document.getElementById('mn-' + id);
+    if(!el) return;
+    var note = bigMinNote(dishById[id]);
+    el.textContent = note;
+    el.style.display = note ? '' : 'none';
+  });
+}
 function allowedDishes(g){ return g>=30 ? 15 : (g>=20 ? 8 : (g>=15 ? 5 : 0)); }
 function pickedCount(){ return Object.keys(picked).filter(function(k){ return picked[k]; }).length; }
 
@@ -120,7 +146,10 @@ function render(data){
         return '<div class="dish'+(picked[d.id]?' on':'')+'" data-id="'+d.id+'" data-g="'+g[0]+'" onclick="toggle(this)">'+
           '<span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'+
           '<span style="flex:1"><span class="nm">'+esc(d.name)+((d.allergens||[]).length?' <span class="cd">('+(d.allergens||[]).join(')(')+')</span>':'')+'</span>'+
-          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+'</span>'+
+          (d.description?'<br><span class="ds">'+esc(d.description)+'</span>':'')+
+          // Always rendered, filled in by refreshMinNotes(). The list is built
+          // before the guest types their count, so this cannot be decided here.
+          '<br><span class="ds" id="mn-'+d.id+'" style="color:#8A6400;display:none"></span></span>'+
           (d.sell_price!=null?'<span class="pr">AED '+Math.round(Number(d.sell_price))+' <span style="font-size:9px">each</span><br><span style="font-size:9px;color:var(--ink-faint)">min '+(d.min_order||10)+' pieces</span></span>':'')+
           (picked[d.id]?'<span class="qbox" onclick="event.stopPropagation()"><input type="number" class="qin" id="q-'+d.id+'" min="'+(d.min_order||10)+'" value="'+(qty[d.id]||defaultQty(d))+'" oninput="setQty(\''+d.id+'\',this.value)"><br><span style="font-size:9px;color:var(--ink-faint)">pieces</span></span>':'')+'</div>';
         })();
@@ -156,7 +185,12 @@ function toggle(node){
   picked[id] = !picked[id];
   node.classList.toggle('on', picked[id]);
   var d = dishById[id];
-  if(picked[id]){ if(!qty[id]) qty[id] = defaultQty(d); }
+  if(picked[id]){
+    if(!qty[id]) qty[id] = defaultQty(d);
+    // The quantity box is about to say 70 on a 15-guest booking. Say why, now,
+    // rather than letting them find out when the send is refused.
+    if(bigMin(d)) flash(d.name + ' — ' + bigMinNote(d));
+  }
   else delete qty[id];
   var qb = node.querySelector('.qbox');
   if(qb) qb.remove();
@@ -194,6 +228,7 @@ function onGuests(v){
       if(!picked[n.getAttribute('data-id')]) n.classList.remove('on');
     });
   }
+  refreshMinNotes();   // the big-minimum lines only make sense once we know the count
   counts();
 }
 function counts(){
