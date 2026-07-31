@@ -902,8 +902,20 @@ async function resPrintBrief(){
     // as the average bill. On the top guest they are 831 and 1,862 — reading one
     // as the other is a factor of two. Now all three figures sit together under
     // one band, named the way they'd be said out loud.
+    // ⚠ COLGROUP, NOT th WIDTHS. With table-layout:fixed the browser takes every
+    // column width from the FIRST row only. The banded header puts Total / Per
+    // guest / Per table in the SECOND row, so their widths were silently ignored
+    // and the colspan="3" group swallowed a third of the page while "Worth
+    // knowing" was crushed into a ribbon. A colgroup is read independently of
+    // the rows, so it is the only thing that can size a banded table.
+    // The last column is deliberately left unsized: it takes everything that is
+    // left, which is what the guest's request deserves.
+    var cols = '<colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4">'
+      + '<col class="c5"><col class="c6">'
+      + (money ? '<col class="c7"><col class="c8"><col class="c9">' : '')
+      + '<col></colgroup>';
     var span = money ? ' rowspan="2"' : '';
-    h += '<table><thead><tr>'
+    h += '<table>' + cols + '<thead><tr>'
       + '<th class="w1"' + span + '>Time</th><th class="w2"' + span + '>Pax</th>'
       + '<th class="w3"' + span + '>Guest</th><th class="w4"' + span + '>Table</th>'
       + '<th class="w5"' + span + '>Last visit</th><th class="w6"' + span + '>Visits</th>'
@@ -981,12 +993,14 @@ async function resPrintBrief(){
     + 'To change a booking, the hosts do it in SevenRooms.</div>';
 
   var css = '@page{size:A4 landscape;margin:8mm}'
-    + 'html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#1c1c1c}'
+    // 11px, not 10: this is read standing up, at arm's length, under service
+    // light. The width for it comes from keeping every other column tight.
+    + 'html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1c1c1c}'
     + '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    + '.hd{border-bottom:2px solid #6B1F2A;padding-bottom:6px;margin-bottom:10px}'
+    + '.hd{border-bottom:2px solid #6B1F2A;padding-bottom:4px;margin-bottom:7px}'
     + '.ttl{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
-    + '.dt{font-size:19px;margin-top:2px}.tot{font-size:11px;color:#555;margin-top:2px}'
-    + '.area{margin:11px 0 3px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
+    + '.dt{font-size:17px;margin-top:2px}.tot{font-size:11px;color:#555;margin-top:2px}'
+    + '.area{margin:7px 0 3px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#6B1F2A;font-weight:700}'
     // table-layout:fixed is the whole fix for the sheet running off the page.
     // Without it the browser widens the table to fit the longest note on the
     // night -- one guest's "Custom question response: We are celebrating 2
@@ -995,19 +1009,27 @@ async function resPrintBrief(){
     // width and wraps the text instead.
     + 'table{width:100%;table-layout:fixed;border-collapse:collapse}'
     + 'th{background:#6B1F2A;color:#fff;font-size:8px;letter-spacing:1px;text-transform:uppercase;text-align:left;padding:4px 5px}'
-    + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3;'
+    + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.28;'
     +   'word-wrap:break-word;overflow-wrap:break-word}'
     + 'tr{page-break-inside:avoid}'
-    + '.w1{width:32px}.w2{width:24px;text-align:center}.w3{width:106px;font-weight:700}.w4{width:38px}'
-    + '.w5{width:52px}.w6{width:30px;text-align:center}'
-    + '.w7{width:58px;text-align:right}.w8{width:46px;text-align:right}.w9{width:46px;text-align:right}'
-    + 'th.w2,th.w6{text-align:center}th.w7,th.w8,th.w9{text-align:right}'
+    // Column widths live here, on the colgroup. Everything is kept tight so the
+    // last column — the guest's actual request — gets the rest of the page: on
+    // A4 landscape at 8mm margins that leaves it roughly 600px, more than half
+    // the sheet, which is the right way round for a service brief.
+    // c5 is 68px because "23 Jan 2025" measures 67px at 11px Arial. At 58 it was
+    // nowrap-overflowing into the Visits column — measured, not guessed.
+    + '.c1{width:30px}.c2{width:22px}.c3{width:104px}.c4{width:34px}.c5{width:68px}.c6{width:28px}'
+    + '.c7{width:50px}.c8{width:42px}.c9{width:42px}'
+    + '.w2,.w6{text-align:center}.w3{font-weight:700}'
+    + '.w5{white-space:nowrap}'                       // "23 Jan 2025" must not wrap onto two lines
+    + '.w7,.w8,.w9{text-align:right;font-size:9px;font-variant-numeric:tabular-nums}'
     // The band over the three money columns, and a hairline down each side of
     // the block so the eye can find it without reading a single heading.
-    + 'th.grp{text-align:center;letter-spacing:2px;border-bottom:1px solid rgba(255,255,255,.45)}'
+    + 'th.grp{text-align:center;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,.45)}'
     + 'th.w7,td.w7{border-left:1px solid #bbb}'
     + 'th.grp,td.w9{border-right:1px solid #bbb}'
-    + 'td.w7,td.w8,td.w9{background:#faf7f4}'
+    + 'th.w7,th.w8,th.w9{padding:3px 5px;letter-spacing:0}'
+    + 'td.w7,td.w8,td.w9{background:#faf7f4;padding:4px 5px}'
     + '.vip{background:#6B1F2A;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px;vertical-align:1px}'
     + '.tg{color:#6B1F2A}.more{color:#999}'
     // The flags. Read at arm's length across a pass, so: colour before words.
