@@ -1517,10 +1517,11 @@ function admFbPaintPick(){
 function admFbPickList(){
   var p=admFbPicked(); return Object.keys(p).map(function(k){ return p[k]; });
 }
-function admFbBriefMany(){
-  var list=admFbPickList();
+// One brief from any set of items. Shared by the ticked-selection brief and the
+// whole-round brief, so the two can never drift into saying different things.
+function admFbBriefFrom(list, done){
   if(!list.length) return;
-  // Same order as the screen, so the brief reads the way he ticked it.
+  // Same order as the screen, so the brief reads the way it looks.
   var blocks=[], n=0;
   list.forEach(function(x){
     var b=admFbBriefBlock(x.topic, x.qkey, n+1);
@@ -1531,7 +1532,19 @@ function admFbBriefMany(){
            'Each one below is a separate request with its own round and item. Fix them',
            'independently; do not merge them into one change.', '',
            blocks.join('\n\n'), '', admFbBriefRules()].join('\n');
-  admFbCopy2(txt, n+' items copied as one brief — paste it to Claude');
+  admFbCopy2(txt, done||(n+' items copied as one brief — paste it to Claude'));
+}
+function admFbBriefMany(){ admFbBriefFrom(admFbPickList()); }
+// Every item in one round, in one tap. Ticking 14 boxes to brief a round he was
+// always going to brief whole is work the screen should have done for him.
+function admFbBriefRound(t){
+  // Only what still needs doing. Briefing items that are already fixed and live
+  // would ask for work that exists — the fastest way to undo something.
+  var list=((state.fbItemsByTopic&&state.fbItemsByTopic[t])||[])
+    .filter(function(i){ return i.st==='open'||i.st==='prog'; });
+  if(!list.length){ toast('Nothing left to brief in that round — it is all fixed and live.', true); return; }
+  admFbBriefFrom(list.map(function(i){ return {topic:i.topic, qkey:i.qkey}; }),
+    list.length+' items copied as one brief — paste it to Claude');
 }
 // ── Their status link ───────────────────────────────────────────────────────
 // One unguessable token per person, so they can look any time, without asking
@@ -2019,6 +2032,9 @@ function admFbHTML(){
   // rounds are already open when the screen paints.
   state.fbNeedy={};
   items.forEach(function(i){ if(i.st==='open'||i.st==='prog') state.fbNeedy[i.topic]=1; });
+  // Every item of every round, unfiltered — what the one-tap round brief reads.
+  state.fbItemsByTopic={};
+  items.forEach(function(i){ (state.fbItemsByTopic[i.topic]=state.fbItemsByTopic[i.topic]||[]).push(i); });
   var match=function(i){
     if(filter==='all') return true;
     if(filter==='done') return i.st==='ok'||i.st==='ship';
@@ -2046,7 +2062,7 @@ function admFbHTML(){
       // the panel's own buttons already use.
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
         +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'" onclick="admFbToggleSend()">Send a round</button>'
-        + (total?'<button class="btn btn-sm" style="'+FB_NOSHOUT+(state.fbSelMode?'background:#400207;color:#E8D9C7;border-color:#400207;':'')+'" onclick="admFbToggleSelMode()">'+(state.fbSelMode?'Done selecting':'Select')+'</button>':'')
+        + (total?'<button class="btn btn-sm" style="'+FB_NOSHOUT+(state.fbSelMode?'background:#400207;color:#E8D9C7;border-color:#400207;':'')+'" onclick="admFbToggleSelMode()" title="Tick items across different rounds and brief them together">'+(state.fbSelMode?'Done picking':'Pick across rounds')+'</button>':'')
         +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
       +'</div>'
     +'</div>'
@@ -2186,7 +2202,16 @@ function admFbHTML(){
               +'</span>'
               + pill
             +'</button>'
-            + (open?'<div style="border-top:1px solid #f1e9da;">'+its.map(rowHTML).join('')+'</div>'
+            // One tap to brief everything this round still needs. It was reachable
+            // only by entering Select mode and ticking each row — a mode he had to
+            // know existed, to do a thing he does for the whole round anyway.
+            + (open?( (c.open+c.prog)
+                      ? '<div style="border-top:1px solid #f1e9da;padding:10px 15px;background:#fdfaf6;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+                        +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:#400207;color:#E8D9C7;border-color:#400207;border-radius:8px;" onclick="event.stopPropagation();admFbBriefRound(\''+admEsc(t)+'\')">Copy brief for '+(c.open+c.prog===1?'this one':'all '+(c.open+c.prog))+'</button>'
+                        +'<span style="font-size:11.5px;color:#9c8a72;">One prompt for Claude, covering everything still open here.</span>'
+                        +'</div>'
+                      : '')
+                    + '<div style="border-top:1px solid #f1e9da;">'+its.map(rowHTML).join('')+'</div>'
                     + (peopleByTopic[t]||'') : '')
           +'</div>';
         }).join('')
