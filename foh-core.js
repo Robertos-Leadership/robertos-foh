@@ -284,7 +284,7 @@ function renderNav(){
   const active = resolveTab(state.currentTab);
   // Module-scoped nav: Revenue and Operations are single pages reached from the Manager
   // landing — no cross-module links there. Only the Events module keeps its own sub-tabs.
-  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin' || active==='privateevents' || active==='reviews' || active==='reservations'){ nav.innerHTML=''; return; }
+  if(active==='revenue' || active==='operations' || active==='stocktake' || active==='admin' || active==='privateevents' || active==='reviews' || active==='reservations' || active==='resreports'){ nav.innerHTML=''; return; }
   const eventTabs = state.events.slice().sort(eventSort).map(ev=>
     `<div class="nav-tab ${active===eventTab(ev)?'active':''}" data-tab="${eventTab(ev)}" onclick="switchTab('${eventTab(ev)}')">${ev.name}</div>`
   ).join('');
@@ -311,6 +311,16 @@ function currentStageForTasks(tasks){
 // ── Per-user module access — driven by the app_users table (managed in the Admin module). ──
 // state.access = { modules:[...], isAdmin:bool } for the logged-in user; loaded on sign-in.
 function moduleOf(t){
+  // Reservation Reports is its own SCREEN but not its own PERMISSION. Nicole
+  // asked for it as a separate module (round res-reports, item f-module: "Keep
+  // them in a separate Reports module") and it is one — its own card, its own
+  // page, out of the hosts' way. But it reads exactly the same book the
+  // Reservations screen reads and shows nothing the book does not already show,
+  // so inventing a second permission key would have meant every existing user
+  // silently losing access on the day it shipped until Francesco went and
+  // re-ticked them one by one. Anyone who can see the book can see the reports;
+  // money inside them is still gated on Revenue, separately, as everywhere else.
+  if(t==='resreports') return 'reservations';
   if(t==='revenue'||t==='operations'||t==='stocktake'||t==='admin'||t==='privateevents'||t==='reviews'||t==='reservations') return t;
   return 'events';   // dashboard, event_*, events => the Events module
 }
@@ -341,6 +351,12 @@ function applyFohAccess(){
     var c=document.getElementById('mod-card-'+m);
     if(c) c.style.display = fohBlocked(m) ? 'none' : '';
   });
+  // Reservation Reports rides on the 'reservations' permission (see moduleOf),
+  // so it is keyed off the tab name rather than being in the list above.
+  var rrc=document.getElementById('mod-card-resreports');
+  if(rrc) rrc.style.display = fohBlocked('resreports') ? 'none' : '';
+  var rrn=document.getElementById('mod-new-resreports');
+  if(rrn) rrn.style.display = fohNewSeen('reservations') ? 'none' : '';
   var ad=document.getElementById('mod-card-admin');
   if(ad) ad.style.display = (state.access && state.access.isAdmin) ? '' : 'none';
   // Section labels hide when every module inside them is hidden for this user.
@@ -348,9 +364,12 @@ function applyFohAccess(){
   if(s1) s1.style.display = (!fohBlocked('operations') || !fohBlocked('events')) ? '' : 'none';
   var s2=document.getElementById('sec-business');
   if(s2) s2.style.display = (!fohBlocked('revenue') || !fohBlocked('stocktake')) ? '' : 'none';
-  // The Guests column carries Events + Guest Reviews. It only disappears when
-  // the user has neither — holding just one of them still shows the column.
-  var guests = !fohBlocked('privateevents') || !fohBlocked('reviews');
+  // The Guests column carries Events, Guest Reviews and Reservation Reports. It
+  // only disappears when the user has NONE of them — holding just one still
+  // shows the column. Reservation Reports had to be added here as well as to the
+  // card itself: without it, a user who holds 'reservations' and nothing else in
+  // this column would have their new card hidden by the column around it.
+  var guests = !fohBlocked('privateevents') || !fohBlocked('reviews') || !fohBlocked('resreports');
   var s3=document.getElementById('sec-guests');
   if(s3) s3.style.display = guests ? '' : 'none';
   var col3=document.getElementById('col-guests');
@@ -2702,7 +2721,7 @@ function enterApp(module){
   // Land in the chosen module — Revenue/Operations go straight there; Events keeps the
   // current Events-family tab (Leaders or an event) but NEVER another module's tab.
   var cur=state.currentTab;
-  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin'||module==='privateevents'||module==='reviews'||module==='reservations') ? module
+  var target=(module==='revenue'||module==='operations'||module==='stocktake'||module==='admin'||module==='privateevents'||module==='reviews'||module==='reservations'||module==='resreports') ? module
     : ((cur==='dashboard' || (cur && cur.indexOf('event_')===0)) ? cur : 'dashboard');
   switchTab(target);
 }

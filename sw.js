@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260731j';
+const CACHE = 'robertos-foh-v20260731k';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -46,6 +46,7 @@ const ASSETS = [
   './stock-take.js',
   './foh-reviews.js',
   './foh-reservations.js',
+  './foh-resreports.js',
   './site.webmanifest',
   './apple-touch-icon.png',
   './icon-192.png',

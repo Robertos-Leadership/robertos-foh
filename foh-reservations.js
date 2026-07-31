@@ -1927,6 +1927,11 @@ function renderReservations(){
     + '>'+(RESH.loading?'Reading guests…':'Print brief')+'</button>');
   h.push('<button class="res-btn" id="res-xls-btn" onclick="resExportExcel()" title="Download this night as an Excel file">Excel</button>');
   h.push('<button class="res-btn" onclick="resRangeOpen()" title="Download several nights as ONE Excel file — a summary line per night plus a full sheet for each">Excel: date range</button>');
+  // The way across to the Reports module. It is a separate module (Nicole's
+  // call, round res-reports / f-module) and has its own card on the landing
+  // page — this is just so somebody already looking at the book does not have
+  // to go back out to the hub to ask a question about the last three months.
+  h.push('<button class="res-btn" onclick="enterApp(\'resreports\')" title="Guests, channels, walk-ins, no-shows and win-back lists across a period">Reports</button>');
   h.push('<button class="res-btn" onclick="resRefresh()"'+(RES.loading?' disabled':'')+'>'+(RES.loading?'Refreshing…':'Refresh')+'</button>');
   h.push('</div></div>');
 
