@@ -1613,13 +1613,16 @@ var FB_STATE_LABEL={ ok:'verified live', ship:'fixed, live', prog:'being worked 
 // borrow "verified live" — that would be the unearned claim we just removed.
 // It says who confirmed it instead, which is stronger anyway: the person who
 // asked, not us.
-function admFbStateLabel(t,q){
+// `short` is the LIST's version: same words, without the build number. The build
+// repeated identically down every row and is our vocabulary, not theirs — it
+// belongs in the panel, where it can be read once and acted on.
+function admFbStateLabel(t,q,short){
   if(admFbWorkOf(t,q)) return FB_STATE_LABEL[admFbStateOf(t,q)];
   var c=admFbClosed(t,q);
   if(c && c.rejected) return '⚠ '+admEsc(String(c.rejectedBy).split(' ')[0])+' says we got it wrong';
   if(c && c.confirmedBy) return '✓ '+admEsc(String(c.confirmedBy).split(' ')[0])+' confirmed it';
   var sh=(typeof fbShipped==='function') ? fbShipped(t,q) : null;
-  if(sh && admFbIsLive(sh)) return 'fixed, live · '+admEsc(sh.build);
+  if(sh && admFbIsLive(sh)) return short ? 'fixed, live' : 'fixed, live · '+admEsc(sh.build);
   if(c) return 'fixed — told them';
   return FB_STATE_LABEL.open;
 }
@@ -1700,6 +1703,35 @@ function admFbOpen(t,q){
 function admFbClose(){ state.fbSel=null; state.fbForm=null; renderMain(); }
 function admFbSetFilter(f){ state.fbFilter=f; state.fbSel=null; renderMain(); }
 function admFbToggleSend(){ state.fbSendOpen=!state.fbSendOpen; renderMain(); }
+// A round is one row until you ask for it. Rounds only grow, and a flat list of
+// every item anyone ever asked for is an archive pretending to be a worklist.
+// state holds the EXCEPTIONS to the default, so the default can keep changing
+// (an item moving to "not started" opens its round) without fighting a stored
+// open/shut flag from last week.
+function admFbRoundShut(t){ return !!(state.fbRoundShut||{})[t]; }
+function admFbRoundForced(t){ return !!(state.fbRoundOpen||{})[t]; }
+function admFbToggleRound(t){
+  var openNow=admFbRoundIsOpen(t);
+  state.fbRoundShut=state.fbRoundShut||{}; state.fbRoundOpen=state.fbRoundOpen||{};
+  if(openNow){ state.fbRoundShut[t]=1; delete state.fbRoundOpen[t]; }
+  else { state.fbRoundOpen[t]=1; delete state.fbRoundShut[t]; }
+  renderMain();
+}
+// Open by default when it needs him, or when the item he is working on lives
+// here — never make him hunt for the row whose panel is already on screen.
+function admFbRoundIsOpen(t){
+  if(admFbRoundForced(t)) return true;
+  if(admFbRoundShut(t)) return false;
+  var sel=admFbSel(); if(sel && sel.topic===t) return true;
+  return !!(state.fbNeedy||{})[t];
+}
+// The tick boxes were a permanent column for an occasional job. Leaving the mode
+// clears the ticks too — a tick you cannot see is a tick you will forget you set.
+function admFbToggleSelMode(){
+  state.fbSelMode=!state.fbSelMode;
+  if(!state.fbSelMode) state.fbPick={};
+  renderMain();
+}
 // Move the item between states. Not typing, so a repaint is safe here.
 function admFbSetStatus(k){
   var f=state.fbForm; if(!f) return;
@@ -1781,9 +1813,12 @@ function admFbBar(items){
         return n[k] ? '<i style="display:block;width:'+(n[k]/t*100)+'%;background:'+FB_STATE_COL[k]+';"></i>' : '';
       }).join('')
     + '</div>'
-    + '<div style="display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#9c8a72;">'
-    + ['ok','ship','prog','open'].map(function(k){
-        return '<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:8px;height:8px;border-radius:2px;background:'+FB_STATE_COL[k]+';display:inline-block;"></i>'+FB_STATE_LABEL[k]+'</span>';
+    // Only the states that actually exist, each carrying its count. Naming a
+    // state that is empty teaches a word the screen never uses, and a legend
+    // without numbers makes you count the bar by eye.
+    + '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#9c8a72;">'
+    + ['ok','ship','prog','open'].filter(function(k){ return n[k]; }).map(function(k){
+        return '<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:8px;height:8px;border-radius:2px;background:'+FB_STATE_COL[k]+';display:inline-block;"></i><b style="color:#4a3b2a;font-weight:600;">'+n[k]+'</b> '+FB_STATE_LABEL[k]+'</span>';
       }).join('')
     + '</div>';
   return {n:n, html:bar};
@@ -1956,22 +1991,31 @@ function admFbHTML(){
       var a=m.row.answers||{};
       Object.keys(a).forEach(function(q){
         var v=a[q]&&a[q].a; if(!v || !FB_WORK_ANSWERS[v]) return;
-        tally[q]=tally[q]||{n:0,notes:[]};
+        tally[q]=tally[q]||{n:0,notes:[],whos:[]};
         tally[q].n++;
+        // Who asked for it. The list never showed this — you had to scroll to the
+        // bottom section to find out whose request a row was.
+        if(m.row.who && tally[q].whos.indexOf(m.row.who)<0) tally[q].whos.push(m.row.who);
         if(a[q].note) tally[q].notes.push({who:m.row.who||'someone', note:a[q].note});
       });
     });
     var round=FB_ROUNDS[t];
     Object.keys(tally).sort(function(x,y){ return (tally[y].n-tally[x].n) || (fbKeyPos(round,x)-fbKeyPos(round,y)); })
       .forEach(function(q){
-        items.push({ topic:t, qkey:q, n:tally[q].n, notes:tally[q].notes,
+        items.push({ topic:t, qkey:q, n:tally[q].n, notes:tally[q].notes, whos:tally[q].whos,
                      label:fbLabel(t,q), st:admFbStateOf(t,q), pos:fbKeyPos(round,q) });
       });
     perTopic[t]={ marked:marked, counted:counted, dupes:marked.length-counted.length };
   });
 
   var bar=admFbBar(items), n=bar.n, total=items.length;
-  var filter=state.fbFilter||'all';
+  // Open on what needs him. Landing on "Everything" when nothing is waiting
+  // opens the screen on the archive and makes him find the work himself.
+  var filter=state.fbFilter || (n.open ? 'open' : (n.prog ? 'prog' : 'all'));
+  // Which rounds have something waiting — read by admFbRoundIsOpen so those
+  // rounds are already open when the screen paints.
+  state.fbNeedy={};
+  items.forEach(function(i){ if(i.st==='open'||i.st==='prog') state.fbNeedy[i.topic]=1; });
   var match=function(i){
     if(filter==='all') return true;
     if(filter==='done') return i.st==='ok'||i.st==='ship';
@@ -1981,28 +2025,34 @@ function admFbHTML(){
 
   // ── header + the one line of truth ──
   var who=(function(){ var s={}; (state.fbRows||[]).forEach(function(r){ if(r.who) s[r.who]=1; }); return Object.keys(s); })();
-  var truth = total
-    ? (who.length===1?who[0]+' asked':'The team asked')+' for <b>'+total+'</b> thing'+(total===1?'':'s')+'. '
-      + (n.ok+n.ship)+' fixed and live, '+n.prog+' being worked on, '+n.open+' not started.'
-    : 'Nothing asked for yet.';
+  // Leads with what is waiting on him, because that is the only part he can act
+  // on. The full tally still follows — it is just no longer the headline.
+  var asked=(who.length===1?admEsc(who[0])+' asked':'The team asked')+' for <b>'+total+'</b> thing'+(total===1?'':'s')+'.';
+  var truth = !total ? 'Nothing asked for yet.'
+    : (n.open||n.prog)
+      ? '<b>'+(n.open+n.prog)+'</b> waiting on you &mdash; '
+        + [n.open?n.open+' not started':'', n.prog?n.prog+' being worked on':''].filter(Boolean).join(', ')
+        + '. '+asked+' '+(n.ok+n.ship)+' fixed and live.'
+      : 'Nothing waiting on you. '+asked+' All '+total+' fixed and live.';
   var h='<div class="adm-wrap">'
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
       +'<div><h2 style="font-size:19px;color:#400207;margin:0;font-weight:600;">Feedback</h2>'
       +'<div style="font-size:12.5px;color:#9c8a72;margin-top:3px;">'+truth+'</div></div>'
-      +'<div style="display:flex;gap:8px;">'
-        +'<button class="btn btn-sm" onclick="admFbToggleSend()">'+(state.fbSendOpen?'Close':'Send a round')+'</button>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +'<button class="btn btn-sm" onclick="admFbToggleSend()">Send a round</button>'
+        + (total?'<button class="btn btn-sm"'+(state.fbSelMode?' style="background:#400207;color:#E8D9C7;border-color:#400207;"':'')+' onclick="admFbToggleSelMode()">'+(state.fbSelMode?'Done selecting':'Select')+'</button>':'')
         +'<button class="btn btn-sm" style="background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
       +'</div>'
     +'</div>'
-    + bar.html
-    + (state.fbSendOpen ? admFbSendHTML() : '');
+    + bar.html;
 
   if(!total && !state.fbRows.length){
     return h+'<div class="ppl-empty">Nothing back yet &mdash; send a round above and their answers land here the moment they tap Send.</div></div>';
   }
 
   // ── filters ──
-  var F=[['all','Everything',total],['open','Needs you',n.open],['prog','In progress',n.prog],['done','Done',n.ok+n.ship]];
+  // Needs-you leads, because that is where the screen now opens.
+  var F=[['open','Needs you',n.open],['prog','In progress',n.prog],['all','Everything',total],['done','Done',n.ok+n.ship]];
   h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">'
     + F.map(function(f){
         var on=filter===f[0];
@@ -2020,38 +2070,78 @@ function admFbHTML(){
 
   // ── the list ──
   var sel=admFbSel();
-  var list='', lastTopic=null;
-  if(!shown.length){
-    list='<div class="ppl-empty" style="padding:24px 8px;">Nothing here &mdash; try another filter.</div>';
-  }else{
-    shown.forEach(function(i){
-      if(i.topic!==lastTopic){
-        lastTopic=i.topic;
-        var cnt=shown.filter(function(x){ return x.topic===i.topic; }).length;
-        var round=FB_ROUNDS[i.topic];
-        var follows=(round&&round.follows&&FB_ROUNDS[round.follows])?' &middot; follows '+admEsc(FB_ROUNDS[round.follows].name):'';
-        list+='<div class="ppl-grp" style="margin-top:18px;">'+admEsc(admFbTopicName(i.topic))+' <span>&middot; '+cnt+follows+'</span></div>';
-      }
-      var isSel = sel && sel.topic===i.topic && sel.qkey===i.qkey;
-      var note = i.notes.length ? i.notes[0].note : '';
-      var ticked = !!admFbPicked()[admFbPickKey(i.topic,i.qkey)];
-      // The tick sits OUTSIDE the row button — a checkbox inside a button is
-      // unreachable by keyboard and fights the click that opens the item.
-      list+='<div style="display:flex;align-items:center;border-bottom:1px solid #f1e9da;background:'+(isSel?'#fbf7f1':'transparent')+';">'
-        +'<label style="display:flex;align-items:center;padding:0 9px 0 3px;cursor:pointer;" title="Tick to brief this one with others">'
+  var selMode=!!state.fbSelMode;
+
+  // One row per item, inside its round.
+  var rowHTML=function(i){
+    var isSel = sel && sel.topic===i.topic && sel.qkey===i.qkey;
+    var note = i.notes.length ? i.notes[0].note : '';
+    var ticked = !!admFbPicked()[admFbPickKey(i.topic,i.qkey)];
+    // Who asked, in the slot the repeating build number used to occupy. More
+    // than one person and the count says more than the names would.
+    var whoTxt = i.n>1 ? i.n+' people' : (i.whos&&i.whos[0] ? admEsc(String(i.whos[0]).split(' ')[0]) : '');
+    // The tick sits OUTSIDE the row button — a checkbox inside a button is
+    // unreachable by keyboard and fights the click that opens the item.
+    return '<div style="display:flex;align-items:center;border-bottom:1px solid #f6efe4;background:'+(isSel?'#fbf7f1':'transparent')+';">'
+      + (selMode?'<label style="display:flex;align-items:center;padding:0 9px 0 12px;cursor:pointer;" title="Tick to brief this one with others">'
         +'<input type="checkbox"'+(ticked?' checked':'')+' style="width:15px;height:15px;accent-color:#400207;cursor:pointer;" onchange="admFbPickToggle(&#39;'+admEsc(i.topic)+'&#39;,&#39;'+admEsc(i.qkey)+'&#39;,this.checked)">'
-        +'</label>'
-        +'<button style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 8px 11px 0;cursor:pointer;font-family:inherit;" onclick="admFbOpen(\''+admEsc(i.topic)+'\',\''+admEsc(i.qkey)+'\')">'
-        +'<span style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[i.st]+';"></span>'
-        +'<span style="font-size:11.5px;color:#9c8a72;min-width:18px;">'+admEsc(admFbItemNo(i.topic,i.qkey))+'.</span>'
-        +'<span style="flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;">'+admEsc(i.label||('Question '+i.qkey))
-        + (note?'<span style="display:block;font-size:11.5px;color:#9c8a72;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&ldquo;'+admEsc(note)+'&rdquo;</span>':'')
-        +'</span>'
-        + (i.n>1?'<span style="font-size:11px;color:#9c8a72;white-space:nowrap;">'+i.n+' people</span>':'')
-        +'<span style="font-size:11px;white-space:nowrap;color:'+(i.st==='ok'?'#2E6B34':'#9c8a72')+';">'+admFbStateLabel(i.topic,i.qkey)+'</span>'
-        +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
-        +'</button></div>';
-    });
+        +'</label>':'')
+      +'<button style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 14px 11px '+(selMode?'0':'14px')+';cursor:pointer;font-family:inherit;" onclick="admFbOpen(\''+admEsc(i.topic)+'\',\''+admEsc(i.qkey)+'\')">'
+      +'<span style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[i.st]+';"></span>'
+      +'<span style="font-size:11.5px;color:#b9a88f;min-width:18px;">'+admEsc(admFbItemNo(i.topic,i.qkey))+'.</span>'
+      +'<span style="flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;">'+admEsc(i.label||('Question '+i.qkey))
+      + (note?'<span style="display:block;font-size:11.5px;color:#9c8a72;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&ldquo;'+admEsc(note)+'&rdquo;</span>':'')
+      +'</span>'
+      + (whoTxt?'<span style="font-size:11.5px;color:#9c8a72;white-space:nowrap;flex:none;">'+whoTxt+'</span>':'')
+      +'<span style="font-size:11.5px;white-space:nowrap;flex:none;color:'+(i.st==='ok'?'#2E6B34':(i.st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel(i.topic,i.qkey,true)+'</span>'
+      +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
+      +'</button></div>';
+  };
+
+  // ── one collapsible card per round ──
+  var list='';
+  if(!shown.length){
+    // Not "nothing here, try another filter" — that makes an empty Needs-you
+    // read like a dead end when it is the best news the screen can give.
+    list = (filter==='open'||filter==='prog')
+      ? '<div style="background:#fff;border:1px solid #e8ddcd;border-radius:11px;padding:26px 20px;text-align:center;margin-top:16px;">'
+        +'<div style="font-size:15.5px;color:#400207;font-weight:600;">Nothing is waiting on you.</div>'
+        +'<div style="font-size:12.5px;color:#9c8a72;margin-top:6px;">All '+total+' thing'+(total===1?'':'s')+' the team asked for '+(total===1?'is':'are')+' fixed and live.</div>'
+        +'<button class="btn btn-sm" style="margin-top:14px;" onclick="admFbSetFilter(\'all\')">Look through everything</button></div>'
+      : '<div class="ppl-empty" style="padding:24px 8px;">Nothing here &mdash; try another filter.</div>';
+  }else{
+    var byRound={};
+    shown.forEach(function(i){ (byRound[i.topic]=byRound[i.topic]||[]).push(i); });
+    list='<div style="margin-top:14px;">'
+      + order.filter(function(t){ return byRound[t]; }).map(function(t){
+          var its=byRound[t], round=FB_ROUNDS[t], open=admFbRoundIsOpen(t);
+          // Counted across the WHOLE round, not the filtered slice — a round
+          // badge that changed with the filter would be lying about the round.
+          var all=items.filter(function(x){ return x.topic===t; });
+          var c={ok:0,ship:0,prog:0,open:0}; all.forEach(function(x){ c[x.st]++; });
+          var pill = c.open ? '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#F7DED9;color:#8A2A1A;white-space:nowrap;flex:none;">'+c.open+' not started</span>'
+                   : c.prog ? '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#FAF0DC;color:#8A6A1A;white-space:nowrap;flex:none;">'+c.prog+' being worked on</span>'
+                   : '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#E7F0E5;color:#2E6B34;white-space:nowrap;flex:none;">all live</span>';
+          var follows=(round&&round.follows&&FB_ROUNDS[round.follows])?' &middot; follow-up to '+admEsc(FB_ROUNDS[round.follows].name):'';
+          var P=perTopic[t]||{}, newest=(P.counted&&P.counted[0]) ? P.counted[0].row : null;
+          var whos=[]; (P.counted||[]).forEach(function(m){ if(m.row.who && whos.indexOf(m.row.who)<0) whos.push(m.row.who); });
+          var meta = all.length+' item'+(all.length===1?'':'s')
+            + follows
+            + (whos.length?' &middot; '+admEsc(whos.slice(0,3).join(', '))+(whos.length>3?' +'+(whos.length-3):''):'')
+            + (newest?' &middot; last reply '+admEsc(admUsageAgo(newest.created_at)):'');
+          return '<div style="border:1px solid #e8ddcd;border-radius:11px;background:#fff;margin-bottom:9px;overflow:hidden;">'
+            +'<button style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:0;padding:13px 15px;cursor:pointer;font-family:inherit;" onclick="admFbToggleRound(\''+admEsc(t)+'\')">'
+              +'<span style="color:#c9b79c;font-size:13px;flex:none;display:inline-block;'+(open?'transform:rotate(90deg);':'')+'">&rsaquo;</span>'
+              +'<span style="flex:1;min-width:0;">'
+                +'<span style="display:block;font-size:14.5px;color:#400207;font-weight:600;line-height:1.35;">'+admEsc(admFbTopicName(t))+'</span>'
+                +'<span style="display:block;font-size:11.5px;color:#9c8a72;margin-top:3px;">'+meta+'</span>'
+              +'</span>'
+              + pill
+            +'</button>'
+            + (open?'<div style="border-top:1px solid #f1e9da;">'+its.map(rowHTML).join('')+'</div>':'')
+          +'</div>';
+        }).join('')
+      +'</div>';
   }
   h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;margin-top:6px;" class="'+(sel?'fb-split':'')+'">'
     +'<div id="fb-list">'+list+'</div>'
@@ -2094,6 +2184,16 @@ function admFbHTML(){
       + rows + quietHTML;
   });
   if(people) h+='<div style="margin-top:26px;border-top:1px solid #e3d5c2;padding-top:4px;">'+people+'</div>';
+
+  // "Send a round" opens OVER the screen. Inline, it pushed the actual work
+  // below the fold on every visit for a job he does about once a week.
+  if(state.fbSendOpen){
+    h+='<div style="position:fixed;inset:0;background:rgba(44,24,16,.42);z-index:900;display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;" onclick="if(event.target===this)admFbToggleSend()">'
+      +'<div style="width:100%;max-width:720px;background:#f9f4ee;border-radius:14px;box-shadow:0 18px 50px rgba(44,24,16,.28);padding:16px 16px 6px;">'
+        +'<div style="display:flex;justify-content:flex-end;"><button class="btn btn-sm" style="background:transparent;border-color:transparent;color:#9c8a72;font-size:18px;line-height:1;padding:2px 8px;" title="Close" onclick="admFbToggleSend()">&times;</button></div>'
+        + admFbSendHTML()
+      +'</div></div>';
+  }
 
   return h+'</div>';
 }
