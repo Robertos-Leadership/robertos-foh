@@ -6523,7 +6523,7 @@ function peRenderGuided(){
   }).join('')+'</div>';
   // Escape hatch — an experienced user skips the questions and jumps into the full
   // editor, carrying whatever's been entered so far. Reuses peGuideFinish('save').
-  h += '<div style="text-align:right;margin:-2px 0 14px"><span style="font-size:11.5px;color:#8A6A4F;text-decoration:underline;cursor:pointer'+(g.busy?';opacity:.5;pointer-events:none':'')+'" onclick="peGuideFinish(\'save\')">Skip the steps — open the full form ›</span></div>';
+  h += '<div style="text-align:right;margin:-2px 0 14px"><span style="font-size:11.5px;color:#8A6A4F;text-decoration:underline;cursor:pointer'+(g.busy?';opacity:.5;pointer-events:none':'')+'" onclick="peGuideFinish(\'save\')">Create it now and open the full form ›</span></div>';
   h += '<div class="pe-card">';
   if(g.step===0){
     h += '<div class="pe-title" style="font-size:19px">Who’s the booking for?</div>'+
