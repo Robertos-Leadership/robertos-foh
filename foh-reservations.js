@@ -868,6 +868,55 @@ function resClamp(s, n){
   return s.length > n ? s.slice(0, n-2).replace(/[\s·,;-]+\S*$/, '') + '…' : s;
 }
 
+// ── THE NOTE ON SCREEN ────────────────────────────────────────────────────
+// The note column is one line with an ellipsis (.res-note in foh-styles.css),
+// so what a manager actually saw on 31 Jul was "Selected: DINNER · DC INFO, …"
+// — internal host codes filling the line while the guest's request sat past the
+// cut. The full text existed only in a title tooltip, which a phone cannot show
+// at all, and the same truncation that hid an allergy on the printed sheet was
+// hiding it here too, harder.
+//
+// Now the cell carries the printed brief's flags first, then the cleaned
+// request. Francesco's call (31 Jul): the team taps a note to open it in place
+// rather than the row growing for everyone, so a long request costs no width
+// until somebody wants to read it.
+//
+// Which notes are open is held OUTSIDE the render: this screen re-renders itself
+// every 90 seconds while it is tonight, and a note that closed itself mid-read
+// would be worse than one that never opened.
+var RES_OPEN_NOTES = {};
+function resNoteKey(r){
+  return String((r && (r.client || r.name) || '') + '|' + ((r && r.time) || ''))
+    .replace(/[^A-Za-z0-9_|-]/g, '');
+}
+function resNoteCell(r){
+  var d = resReadNote(r.notes);
+  // Collapsed, the cell is one line with an ellipsis, so a chip past the edge is
+  // simply cut in half. Measured on the real stylesheet at a 116px column: TWO
+  // chips already overflow — "ALLERGY · ALCOHOL-FREE" lost the alcohol-free.
+  // So exactly ONE chip rides the collapsed line, and because RES_FLAGS is
+  // ordered dietary-first that one is always the most serious thing on the
+  // booking. The others are counted, not hidden, and arrive with the tap.
+  var lead = d.flags.slice(0, 1), rest = d.flags.slice(1);
+  var body = resFlagChips(lead)
+    + (rest.length ? '<span class="rn-more">' + resFlagChips(rest) + '</span>'
+                   + '<span class="rn-n">+' + rest.length + '</span>' : '')
+    + (d.text ? '<span class="rn-t">' + resEsc(d.text) + '</span>' : '')
+    + (d.asked.length ? '<span class="rn-q">' + d.asked.map(resEsc).join(' &middot; ') + '</span>' : '');
+  if(!body) return '<div class="res-note"></div>';
+  var key = resNoteKey(r);
+  return '<div class="res-note rn-tap' + (RES_OPEN_NOTES[key] ? ' rn-open' : '') + '"'
+    + ' role="button" tabindex="0" aria-label="Show the whole note"'
+    + ' data-k="' + resEsc(key) + '" onclick="resNoteToggle(this)"'
+    + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();resNoteToggle(this);}"'
+    + ' title="' + resEsc(d.text || '') + '">' + body + '</div>';
+}
+function resNoteToggle(el){
+  var k = el.getAttribute('data-k');
+  if(RES_OPEN_NOTES[k]) delete RES_OPEN_NOTES[k]; else RES_OPEN_NOTES[k] = 1;
+  el.classList.toggle('rn-open');
+}
+
 async function resPrintBrief(){
   // Never print a sheet with the history column silently empty.
   await resEnsureHistory();
@@ -1971,7 +2020,7 @@ function renderReservations(){
           // "not assigned" would contradict what the hosts can see.
           + '<div class="res-tbls">'+((r.tables&&r.tables.length)?resEsc(r.tables.join(', ')):'<i>&mdash;</i>')+'</div>'
           + '<div><span class="res-pill res-pill-'+st+'">'+resEsc(r.status_display||r.status||'')+'</span></div>'
-          + '<div class="res-note" title="'+resEsc(r.notes||'')+'">'+resEsc(r.notes||'')+'</div>'
+          + resNoteCell(r)
           + '<div class="res-by">'+resEsc(r.booked_by||'')+(r.created?'<i>'+resEsc(resWhen(r.created))+'</i>':'')+'</div>'
           + (money?'<div class="res-right">'+resSpendCell(r)+'</div>':'')
           + '</div>');

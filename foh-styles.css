@@ -2552,6 +2552,35 @@
   .res-note,.res-by{font-size:11.5px;color:#6B5B4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .res-by i{display:block;font-style:normal;font-size:10.5px;color:#A99887}
 
+  /* ── The note: flags, then the request, tap to open ────────────────────────
+     Collapsed the cell is still one line, so the grid keeps its shape. The
+     flags are emitted FIRST precisely so that they survive the ellipsis: a
+     dietary requirement must be readable without anyone touching anything.
+     Tapping opens the row in place (rn-open) — see resNoteCell(). */
+  .res-note.rn-tap{cursor:pointer}
+  .res-note.rn-tap:hover .rn-t{text-decoration:underline dotted rgba(107,31,42,.45)}
+  .res-note.rn-tap:focus-visible{outline:2px solid var(--vino);outline-offset:2px;border-radius:4px}
+  .res-note.rn-open{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.5}
+  .res-note .rn-q{color:#A99887}
+  .res-note.rn-open .rn-q{display:block}
+  /* Flags beyond the first two are held back until the note is opened — see
+     resNoteCell(). Hidden, not clipped: a chip half off the edge reads as a
+     rendering fault. */
+  .res-note .rn-more{display:none}
+  .res-note.rn-open .rn-more{display:inline}
+  /* The count of what is waiting behind the tap. Never a silent omission. */
+  .res-note .rn-n{display:inline-block;font-size:9px;font-weight:700;color:#8C7B68;
+    background:#EFE6D9;border-radius:3px;padding:1px 4px;margin-right:5px;vertical-align:1px}
+  .res-note.rn-open .rn-n{display:none}
+  .res-note .fl{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;
+    padding:1px 5px;border-radius:3px;margin:0 5px 0 0;vertical-align:1px;white-space:nowrap}
+  /* Red is only ever a dietary requirement — same rule as the printed brief, so
+     the two surfaces cannot teach the team two different colour languages. */
+  .res-note .fl.crit{background:#B00020;color:#fff}
+  .res-note .fl.warn{background:#8a5a00;color:#fff}
+  .res-note .fl.occ{background:#F0E6D8;color:#5A4326;border:1px solid #D8C5A8}
+  .res-note .fl.menu{background:#26413C;color:#fff}
+
   /* ── Spend cell: gross, net, average per guest ─────────────────────────────
      Gross leads because it is what the guest paid and what the host would say
      out loud; net sits under it in the same colour family but lighter, so the
