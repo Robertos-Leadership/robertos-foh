@@ -1627,6 +1627,9 @@ function admFbStateLabel(t,q,short){
   return FB_STATE_LABEL.open;
 }
 var FB_STATE_COL={ ok:'#5C9463', ship:'#7FA6CC', prog:'#D9B45B', open:'#C9BBA3' };
+// The app-wide .btn is uppercase with 0.15em tracking. This screen is written in
+// sentences, and uppercase sentences read as shouting — every button here opts out.
+var FB_NOSHOUT='text-transform:none;letter-spacing:0;font-size:12px;';
 // What the person who ASKED said about the item that closed this one. Their
 // latest submission only — the same rule everything else counts by.
 function admFbAnswerTo(topic, qkey){
@@ -2038,10 +2041,13 @@ function admFbHTML(){
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
       +'<div><h2 style="font-size:19px;color:#400207;margin:0;font-weight:600;">Feedback</h2>'
       +'<div style="font-size:12.5px;color:#9c8a72;margin-top:3px;">'+truth+'</div></div>'
+      // .btn is UPPERCASE with 0.15em tracking app-wide. On a screen made of
+      // sentences that reads as shouting, so these opt out — the same `noshout`
+      // the panel's own buttons already use.
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-        +'<button class="btn btn-sm" onclick="admFbToggleSend()">Send a round</button>'
-        + (total?'<button class="btn btn-sm"'+(state.fbSelMode?' style="background:#400207;color:#E8D9C7;border-color:#400207;"':'')+' onclick="admFbToggleSelMode()">'+(state.fbSelMode?'Done selecting':'Select')+'</button>':'')
-        +'<button class="btn btn-sm" style="background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
+        +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'" onclick="admFbToggleSend()">Send a round</button>'
+        + (total?'<button class="btn btn-sm" style="'+FB_NOSHOUT+(state.fbSelMode?'background:#400207;color:#E8D9C7;border-color:#400207;':'')+'" onclick="admFbToggleSelMode()">'+(state.fbSelMode?'Done selecting':'Select')+'</button>':'')
+        +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
       +'</div>'
     +'</div>'
     + bar.html;
@@ -2056,7 +2062,7 @@ function admFbHTML(){
   h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">'
     + F.map(function(f){
         var on=filter===f[0];
-        return '<button class="btn btn-sm" style="border-radius:20px;'+(on?'background:#400207;color:#E8D9C7;border-color:#400207;':'')+'" onclick="admFbSetFilter(\''+f[0]+'\')">'
+        return '<button class="btn btn-sm" style="border-radius:20px;'+FB_NOSHOUT+(on?'background:#400207;color:#E8D9C7;border-color:#400207;':'background:#fff;border:1px solid #e3d5c2;color:#6b5a45;')+'" onclick="admFbSetFilter(\''+f[0]+'\')">'
           + f[1]+' <b style="font-weight:400;opacity:.7;">'+f[2]+'</b></button>';
       }).join('')
     +'</div>';
@@ -2069,6 +2075,48 @@ function admFbHTML(){
   h+='<div id="fb-pickbar" style="display:'+(pickInner?'flex':'none')+';align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;background:#400207;color:#E8D9C7;border-radius:10px;padding:9px 13px;">'+pickInner+'</div>';
 
   // ── the list ──
+  // ── who replied, and who has gone quiet ──
+  // Built per round and rendered INSIDE that round's card. As its own section at
+  // the foot of the page it reprinted every round name a second time, in a
+  // heavier serif than the cards above — the same three names twice on one
+  // screen, which is most of what made this feel messy.
+  var peopleByTopic={};
+  order.forEach(function(t){
+    var P=perTopic[t]; if(!P) return;
+    var rows=P.marked.map(function(m){
+      var r=m.row, a=r.answers||{}, counts={};
+      Object.keys(a).forEach(function(q){ var v=a[q]&&a[q].a; if(v) counts[v]=(counts[v]||0)+1; });
+      var pills=FB_ANSWER_ORDER.filter(function(k){ return counts[k]; }).map(function(k){ return admFbPill(k+' · '+counts[k]); }).join(' ');
+      var sub=admEsc(admUsageAgo(r.created_at))
+        + (m.again>1 ? (m.latest?' · answered '+(m.again===2?'twice':m.again+' times')+', this is the latest':' · an earlier answer, not counted') : '');
+      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:10px 4px;border-bottom:1px solid #f1e9da;'+(m.latest?'':'opacity:.5;')+'">'
+        +'<div style="min-width:150px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:13.5px;">'+admEsc(r.who||'Anonymous')+'</div>'
+        +'<div style="font-size:11.5px;color:#9c8a72;">'+sub+'</div>'
+        + (m.latest&&r.who?'<button class="btn btn-sm" style="font-size:10.5px;padding:3px 7px;margin-top:4px;text-transform:none;letter-spacing:0;" onclick="admFbStatusLink(\''+admEsc(r.who)+'\')">Copy their status link</button>':'')
+        +'</div>'
+        +'<div style="flex:2;min-width:180px;display:flex;gap:5px;flex-wrap:wrap;">'+(pills||'<span style="font-size:12px;color:#9c8a72;">no answers, note only</span>')+'</div>'
+        + (r.extra?'<div style="flex-basis:100%;font-size:12.5px;color:#4a3b2a;background:#f7f2e8;border-radius:8px;padding:8px 10px;"><b style="color:#400207;">What we missed:</b> '+admEsc(r.extra)+'</div>':'')
+        +'</div>';
+    }).join('');
+    var replied={}; byTopic[t].forEach(function(r){ if(r.who) replied[String(r.who).trim().toLowerCase()]=1; });
+    var qs={}, quiet=[];
+    sentRows.filter(function(s){ return s.topic===t; }).forEach(function(s){
+      var k=String(s.who||'').trim().toLowerCase();
+      if(!k||replied[k]||qs[k]) return; qs[k]=1; quiet.push(s);
+    });
+    var quietHTML=quiet.map(function(s){
+      return '<div style="padding:8px 4px;border-bottom:1px solid #f1e9da;font-size:12.5px;color:#9c8a72;">'+admEsc(s.who)+' &mdash; sent '+admEsc(admUsageAgo(s.sent_at))+', nothing back yet</div>';
+    }).join('');
+    if(!rows && !quietHTML) return;
+    peopleByTopic[t]='<div style="border-top:1px solid #f1e9da;padding:12px 15px 4px;background:#fdfaf6;">'
+      +'<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#b09a7d;margin-bottom:6px;">Who replied</div>'
+      + (P.dupes?'<div style="background:#F7DED9;border:1px solid #D89C90;border-radius:8px;padding:8px 11px;font-size:12px;color:#8A2A1A;line-height:1.5;margin:0 0 8px;">'
+        +(P.dupes===1?'Someone answered this round twice.':P.dupes+' answers here are repeats.')
+        +' Counting each person once, using their latest &mdash; the earlier ones are still below, just not counted.</div>':'')
+      + rows + quietHTML
+      +'</div>';
+  });
+
   var sel=admFbSel();
   var selMode=!!state.fbSelMode;
 
@@ -2107,7 +2155,7 @@ function admFbHTML(){
       ? '<div style="background:#fff;border:1px solid #e8ddcd;border-radius:11px;padding:26px 20px;text-align:center;margin-top:16px;">'
         +'<div style="font-size:15.5px;color:#400207;font-weight:600;">Nothing is waiting on you.</div>'
         +'<div style="font-size:12.5px;color:#9c8a72;margin-top:6px;">All '+total+' thing'+(total===1?'':'s')+' the team asked for '+(total===1?'is':'are')+' fixed and live.</div>'
-        +'<button class="btn btn-sm" style="margin-top:14px;" onclick="admFbSetFilter(\'all\')">Look through everything</button></div>'
+        +'<button class="btn btn-sm" style="margin-top:14px;'+FB_NOSHOUT+'background:#fff;border:1px solid #e3d5c2;color:#4a3b2a;border-radius:8px;" onclick="admFbSetFilter(\'all\')">Look through everything</button></div>'
       : '<div class="ppl-empty" style="padding:24px 8px;">Nothing here &mdash; try another filter.</div>';
   }else{
     var byRound={};
@@ -2138,7 +2186,8 @@ function admFbHTML(){
               +'</span>'
               + pill
             +'</button>'
-            + (open?'<div style="border-top:1px solid #f1e9da;">'+its.map(rowHTML).join('')+'</div>':'')
+            + (open?'<div style="border-top:1px solid #f1e9da;">'+its.map(rowHTML).join('')+'</div>'
+                    + (peopleByTopic[t]||'') : '')
           +'</div>';
         }).join('')
       +'</div>';
@@ -2148,42 +2197,6 @@ function admFbHTML(){
     + (sel?admFbPanelHTML():'')
     +'</div>';
 
-  // ── who replied, and who has gone quiet ──
-  var people='';
-  order.forEach(function(t){
-    var P=perTopic[t]; if(!P) return;
-    var rows=P.marked.map(function(m){
-      var r=m.row, a=r.answers||{}, counts={};
-      Object.keys(a).forEach(function(q){ var v=a[q]&&a[q].a; if(v) counts[v]=(counts[v]||0)+1; });
-      var pills=FB_ANSWER_ORDER.filter(function(k){ return counts[k]; }).map(function(k){ return admFbPill(k+' · '+counts[k]); }).join(' ');
-      var sub=admEsc(admUsageAgo(r.created_at))
-        + (m.again>1 ? (m.latest?' · answered '+(m.again===2?'twice':m.again+' times')+', this is the latest':' · an earlier answer, not counted') : '');
-      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:10px 4px;border-bottom:1px solid #f1e9da;'+(m.latest?'':'opacity:.5;')+'">'
-        +'<div style="min-width:150px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:13.5px;">'+admEsc(r.who||'Anonymous')+'</div>'
-        +'<div style="font-size:11.5px;color:#9c8a72;">'+sub+'</div>'
-        + (m.latest&&r.who?'<button class="btn btn-sm" style="font-size:10.5px;padding:3px 7px;margin-top:4px;text-transform:none;letter-spacing:0;" onclick="admFbStatusLink(\''+admEsc(r.who)+'\')">Copy their status link</button>':'')
-        +'</div>'
-        +'<div style="flex:2;min-width:180px;display:flex;gap:5px;flex-wrap:wrap;">'+(pills||'<span style="font-size:12px;color:#9c8a72;">no answers, note only</span>')+'</div>'
-        + (r.extra?'<div style="flex-basis:100%;font-size:12.5px;color:#4a3b2a;background:#f7f2e8;border-radius:8px;padding:8px 10px;"><b style="color:#400207;">What we missed:</b> '+admEsc(r.extra)+'</div>':'')
-        +'</div>';
-    }).join('');
-    var replied={}; byTopic[t].forEach(function(r){ if(r.who) replied[String(r.who).trim().toLowerCase()]=1; });
-    var qs={}, quiet=[];
-    sentRows.filter(function(s){ return s.topic===t; }).forEach(function(s){
-      var k=String(s.who||'').trim().toLowerCase();
-      if(!k||replied[k]||qs[k]) return; qs[k]=1; quiet.push(s);
-    });
-    var quietHTML=quiet.map(function(s){
-      return '<div style="padding:8px 4px;border-bottom:1px solid #f1e9da;font-size:12.5px;color:#9c8a72;">'+admEsc(s.who)+' &mdash; sent '+admEsc(admUsageAgo(s.sent_at))+', nothing back yet</div>';
-    }).join('');
-    if(!rows && !quietHTML) return;
-    people+='<div class="ppl-grp" style="margin-top:16px;">'+admEsc(admFbTopicName(t))+' <span>&middot; who replied</span></div>'
-      + (P.dupes?'<div style="background:#F7DED9;border:1px solid #D89C90;border-radius:8px;padding:8px 11px;font-size:12px;color:#8A2A1A;line-height:1.5;margin:8px 4px 0;">'
-        +(P.dupes===1?'Someone answered this round twice.':P.dupes+' answers here are repeats.')
-        +' Counting each person once, using their latest &mdash; the earlier ones are still below, just not counted.</div>':'')
-      + rows + quietHTML;
-  });
-  if(people) h+='<div style="margin-top:26px;border-top:1px solid #e3d5c2;padding-top:4px;">'+people+'</div>';
 
   // "Send a round" opens OVER the screen. Inline, it pushed the actual work
   // below the fold on every visit for a job he does about once a week.
