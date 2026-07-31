@@ -918,7 +918,7 @@ async function resPrintBrief(){
     h += '<table>' + cols + '<thead><tr>'
       + '<th class="w1"' + span + '>Time</th><th class="w2"' + span + '>Pax</th>'
       + '<th class="w3"' + span + '>Guest</th><th class="w4"' + span + '>Table</th>'
-      + '<th class="w5"' + span + '>Last visit</th><th class="w6"' + span + '>Visits</th>'
+      + '<th class="w5"' + span + '>Last here</th><th class="w6"' + span + '>Visits</th>'
       + (money ? '<th class="grp" colspan="3">Spend with us</th>' : '')
       + '<th' + span + '>Worth knowing</th></tr>'
       + (money ? '<tr><th class="w7">Total</th><th class="w8">Per guest</th><th class="w9">Per table</th></tr>' : '')
@@ -967,7 +967,9 @@ async function resPrintBrief(){
         + '<td class="w3">' + (r.vip ? '<span class="vip">VIP</span> ' : '') + resEsc(r.name||'') + '</td>'
         + '<td class="w4">' + ((r.tables&&r.tables.length) ? resEsc(r.tables.join(', ')) : '') + '</td>'
         + '<td class="w5">' + (firstTime ? '<i>first visit</i>' : (venueScoped && g.last_visit ? resEsc(resVisitShort(g.last_visit)) : '')) + '</td>'
-        + '<td class="w6">' + (venueScoped ? resNum(g.visits) : '') + '</td>'
+        // Blank, not "0", on a first visit: the column beside it already says
+        // "first visit", and "first visit / 0" reads as two different facts.
+        + '<td class="w6">' + (venueScoped && !firstTime ? resNum(g.visits) : '') + '</td>'
         // Three figures, asked for 31 Jul: lifetime total, then SevenRooms' two
         // averages -- per_cover is per PERSON, per_visit is the average BILL.
         // All three come STRAIGHT from SevenRooms and none is computed here:
@@ -1018,9 +1020,17 @@ async function resPrintBrief(){
     // the sheet, which is the right way round for a service brief.
     // c5 is 68px because "23 Jan 2025" measures 67px at 11px Arial. At 58 it was
     // nowrap-overflowing into the Visits column — measured, not guessed.
-    + '.c1{width:30px}.c2{width:22px}.c3{width:104px}.c4{width:34px}.c5{width:68px}.c6{width:28px}'
+    + '.c1{width:30px}.c2{width:22px}.c3{width:100px}.c4{width:34px}.c5{width:70px}.c6{width:34px}'
     + '.c7{width:50px}.c8{width:42px}.c9{width:42px}'
-    + '.w2,.w6{text-align:center}.w3{font-weight:700}'
+    + '.w2{text-align:center}.w3{font-weight:700}'
+    // The history pair used to read as one blurred phrase -- "Last visit" and
+    // "Visits" share a word, and left-aligned text sat hard against the number
+    // beside it. Now: different words, the count right-aligned so the digits
+    // pull away from the date, and a hairline holding the pair together.
+    + '.w6{text-align:right;font-variant-numeric:tabular-nums}'
+    + 'th.w5,td.w5{border-left:1px solid #ddd;padding-left:7px}'
+    + 'th.w6,td.w6{padding-right:7px}'
+    + 'th{white-space:nowrap}'
     + '.w5{white-space:nowrap}'                       // "23 Jan 2025" must not wrap onto two lines
     + '.w7,.w8,.w9{text-align:right;font-size:9px;font-variant-numeric:tabular-nums}'
     // The band over the three money columns, and a hairline down each side of
