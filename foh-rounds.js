@@ -54,7 +54,21 @@ var FB_A = {
   WAIT: 'Not yet',
   FINE: 'Agree, this is fine',
   NEVER:"Doesn't happen",
-  LEAVE:'Leave as is'
+  LEAVE:'Leave as is',
+  // ── Added for the Reservations reporting round (res-reports) ──────────────
+  // A menu round asks a different question to every round before it: not "is
+  // this broken?" but "shall we build this?". Two answers, no middle — a
+  // "nice to have" on a report menu is how you end up building fourteen
+  // reports nobody opens.
+  //
+  // These are NEW VALUES rather than reworded old ones on purpose. FB_ASK_LABEL
+  // is keyed by value and shared by every round, so renaming GO/FINE to suit
+  // this round would silently re-word Andrea's and Valentina's rounds, which
+  // are already sent and answered.
+  BUILD:'Build it',
+  SKIP: "Don't build",
+  OKNP: 'OK, no problem',
+  SOLVE:'Important — find a solution'
 };
 
 // The three answers a round offers. A round picks one set via `ask:`.
@@ -66,7 +80,13 @@ var FB_ASK = {
   STANDARD: [FB_A.FIX, FB_A.NICE, FB_A.NEVER],
   COO:      [FB_A.FIX, FB_A.NICE, FB_A.LEAVE],
   GO:       [FB_A.GO,  FB_A.WAIT, FB_A.LEAVE],
-  OK:       [FB_A.FINE, FB_A.PROB]
+  OK:       [FB_A.FINE, FB_A.PROB],
+  // BUILD — "shall we build this report?"  CANT — "we can't do this; is that a
+  // problem?". CANT is reached via a round's `askOk:`, which overrides the OK
+  // set for its works:true items (see foh-feedback.html). A round that does not
+  // set askOk still gets OK, so every existing round is untouched.
+  BUILD:    [FB_A.BUILD, FB_A.SKIP],
+  CANT:     [FB_A.OKNP,  FB_A.SOLVE]
 };
 
 // How the phone page words each answer on its button.
@@ -77,10 +97,15 @@ FB_ASK_LABEL[FB_A.LEAVE] = 'Leave it as it is';
 FB_ASK_LABEL[FB_A.GO]    = 'Yes — go ahead';
 FB_ASK_LABEL[FB_A.WAIT]  = 'Not yet';
 FB_ASK_LABEL[FB_A.FIX]   = 'Yes — fix this';
+FB_ASK_LABEL[FB_A.BUILD] = 'Yes — build the report';
+FB_ASK_LABEL[FB_A.SKIP]  = 'Don’t build this one';
+FB_ASK_LABEL[FB_A.OKNP]  = 'OK, no problem';
+FB_ASK_LABEL[FB_A.SOLVE] = 'This is important — try to find a solution';
 
 // Display order in Admin: loudest first. Every answer any round can produce must
 // be here or it renders no pill at all (the pills filter THIS list).
-var FB_ANSWER_ORDER = [FB_A.FIX, FB_A.PROB, FB_A.GO, FB_A.NICE, FB_A.WAIT, FB_A.FINE, FB_A.NEVER, FB_A.LEAVE];
+var FB_ANSWER_ORDER = [FB_A.FIX, FB_A.PROB, FB_A.SOLVE, FB_A.GO, FB_A.BUILD, FB_A.NICE, FB_A.WAIT,
+                       FB_A.FINE, FB_A.OKNP, FB_A.NEVER, FB_A.LEAVE, FB_A.SKIP];
 
 // Which answers mean "he is asking us to DO something". An EXPLICIT set: this was
 // once inferred from position (indexOf(v) > 1), which quietly made any answer
@@ -90,9 +115,202 @@ var FB_WORK_ANSWERS = {};
 FB_WORK_ANSWERS[FB_A.FIX] = 1;
 FB_WORK_ANSWERS[FB_A.PROB] = 1;
 FB_WORK_ANSWERS[FB_A.GO] = 1;
+// "Build it" is a request to build; "find a solution" is her telling us a gap
+// matters enough to go and solve. Both are work. "Don't build" and "OK, no
+// problem" are deliberately absent — they are her closing something down.
+FB_WORK_ANSWERS[FB_A.BUILD] = 1;
+FB_WORK_ANSWERS[FB_A.SOLVE] = 1;
 
 // ── The rounds. Newest first. ───────────────────────────────────────────────
 var FB_ROUNDS = {
+  // ── Reservations reporting, for Nicole (Head of Marketing) ────────────────
+  // Different in shape to every round before it: nothing here is broken and
+  // nothing is a fix. It is a MENU. She is choosing which reports get built,
+  // so every item uses FB_ASK.GO — "go ahead / not yet / leave it".
+  //
+  // The nine she CANNOT have carry works:true, which switches them to the OK
+  // set (agree / there's a problem). That is deliberate: asking "shall we build
+  // this?" about something impossible wastes her time, but she still has to be
+  // able to say "that one is a dealbreaker for me". Their green badge reads
+  // "Not possible today" — the CAN items carry no badge at all, so the badge
+  // only ever labels the impossible group.
+  //
+  // EVERY figure in the `today:` lines was measured on 31 Jul 2026 against the
+  // live book: 92 nights (4,201 bookings / 12,287 covers), 3,736 guest
+  // profiles, all of 2024 (47,454 bookings) and all of 2023 (64,165). Nothing
+  // here is estimated. If a line has no percentage it is because there is no
+  // honest one to give, not because it was left out.
+  // See RESERVATIONS-REPORTING-SCOPE.md for the workings behind each one.
+  'res-reports': {
+    name: 'Reservations — which reports do you want? (Nicole)',
+    email: {
+      subject: 'Reservations reporting — which of these do you actually want?',
+      body: ['Francesco mentioned you would be interested in getting more out of the reservations book, so we did some preliminary work to find out what is actually in there.',
+             'On top of the two Excel exports you already use, there are <b>16 further reports we could build</b> — and <b>7 things we cannot do at all</b>, which you should hear about now rather than after waiting for something that never arrives.',
+             'Have a look and tap <b>build the report</b> on the ones you want and <b>don’t build</b> on the rest. <b>Nothing gets built until you pick.</b>'],
+      cta: 'Choose your reports',
+      wa: 'Francesco mentioned you would be interested in getting more out of the reservations book, so we did some preliminary work — on top of the two Excel exports you already use there are 16 further reports we could build, and 7 things we cannot do at all. The link lists them with how reliable each one is. Tap build the report on the ones you actually want — nothing gets built until you pick.'
+    },
+    title: 'Which reports do you want?',
+    ask: FB_ASK.BUILD,
+    askOk: FB_ASK.CANT,
+    okLabel: 'Not possible today',
+    intro: [
+      'Hi Nicole — Francesco said you would be interested in getting more out of the reservations book, so we did some preliminary work to see what is really in there.',
+      '<b>You already have two exports</b> and nothing below replaces them: the <b>Excel</b> button for one night, and <b>Excel: date range</b> for up to 31 nights in one file. Those stay exactly as they are.',
+      'What we found is <b>16 further reports we could build</b> that you cannot get today — and <b>7 things we cannot do at all</b>, which you should hear about now rather than after waiting for something that never arrives.',
+      'Rather than guess which of the 16 you would actually use, we are asking you.',
+      'Each one says <b>how reliable it is</b> in plain words. Where we could measure the accuracy we have put the real figure in. Where there is no honest figure we have said what it is blind to instead — <b>no invented percentages.</b>'
+    ],
+    howto: 'Tap <b>Yes — build the report</b> on the ones you want and <b>Don’t build this one</b> on the rest. There is no prize for picking lots — the ones you tick are the ones we build, so please only tick what you would actually open.<br><br>The seven marked <b>Not possible today</b> work differently: read the reason, then tap <b>OK, no problem</b> if you can live without it, or <b>This is important — try to find a solution</b> if you cannot. That second one is not a dead end: it tells us to go and look properly.<br><br>Answers save on this phone as you go, so you can stop and come back. Tap <b>Send my answers</b> when you are done.',
+    lastQ: 'What do you get asked for that is not on this list at all? And when someone upstairs asks you about guests, what is the question you dread because you cannot answer it?',
+    items: [
+
+      // ── The 17 we can build ───────────────────────────────────────────────
+      { id:'r-onevisit',
+        said: '“How many guests came only once in the last three months, broken down by month?”',
+        today: 'Yes. <b>Answered already:</b> between May and July, <b>3,358 guests came exactly once</b> — 80.5% of May’s guests, 83.1% of June’s, 84.5% of July’s. Of those, <b>2,347 have never visited us before or since</b>.<br><br><i>How reliable:</i> the counts are exact. <b>One thing you must know:</b> the three months are <b>not comparable to each other</b> — a May guest has had three months to come back, a July guest has had days. We measured it: return rates were 11.8% for May, 5.8% for June, 2.3% for July, and that slope is <b>entirely</b> the measuring window, not guest behaviour. If you want months compared fairly we should fix a window — say “came back within 60 days” — and only report months old enough to have one.',
+        label: 'One-visit guests per month — YOUR QUESTION A' },
+
+      { id:'r-conversion',
+        said: '“In 2024, how many guests came back a second time, and a third?”',
+        today: 'Yes. <b>Answered already:</b> of <b>21,077 guests whose first ever visit was in 2024</b>, <b>9.2% came back a second time</b> and <b>2.5% a third</b>. Guests we already knew from 2023 behaved completely differently — 36.2% and 17.8%.<br><br><i>How reliable:</i> exact for guests we can identify. <b>The catch, and it is a big one:</b> 12,340 of 2024’s bookings were logged as an anonymous “Guest” — a throwaway record per walk-in, 32% of everyone. None of them can ever show as returning. Counting them drags the second-visit rate from 14.5% down to 9.8%. The figures above <b>exclude</b> them, because pretending 12,336 people we never named all failed to come back is not a fact, it is an artefact.',
+        label: 'First → second → third conversion — YOUR QUESTION B' },
+
+      { id:'r-newreturning',
+        said: '“How many new faces did we get this month, versus regulars?”',
+        today: 'Yes — every month, split into first-time and returning, for any period you like.<br><br><i>How reliable:</i> exact for named guests. Blind to the anonymous walk-ins above — <b>2.4% of covers</b> right now, though it was far worse in 2024.',
+        label: 'New vs returning guests, per month' },
+
+      { id:'r-returnwindow',
+        said: '“How many of last month’s guests came back within 30 days? 60? 90?”',
+        today: 'Yes. This is the honest version of the one-visit question and the one we would push you towards, because every month gets judged on the same clock.<br><br><i>How reliable:</i> exact. Same walk-in blind spot.',
+        label: 'Came back within 30 / 60 / 90 days' },
+
+      { id:'r-channel',
+        said: '“Where are our bookings actually coming from?”',
+        today: 'Yes — every booking records it. Over the last three months: <b>Walk In 1,487</b>, then the reservations team by name, then Instagram 352, Website 346, Google Reserve 178, OpenTable, the booking widget, and each campaign landing page separately.<br><br><i>How reliable:</i> exact. <b>33 clean values</b>, nothing to interpret.',
+        label: 'Booking channel — where bookings come from' },
+
+      { id:'r-walkin',
+        said: '“How much of our business is walk-in — and do walk-ins ever come back?”',
+        today: 'Yes to both. Walk-ins were <b>35.4% of bookings</b> over the last three months and <b>55.0% in 2024</b>. Because a named walk-in gets a real guest record, we can follow whether they return.<br><br><i>How reliable:</i> the split is exact. The return half only covers walk-ins whose name was taken — the rest are invisible by definition.',
+        label: 'Walk-in share, and whether walk-ins return' },
+
+      { id:'r-areas',
+        said: '“How do Piemonte, Scala and the Terrazza compare?”',
+        today: 'Yes — bookings and covers by seating area, any period. Piemonte, Scala, High Tables, Bar Tables, Terrazza and Cortina each counted separately.<br><br><i>How reliable:</i> exact. <i>One caveat:</i> around 12% of bookings have no area set and land in an “unassigned” line rather than being quietly dropped.',
+        label: 'Covers and bookings by seating area' },
+
+      { id:'r-times',
+        said: '“What are our busiest times?”',
+        today: 'Yes — bookings and covers by time slot, across any period, by night of the week or by area.<br><br><i>How reliable:</i> exact. <i>Worth knowing:</i> we are <b>closed Sundays</b> — a per-day average has to divide by 6, not 7, or every number comes out 14% light.',
+        label: 'Busiest times and slot distribution' },
+
+      { id:'r-spendguest',
+        said: '“What does a guest spend, and does it differ by area or night?”',
+        today: 'Yes — average spend per guest, by night, area or shift.<br><br><i>How reliable:</i> the <b>average per guest is good — within about 2% of Simphony</b>. The <b>total is not</b>, and must never be quoted as takings: it only covers bookings with a check attached, which runs <b>83–98% of the real figure</b> and moves night to night. A walk-in served without a booking has nothing to attach a check to.',
+        label: 'Spend per guest by night, area or shift' },
+
+      { id:'r-topguests',
+        said: '“Who are our most valuable guests?”',
+        today: 'Yes — ranked by lifetime spend, visits, or average per visit, taken straight from each guest’s SevenRooms profile so it matches what the hosts see.<br><br><i>How reliable:</i> these are SevenRooms’ own figures, passed through untouched. They are <b>net</b>. <b>Do not divide one by another</b> — SevenRooms’ own per-cover figure fails to reconcile to its own total on <b>12.6% of guests</b>, so they have to be read as given.',
+        label: 'Top guests by lifetime value' },
+
+      { id:'r-lapsed',
+        said: '“Which regulars have stopped coming?”',
+        today: 'Yes — every guest above a visit count you choose whose last visit was more than X weeks ago. The list you would actually run a win-back campaign from.<br><br><i>How reliable:</i> exact. Both halves come from the guest profile untouched.',
+        label: 'Lapsed regulars — win-back list' },
+
+      { id:'r-vip',
+        said: '“How many VIPs did we host?”',
+        today: 'Yes — the VIP flag is on every booking. <b>267 of 4,201</b> over the last three months.<br><br><i>How reliable:</i> exact as a count of the flag. It reports <b>who was flagged in SevenRooms</b>, which is only as good as the flagging.',
+        label: 'VIP bookings' },
+
+      { id:'r-partysize',
+        said: '“What size are our tables really?”',
+        today: 'Yes — party size mix by period, area or night of the week. Twos versus sixes versus the big tables.<br><br><i>How reliable:</i> exact.',
+        label: 'Party size mix' },
+
+      { id:'r-leadtime',
+        said: '“How far ahead do people book?”',
+        today: 'Yes — every booking records when it was made as well as the night it was for, so we can show same-day versus a week out versus a month out. Useful against a campaign date.<br><br><i>How reliable:</i> exact — present on <b>all 4,201</b> bookings we checked, none missing.',
+        label: 'How far ahead people book' },
+
+      { id:'r-cancellations',
+        said: '“Show me last month’s cancellations and no-shows — who, and where did they come from?”',
+        today: 'Yes. SevenRooms sends us <b>every</b> cancellation and no-show in full — name, time, table, party size, channel and phone. On 30 July it sent 55 bookings: 45 completed, <b>8 no-shows and 2 cancellations</b>, which is exactly what you see on the SevenRooms screen.<br><br><i>How reliable:</i> exact — it is the same list SevenRooms shows you. <i>One honest note:</i> our app currently <b>filters those 10 out</b> before they reach the screen, because the Reservations book was built to show tonight’s service. Nothing is missing from the feed; we just throw it away. Turning it back on is a small change on our side.',
+        label: 'Cancellation / no-show list, with channel' },
+
+      { id:'r-noshowrate',
+        said: '“What is our no-show rate, and is one booking channel worse than the others?”',
+        today: 'Yes — no-show and cancellation rate by month, by channel, by party size and by how far ahead the booking was made. This is the one we would most encourage you to take: your own screen shows several no-shows in a row against the same channel, and if that holds across a few months it is a real number to take to that partner.<br><br><i>How reliable:</i> exact, because we count them ourselves from the nightly book. <b>What we will not use</b> is SevenRooms’ own lifetime no-show number on a guest record — it is provably wrong: of 440 guests carrying no-shows, <b>9 have more no-shows than they have visits</b>, one showing <b>31 against 17 visits</b>. We count the nights instead, which is checkable.',
+        label: 'No-show / cancellation rate by channel and month' },
+
+      // ── The 7 we cannot ───────────────────────────────────────────────────
+      { id:'x-ratings', works:true,
+        said: '“What are guests rating us?”',
+        today: 'Not from here. The rating field is filled in on <b>169 of 3,605 guests — 4.7%</b>. That is not a small sample, it is an absence, and an average of it would say nothing about the other 95%. Guest satisfaction lives in the <b>SevenRooms Guest Satisfaction page</b> and in the <b>Guest Reviews module</b> you already have, which is the right place to ask.',
+        label: 'Guest ratings — NOT POSSIBLE, only 4.7% filled in' },
+
+      { id:'x-lifetimegross', works:true,
+        said: '“What has this guest spent with us in total, gross?”',
+        today: 'We can give you their <b>lifetime net</b>, straight from SevenRooms. We cannot give you a trustworthy <b>gross</b>: SevenRooms’ lifetime figures sit on a different basis to the per-booking ones, and its own gross-to-net ratio wanders between 1.00 and 1.28 across guests. Two columns both called “gross” meaning two different things in one report is how a number ends up quoted wrongly upstairs.',
+        label: 'Lifetime gross spend — NOT POSSIBLE, two different bases' },
+
+      { id:'x-takings', works:true,
+        said: '“What did we take last night?”',
+        today: 'Not from the Reservations book, and this one matters. It can only see money on bookings with a check attached — measured against Simphony that is <b>83–98% of the real net, and the gap moves every night</b>. A walk-in served without a booking has nothing to attach a check to. For real takings use the <b>Revenue module</b> or the <b>closing report</b>, which reconcile to Simphony properly.',
+        label: 'Night takings — NOT POSSIBLE here, use Revenue' },
+
+      { id:'x-anonwalkin', works:true,
+        said: '“Do our walk-ins become regulars?”',
+        today: 'Only for the ones whose name we took. Where no name was captured, SevenRooms writes a throwaway record called “Guest” — <b>12,340 of them in 2024, 26% of all bookings</b>, and <b>not one ever appears twice</b>. They are people we served and can never follow. Right now it is much better — 131 records, <b>2.4% of covers</b> — but it will never be zero without a change on the floor, not in the app.',
+        label: 'Unnamed walk-in repeat rate — NOT POSSIBLE, no identity captured' },
+
+      { id:'x-dishes', works:true,
+        said: '“What are our regulars actually ordering?”',
+        today: 'Not from the reservations book — a booking carries no dish or menu information at all, only a free-text note. The check total is there, never the lines on it. That link would have to come from Simphony.',
+        label: 'What guests ordered — NOT POSSIBLE, no dish data on a booking' },
+
+      { id:'x-pii', works:true,
+        said: '“Can I get the guest list with emails for a campaign?”',
+        today: 'Not through this app, and this is a decision rather than a limit. Email, both phone numbers, home address, birthday and the marketing opt-ins are <b>deliberately never sent to the browser</b> — phone comes through masked to the last four digits. It means a leaked screen or file cannot expose a guest. Marketing lists should come from SevenRooms directly, where the opt-in is recorded and consent can be evidenced.',
+        label: 'Guest emails / personal data — DELIBERATELY WITHHELD, not a gap' },
+
+      { id:'x-occasion', works:true,
+        said: '“How many birthdays and anniversaries did we do last month?”',
+        today: 'Not reliably. Occasions do exist on a booking, but jumbled into one text field together with allergies, seating requests and who took the call — a single booking reads <i>“BIRTHDAY, RESTAURANT WEEK MENU, CONFIRMED VIA CALL, DC INFO, TH INFO, SEAT INFO”</i>. On one night that produced 36 different “types” across 96 bookings. We could write something to pull “BIRTHDAY” out of that text, but it would be a guess dressed as a number, and it breaks the day someone types it differently. <b>Channel</b> (report 7) is clean and is the one to trust.',
+        label: 'Birthdays / occasions — NOT RELIABLE, jumbled into one text field' },
+
+      // ── The 5 about how you want it ───────────────────────────────────────
+      { id:'f-excel',
+        said: 'Do you want these as <b>branded Excel files</b> — Roberto’s colours, proper headings, print-ready?',
+        today: 'We can. The Reservations export already does it, so the styling exists and costs little to reuse. Say no if you would rather have something plainer that you can pivot and cut yourself.',
+        label: 'Branded Excel files' },
+
+      { id:'f-module',
+        said: 'Should reports live in their <b>own module</b> in the app, or stay <b>inside Reservations</b> next to the book?',
+        today: 'Your call entirely. A separate <b>Reports</b> module keeps them out of the way of the hosts and makes room to grow. Keeping them in Reservations means one less thing to find. Tell us which in the note if you have a preference either way.',
+        label: 'Own Reports module, or inside Reservations?' },
+
+      { id:'f-popup',
+        said: 'When you run one, should it open as a <b>quick pop-up</b> you fill in and download, or a <b>full page</b> showing the numbers on screen first?',
+        today: 'The pop-up is faster when you know what you want. The full page lets you look before downloading and is better on a laptop. We can do either — a pop-up is quicker to build.',
+        label: 'Pop-up, or a full page with the numbers on screen?' },
+
+      { id:'f-ai',
+        said: 'Would you use it if you could just <b>ask in words</b> — “how many one-visit guests in June” — instead of setting the options yourself?',
+        today: 'We can build this, with one firm rule we will not bend: <b>the app does all the arithmetic and the AI only reads your question and writes the sentence around the answer.</b> It never works out a number. That is how the Revenue module already works and it is why its figures can be trusted. Honest warning: it is the most expensive item on this list, so only tick it if you would genuinely use it.',
+        label: 'Ask for a report in plain words (AI)' },
+
+      { id:'f-daterange',
+        said: 'Do you want <b>ready-made date ranges</b> — last 7 days, last month, this quarter, last year — instead of picking two dates every time?',
+        today: 'Easy, and it removes the commonest mistake in any report: an off-by-one date range that quietly changes the answer. You would still be able to pick your own dates. Tell us in the note which ranges you actually use.',
+        label: 'Preset date ranges (last 7 days, last month, this quarter…)' }
+    ]
+  },
+
   'events-20-2': {
     name: 'Events — what we fixed for you (round 2)',
     follows: 'events-20',

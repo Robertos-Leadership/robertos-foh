@@ -75,7 +75,7 @@
      This page stays link-only and login-free: this is a plain same-origin
      script, no app shell, no Supabase client, nothing to sign in to. If it ever
      fails to load, boot() says so plainly rather than showing a blank card. -->
-<script src="foh-rounds.js?v=20260717f"></script>
+<script src="foh-rounds.js?v=20260731a"></script>
 <script>
 var SUPA = 'https://paoaivwtkzujmrgrfjuq.supabase.co';
 var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhb2Fpdnd0a3p1am1yZ3JmanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzAxMzAsImV4cCI6MjA5NjY0NjEzMH0.VynG9PBeIaqRG2lkMEuzskkcB11EhR-UfO9eGYsaUxk';
@@ -173,7 +173,12 @@ function render(){
     // "lead-source". She must never see that — it is plumbing. What she reads is
     // simply where she is in the list.
     var num = i + 1;
-    var opts = it.works ? OK : (set.ask || ASK);
+    // A round may override the works:true answers with its own set (askOk).
+    // The Reservations menu round needs "OK, no problem / this is important"
+    // there rather than "agree this is fine / there's a problem", because its
+    // works:true items are things we CANNOT do, not things we fixed. Falls back
+    // to OK, so every round written before this one is unaffected.
+    var opts = it.works ? (set.askOk || OK) : (set.ask || ASK);
     var cur = (answers[n] && answers[n].a) || '';
     h += '<div class="q"><div class="qh"><span class="qn">'+num+'</span><p class="said">'+it.said+'</p></div>'
        // A round may rename the green badge — "Works today" is right when we are
