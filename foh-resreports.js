@@ -840,9 +840,11 @@ function rrRepCancellations(pull, opt){
   });
   var ns = rows.filter(function(r){ return r.state==='noshow'; }).length;
   var cx = rows.length - ns;
+  var nn = Object.keys(pull.nights).length;
   return {
     title: 'Cancellations and no-shows',
-    sub: ns + ' no-show' + (ns===1?'':'s') + ' and ' + cx + ' cancellation' + (cx===1?'':'s') + ' over ' + Object.keys(pull.nights).length + ' nights.',
+    sub: ns + ' no-show' + (ns===1?'':'s') + ' and ' + cx + ' cancellation' + (cx===1?'':'s')
+       + ' over ' + nn + ' night' + (nn===1?'':'s') + '.',
     tables: [ { name:'The list',
       head:['Date','Day','Time','What happened','Guest','Covers','Seating area','Table','Booked by','Phone','Booked on','Days ahead'],
       widths:[13,12,8,15,26,9,20,14,22,12,12,11], num:[5,11], rows: out,
