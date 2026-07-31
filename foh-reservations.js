@@ -516,22 +516,55 @@ function resVisitShort(iso){
   }catch(e){ return s; }
 }
 
-// The one-line history that sits under a guest's name on the book.
-function resHistLine(r, money){
-  var g = r && r.client ? RESH.got[r.client] : null;
-  if(!g || g.scope !== 'venue') return '';
-  var visits = Number(g.visits) || 0;
-  if(visits <= 1 && !(Number(g.spend) > 0)) return '<i class="res-hist">first visit</i>';
-  var bits = [visits + (visits === 1 ? ' visit' : ' visits')];
-  // Say NET. SevenRooms' own per-cover figure is computed on the net basis --
-  // checked 28 Jul against three live profiles, spend/covers reproduces it
-  // (780.83 and 463.58 to the fils) while gross/covers does not (921.39, 481.50).
-  // Unlabelled it was fine on its own, but the Spend column beside it now prints
-  // gross AND net on every row, and two money figures on one line with different
-  // bases and no labels is how someone ends up comparing the wrong pair.
-  if(money && Number(g.per_cover) > 0) bits.push('AED ' + resNum(Math.round(g.per_cover)) + ' net/cover');
-  if(g.last_visit) bits.push('last ' + resVisitShort(g.last_visit));
-  return '<i class="res-hist">' + resEsc(bits.join(' · ')) + '</i>';
+// resHistLine() lived here until 31 Jul 2026: the one-line history that used to
+// sit under a guest's name -- "15 visits · AED 177 net/cover · last 23 Jan
+// 2025". It is now five columns (resHistCells) under the "Been with us" band,
+// because a line you have to read is not a column you can scan. Deleted rather
+// than left behind: the guest panel builds its own stats block, so nothing else
+// called it.
+//
+// The one thing that must not be lost with it -- SevenRooms' per-cover figure is
+// NET. Checked 28 Jul against three live profiles: spend/covers reproduces it to
+// the fils (780.83, 463.58) and gross/covers does not (921.39, 481.50). That is
+// why the band says net and the Tonight column beside it says gross · net.
+
+// ── THE GUEST'S HISTORY, AS COLUMNS ───────────────────────────────────────
+// Five cells: when they were last here, how many times, and SevenRooms'
+// lifetime total / per guest / per table for this venue. Same three money
+// figures and the same names as the printed brief, so the screen and the sheet
+// cannot teach two different vocabularies.
+//
+// All five are SevenRooms' own numbers, passed through untouched. They are NET
+// (verified 28 Jul: spend/covers reproduces SevenRooms' per-cover to the fils
+// on the net basis, gross/covers does not), which is why the band says so --
+// the Tonight column beside them prints gross AND net, and two money figures on
+// one row with different bases and no labels is how the wrong pair gets
+// compared. They also do not multiply out against each other: SevenRooms' own
+// per-cover x covers does not reconcile to its own total (193,691 vs 212,811 on
+// the biggest guest), so no total here is ever derived from another.
+function resHistCells(r, money){
+  var g = (r.client && RESH.got[r.client] && RESH.got[r.client].scope === 'venue') ? RESH.got[r.client] : null;
+  var first = g && (Number(g.visits) || 0) <= 1 && !(Number(g.spend) > 0);
+  // A dash means "SevenRooms holds nothing here", which is worth a column
+  // position on the desktop grid — an empty cell in a row of numbers reads as a
+  // rendering fault. On the phone card there is no column to hold open, and
+  // "With us: AED —" is just noise, so those cells carry rm-none and the card
+  // layout drops them.
+  var cell = function(cls, v, bold){
+    var has = g && Number(v) > 0;
+    var body = has ? resNum(Math.round(v)) : '<i>&mdash;</i>';
+    return '<div class="res-right ' + cls + (has ? '' : ' rm-none') + '">'
+      + (bold && has ? '<b>' + body + '</b>' : body) + '</div>';
+  };
+  var lastKnown = !first && g && g.last_visit;
+  // Blank, not "0", on a first visit: the cell beside it already says "first
+  // visit", and "first visit / 0" reads as two different facts.
+  return '<div class="res-lv' + ((first || lastKnown) ? '' : ' rm-none') + '">'
+      + (first ? '<i>first visit</i>' : (lastKnown ? resEsc(resVisitShort(g.last_visit)) : '<i>&mdash;</i>')) + '</div>'
+    + '<div class="res-vc">' + ((g && !first) ? resNum(g.visits) : '') + '</div>'
+    + (money ? cell('res-m1', g && g.spend, true)
+             + cell('res-m2', g && g.per_cover)
+             + cell('res-m3', g && g.per_visit) : '');
 }
 
 // ── VIP NAME MATCH ────────────────────────────────────────────────────────
@@ -968,7 +1001,7 @@ async function resPrintBrief(){
       + '<th class="w1"' + span + '>Time</th><th class="w2"' + span + '>Pax</th>'
       + '<th class="w3"' + span + '>Guest</th><th class="w4"' + span + '>Table</th>'
       + '<th class="w5"' + span + '>Last here</th><th class="w6"' + span + '>Visits</th>'
-      + (money ? '<th class="grp" colspan="3">Spend with us</th>' : '')
+      + (money ? '<th class="grp" colspan="3">Been with us &middot; net</th>' : '')
       + '<th' + span + '>Worth knowing</th></tr>'
       + (money ? '<tr><th class="w7">Total</th><th class="w8">Per guest</th><th class="w9">Per table</th></tr>' : '')
       + '</thead><tbody>';
@@ -1039,7 +1072,7 @@ async function resPrintBrief(){
     + (money ? '' : ' &middot; spend hidden on this login')
     + '.<br>SevenRooms’ automatic tags (upcoming and recent reservations, group segments, marketing) are left off this sheet. '
     + 'A red flag is a dietary requirement — check it with the guest before the order goes to the pass. '
-    + 'Spend with us is SevenRooms’ own lifetime record for this venue — total, average per guest, and average per table. '
+    + '“Been with us” is SevenRooms’ own lifetime record for this venue — total, average per guest, average per table, all NET. '
     + 'They are three separate SevenRooms figures and do not multiply out against each other. '
     + 'To change a booking, the hosts do it in SevenRooms.</div>';
 
@@ -1984,10 +2017,32 @@ function renderReservations(){
                     + ' <i>(' + aN + ' of ' + list.length + ' with a check)</i>' : '')
         + '</span></div>');
       h.push('<div class="res-tbl">');
+      // TWO header rows, banded like the printed brief. The guest's history used
+      // to live as one small italic line under their name -- "15 visits · AED
+      // 177 net/cover · last 23 Jan 2025" -- which is readable but not SCANNABLE:
+      // you cannot run your eye down a column that does not exist. It is five
+      // columns now, grouped under one band so nobody mistakes a lifetime
+      // average for tonight's bill.
+      h.push('<div class="res-r res-hdr res-band">'
+        + '<div class="rb-skip"></div>'
+        // The band names the basis, because the column beside this block
+        // prints tonight's check as gross AND net. Two money figures on one
+        // row with different bases and no labels is how the wrong pair gets
+        // compared. SevenRooms' lifetime figures are net -- verified 28 Jul,
+        // spend/covers reproduces their per-cover to the fils, gross/covers
+        // does not.
+        + '<div class="rb-hist">Been with us' + (money ? ' &middot; net' : '') + '</div>'
+        + '<div class="rb-rest"></div>'
+        + '</div>');
       h.push('<div class="res-r res-hdr">'
         + '<div>Time</div><div>Covers</div><div>Guest</div><div>Table</div>'
-        + '<div>Status</div><div>Note</div><div>Booked by</div>'
-        + (money?'<div class="res-right">Spend<i>gross &middot; net</i></div>':'')
+        + '<div>Status</div>'
+        + '<div class="res-lv">Last here</div><div class="res-vc">Visits</div>'
+        + (money?'<div class="res-right res-m1">Total</div>'
+                +'<div class="res-right res-m2">Per guest</div>'
+                +'<div class="res-right res-m3">Per table</div>':'')
+        + '<div>Note</div><div>Booked by</div>'
+        + (money?'<div class="res-right">Tonight<i>gross &middot; net</i></div>':'')
         + '</div>');
       list.forEach(function(r){
         var st = (r.state==='seated') ? 'seated' : (r.state==='completed' ? 'done' : 'due');
@@ -2004,10 +2059,8 @@ function renderReservations(){
                   ? '<button class="res-guest-btn" onclick="resOpenGuest(\''+String(r.client).replace(/[^A-Za-z0-9_-]/g,'')+'\',\''+resEsc(r.time||'')+'\')" title="See this guest’s history">'+resEsc(r.name)+'</button>'
                   : resEsc(r.name))
               + (r.phone_last4?'<i class="res-phone">••• '+resEsc(r.phone_last4)+'</i>':'')
-              // Last visit and average spend per person sit under the name
-              // rather than in two more columns: it is the same guest's
-              // information, and the grid is already eight columns wide.
-              + resHistLine(r, money)
+              // The history line that used to sit here is now five real columns
+              // (resHistCells) -- see the banded header above.
               // Under the history line, not beside the name: the name column is
               // already the widest thing on the row and a chip inline with it
               // would push the table number off small screens.
@@ -2020,6 +2073,7 @@ function renderReservations(){
           // "not assigned" would contradict what the hosts can see.
           + '<div class="res-tbls">'+((r.tables&&r.tables.length)?resEsc(r.tables.join(', ')):'<i>&mdash;</i>')+'</div>'
           + '<div><span class="res-pill res-pill-'+st+'">'+resEsc(r.status_display||r.status||'')+'</span></div>'
+          + resHistCells(r, money)
           + resNoteCell(r)
           + '<div class="res-by">'+resEsc(r.booked_by||'')+(r.created?'<i>'+resEsc(resWhen(r.created))+'</i>':'')+'</div>'
           + (money?'<div class="res-right">'+resSpendCell(r)+'</div>':'')
