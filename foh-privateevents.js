@@ -2693,11 +2693,21 @@ function peSetMenuSplitGap(e){
 // Order and wording follow peEditorNext so the guest-send names the same next step
 // the editor has been pointing at all along.
 // Returns null when clean to send, else the first missing fact + the field to open.
-function peSendBlocks(e){
+// `forSigning` is true only for the send that asks the client to sign. A menu-only
+// send has looser rules on purpose — see the note on the price block below.
+function peSendBlocks(e, forSigning){
   var t = peCalcTotals(e);
   if(!e.event_date) return {fid:'event_date', msg:'Add the event date before sending — the guest signs against it.'};
   if(!e.guests) return {fid:'guests', msg:'Add the guest count before sending — the price and the kitchen both work off it.'};
-  if((t.total==null || !t.total) && !e.min_spend) return {fid:'min_spend', msg:'Set a price or a minimum spend before sending — the guest would be signing a blank amount.'};
+  // Sharing a menu before the money is settled is a real thing Valentina does, and
+  // the app supports it — just on another screen. So this dead end now names the
+  // route that works instead of only refusing.
+  if((t.total==null || !t.total) && !e.min_spend) return {fid:'min_spend', msg:'Set a price or a minimum spend before sending — or use Menu packages → “Send without prices” to share just the menu.'};
+  // Signing needs an amount that actually resolves. On minimum-spend pricing the
+  // dish total is NOT what is charged, so clearing the minimum leaves nothing to
+  // sign against even though the dishes still add up — and the check above passes.
+  // peAgBase is the one function that knows what the client is really charged.
+  if(forSigning && peAgBase(e)==null) return {fid:'min_spend', msg:'This booking is priced on a minimum spend, but the amount is empty — set it before sending the agreement to sign.'};
   return null;
 }
 // P0 — gaps that should stop a client-facing send until the user confirms.
@@ -2726,11 +2736,11 @@ function peSendChecks(e){
   return msgs;
 }
 // Confirm past any send gaps, naming each one. Returns true to proceed.
-async function peConfirmSend(e){
+async function peConfirmSend(e, forSigning){
   // Missing facts stop the send outright and open the field to fix — the same way
   // peSendPaymentLink refuses a missing link. Only judgment calls (allergens, a
   // split gap, a double-booking) get the overridable confirm below.
-  var block = peSendBlocks(e);
+  var block = peSendBlocks(e, forSigning);
   if(block){ peScrollToField(block.fid, block.msg); return false; }
   var gaps = peSendChecks(e);
   if(!gaps.length) return true;
@@ -4071,7 +4081,7 @@ function peViewSignedCopy(id){
 async function peEmailAgreement(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e || !e.contact_email) return;
-  if(!(await peConfirmSend(e))) return;
+  if(!(await peConfirmSend(e, true))) return;
   var sender = state.userEmail || 'vdetoni@robertos.ae';
   if(!(await peConfirm({title:'Send proposal + agreement?', html:'Email the proposal + agreement link to <b>'+peEsc(e.contact_email)+'</b> now?<br>The guest reads the menu and terms on one page and signs electronically.'+peCopyLine(sender), ok:'Send now', cancel:'Not yet'}))) return;
   var url = peAgreementUrl(e);
