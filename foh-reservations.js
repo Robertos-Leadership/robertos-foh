@@ -896,11 +896,21 @@ async function resPrintBrief(){
     var list = byArea[k];
     var cov = list.reduce(function(s,r){ return s+(r.pax||0); },0);
     h += '<div class="area">' + resEsc(k) + ' &mdash; ' + list.length + ' reservation' + (list.length===1?'':'s') + ', ' + cov + ' covers</div>';
+    // The money block is banded and given plain-English sub-headings because
+    // "Avg/cover" was ambiguous at a glance: SevenRooms keeps TWO averages and
+    // the sheet was printing the per-PERSON one under a heading a manager reads
+    // as the average bill. On the top guest they are 831 and 1,862 — reading one
+    // as the other is a factor of two. Now all three figures sit together under
+    // one band, named the way they'd be said out loud.
+    var span = money ? ' rowspan="2"' : '';
     h += '<table><thead><tr>'
-      + '<th class="w1">Time</th><th class="w2">Pax</th><th class="w3">Guest</th><th class="w4">Table</th>'
-      + '<th class="w5">Last visit</th><th class="w6">Visits</th>'
-      + (money ? '<th class="w7">Spent with us</th><th class="w8">Avg/cover</th>' : '')
-      + '<th>Worth knowing</th></tr></thead><tbody>';
+      + '<th class="w1"' + span + '>Time</th><th class="w2"' + span + '>Pax</th>'
+      + '<th class="w3"' + span + '>Guest</th><th class="w4"' + span + '>Table</th>'
+      + '<th class="w5"' + span + '>Last visit</th><th class="w6"' + span + '>Visits</th>'
+      + (money ? '<th class="grp" colspan="3">Spend with us</th>' : '')
+      + '<th' + span + '>Worth knowing</th></tr>'
+      + (money ? '<tr><th class="w7">Total</th><th class="w8">Per guest</th><th class="w9">Per table</th></tr>' : '')
+      + '</thead><tbody>';
     list.forEach(function(r){
       var g = r.client ? RESH.got[r.client] : null;
       var venueScoped = g && g.scope === 'venue';
@@ -946,14 +956,15 @@ async function resPrintBrief(){
         + '<td class="w4">' + ((r.tables&&r.tables.length) ? resEsc(r.tables.join(', ')) : '') + '</td>'
         + '<td class="w5">' + (firstTime ? '<i>first visit</i>' : (venueScoped && g.last_visit ? resEsc(resVisitShort(g.last_visit)) : '')) + '</td>'
         + '<td class="w6">' + (venueScoped ? resNum(g.visits) : '') + '</td>'
-        // Lifetime spend beside the average, asked for 31 Jul: the average alone
-        // does not tell a manager whether this is a guest who has left AED 190k
-        // in the room or AED 300. Both figures come STRAIGHT from SevenRooms and
-        // neither is computed here -- SevenRooms' own avg/cover x covers does not
-        // reconcile to its own total (top guest: 212,811 vs 193,691), so the two
-        // columns are not meant to tie out and must never be multiplied together.
+        // Three figures, asked for 31 Jul: lifetime total, then SevenRooms' two
+        // averages -- per_cover is per PERSON, per_visit is the average BILL.
+        // All three come STRAIGHT from SevenRooms and none is computed here:
+        // SevenRooms' own per-cover x covers does not reconcile to its own total
+        // (top guest 212,811 vs 193,691), so these columns are not meant to tie
+        // out and must never be multiplied against each other.
         + (money ? '<td class="w7">' + (venueScoped && Number(g.spend)>0 ? '<b>' + resNum(Math.round(g.spend)) + '</b>' : '') + '</td>'
-                 + '<td class="w8">' + (venueScoped && Number(g.per_cover)>0 ? resNum(Math.round(g.per_cover)) : '') + '</td>' : '')
+                 + '<td class="w8">' + (venueScoped && Number(g.per_cover)>0 ? resNum(Math.round(g.per_cover)) : '') + '</td>'
+                 + '<td class="w9">' + (venueScoped && Number(g.per_visit)>0 ? resNum(Math.round(g.per_visit)) : '') + '</td>' : '')
         + '<td>' + know.join('<br>') + '</td>'
         + '</tr>';
     });
@@ -965,7 +976,8 @@ async function resPrintBrief(){
     + (money ? '' : ' &middot; spend hidden on this login')
     + '.<br>SevenRooms’ automatic tags (upcoming and recent reservations, group segments, marketing) are left off this sheet. '
     + 'A red flag is a dietary requirement — check it with the guest before the order goes to the pass. '
-    + '“Spent with us” and “Avg/cover” are SevenRooms’ own lifetime figures for this venue; they do not multiply out against each other. '
+    + 'Spend with us is SevenRooms’ own lifetime record for this venue — total, average per guest, and average per table. '
+    + 'They are three separate SevenRooms figures and do not multiply out against each other. '
     + 'To change a booking, the hosts do it in SevenRooms.</div>';
 
   var css = '@page{size:A4 landscape;margin:8mm}'
@@ -986,9 +998,16 @@ async function resPrintBrief(){
     + 'td{border-bottom:1px solid #ddd;padding:4px 5px;vertical-align:top;line-height:1.3;'
     +   'word-wrap:break-word;overflow-wrap:break-word}'
     + 'tr{page-break-inside:avoid}'
-    + '.w1{width:34px}.w2{width:26px;text-align:center}.w3{width:112px;font-weight:700}.w4{width:40px}'
-    + '.w5{width:54px}.w6{width:32px;text-align:center}.w7{width:62px;text-align:right}.w8{width:50px;text-align:right}'
-    + 'th.w2,th.w6{text-align:center}th.w7,th.w8{text-align:right}'
+    + '.w1{width:32px}.w2{width:24px;text-align:center}.w3{width:106px;font-weight:700}.w4{width:38px}'
+    + '.w5{width:52px}.w6{width:30px;text-align:center}'
+    + '.w7{width:58px;text-align:right}.w8{width:46px;text-align:right}.w9{width:46px;text-align:right}'
+    + 'th.w2,th.w6{text-align:center}th.w7,th.w8,th.w9{text-align:right}'
+    // The band over the three money columns, and a hairline down each side of
+    // the block so the eye can find it without reading a single heading.
+    + 'th.grp{text-align:center;letter-spacing:2px;border-bottom:1px solid rgba(255,255,255,.45)}'
+    + 'th.w7,td.w7{border-left:1px solid #bbb}'
+    + 'th.grp,td.w9{border-right:1px solid #bbb}'
+    + 'td.w7,td.w8,td.w9{background:#faf7f4}'
     + '.vip{background:#6B1F2A;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;border-radius:2px;vertical-align:1px}'
     + '.tg{color:#6B1F2A}.more{color:#999}'
     // The flags. Read at arm's length across a pass, so: colour before words.
