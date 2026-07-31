@@ -220,6 +220,69 @@ function rrAllRows(nights, includeGone){
   return out;
 }
 
+// ── WHAT THE NIGHTS WE READ ACTUALLY WERE ─────────────────────────────────
+// Two things every report has to own up to, both found 31 Jul 2026 by reading
+// the reports as Nicole rather than as the person who wrote them.
+//
+// 1. CLOSED NIGHTS. "92 nights read" over a quarter sounds like 92 nights of
+//    trade. Twelve of them were Sundays, when we are shut. 92 is exactly the
+//    number somebody divides by to get a per-night average, and it would come
+//    out 13% light. So the count is now split.
+//
+// 2. A NIGHT THAT HAS NOT FINISHED. Set the end date to today and the book for
+//    tonight comes back happily — including tables that have not arrived yet.
+//    A night still running cannot produce a no-show, because nobody has failed
+//    to turn up until service is over. So an unfinished night pushes every
+//    no-show rate DOWN while its bookings count in full. Nothing said so. Run a
+//    month-end report on the 2nd and it would matter.
+//
+// A night with no rows at all is treated as closed. A night carrying a booking
+// still to come or still seated is treated as unfinished.
+function rrPullShape(nights){
+  var dates = Object.keys(nights).sort();
+  var closed = [], unfinished = [];
+  dates.forEach(function(d){
+    var rows = nights[d] || [];
+    if(!rows.length){ closed.push(d); return; }
+    var pending = 0;
+    rows.forEach(function(r){ if(r.state === 'upcoming' || r.state === 'seated') pending++; });
+    if(pending) unfinished.push({ date: d, pending: pending });
+  });
+  return { read: dates.length, closed: closed, trading: dates.length - closed.length,
+           unfinished: unfinished };
+}
+// The one sentence that goes on the screen and into every workbook.
+function rrShapeLine(s){
+  if(!s) return '';
+  var t = s.read + ' night' + (s.read===1?'':'s') + ' read';
+  if(s.closed.length) t += ' (' + s.trading + ' with trade, ' + s.closed.length + ' closed)';
+  return t;
+}
+// TWO DIFFERENT CAUSES, AND THE SENTENCE HAS TO BE TRUE FOR BOTH. Tonight is
+// genuinely still running. But a night in JUNE can carry the same open bookings
+// — the hosts simply never closed them out, and 29 June and 8 July both did on
+// 31 Jul 2026. Calling those "had not finished" would be wrong. What is the same
+// either way is the effect: an open booking counts in full but cannot become a
+// no-show, so every rate on the page is pulled slightly down.
+function rrUnfinishedLine(s){
+  if(!s || !s.unfinished.length) return '';
+  var today = rrToday();
+  var n = s.unfinished.length;
+  var tables = s.unfinished.reduce(function(a,u){ return a + u.pending; }, 0);
+  var names = s.unfinished.map(function(u){
+    return resDateLabel(u.date) + (u.date === today ? ' (tonight, still running)' : '');
+  }).join(', ');
+  return n + ' night' + (n===1?'':'s') + ' in this range still '
+    // A literal em dash, not an HTML entity: this string is escaped before it
+    // reaches the screen and written raw into the Excel, so "&mdash;" would show
+    // up as those seven characters in both.
+    + (n===1?'has':'have') + ' bookings showing as due or seated — ' + names + ', '
+    + tables + ' table' + (tables===1?'':'s') + ' in all. '
+    + 'Either the night is still running, or nobody closed those bookings out afterwards. '
+    + 'Either way they count as bookings but can never become a no-show, so any no-show or '
+    + 'cancellation rate here is slightly LOW.';
+}
+
 // ── GUEST PROFILES ────────────────────────────────────────────────────────
 // Only three reports need these — one-visit (the "only ever once" column), top
 // guests, and lapsed regulars. Batched 60 at a time, which measured at about
@@ -344,9 +407,19 @@ function rrRepOneVisit(pull, opt){
     distinct++;
     if(L.guests[id].dates.length === 1) distinctOnce++;
   });
+  // THE LAST CELL USED TO BE A HARDCODED null, AND THAT WAS THE WORST THING ON
+  // THIS PAGE. Caught 31 Jul 2026 reading the report as Nicole: the total row
+  // printed "93.2% of guests came once" — the biggest, roundest, most alarming
+  // number in the module — and left the cell that calms it down blank. Cropped
+  // into a deck, 93.2% reads as "93% of our guests never come back", which is
+  // not what it says: most of that 93% are people who came once THIS QUARTER,
+  // and only about two thirds of them have never been in otherwise. Both
+  // numbers behind that percentage are clean and were already on the row.
+  // Giving someone the frightening figure and withholding the reassuring one is
+  // not neutrality.
   rows.push(['WHOLE WINDOW (each guest once)', distinct, totVisits, distinctOnce,
              rrPct(distinctOnce, distinct), rrPct(distinctOnce, totVisits),
-             totKnown ? totEver : null, null]);
+             totKnown ? totEver : null, totKnown ? rrPct(totEver, totKnown) : null]);
 
   // The runway table. This is the honest half of the answer and it is not
   // optional: it shows, in her own book, that the monthly one-visit percentages
@@ -382,6 +455,7 @@ function rrRepOneVisit(pull, opt){
         note: 'Read this before quoting the percentages above.' }
     ],
     notes: [
+      'BEFORE YOU QUOTE THE BIG NUMBER ON THE TOTAL ROW: "came once in this window" is not "never comes back". Most of those people came once THIS QUARTER; the last two columns say how many have never been in at any other time, which is the far smaller number and the one that actually means what the big one sounds like. Quote them together or neither.',
       'THE ONE THING TO KNOW: the monthly percentages above are NOT comparable to each other. A guest who came in the first month has had the whole window to come back; a guest who came in the last month has had days. The second table shows that in your own book — the return rate falls month by month purely because the runway shortens.',
       'If you want months compared fairly, run "Came back within 30 / 60 / 90 days" instead. Every month there is judged on the same clock, and a month too recent to have a full clock is named as such rather than given a misleadingly low number.',
       'Counted from the nightly book, by SevenRooms client id, counting distinct dates. It is NOT read off the guest profile: profile "visits" is lifetime as of today, not as of a date. Measured 31 Jul 2026 over May–Jul, 3,358 guests came exactly once but only 2,347 carried visits == 1 — the other 1,007 are regulars who happened to come once that quarter.',
@@ -530,17 +604,34 @@ function rrRepReturnWindow(pull, opt){
 }
 
 // ── 4. r-channel — Where bookings come from ───────────────────────────────
+//
+// THE COLUMN IS CALLED "BOOKINGS THAT HAPPENED" AND THAT WORDING IS LOAD-BEARING.
+// Found 31 Jul 2026 by running this beside the no-show report: Instagram reads
+// 353 here and 551 there, Walk In 1,494 against 1,517, and the totals 4,217
+// against 5,466. Both are right — this report counts the tables that CAME, the
+// no-show report counts every booking that was MADE — but both used to say just
+// "Bookings", so channel mix on one slide and no-show rates on the next carried
+// two different counts for the same channel with nothing to explain it. The
+// arithmetic that reconciles them is now printed under the table with the real
+// figures in it, rather than left in a footnote.
 function rrRepChannel(pull, opt, money){
   var rows = rrAllRows(pull.nights, false);
+  var gone = rrAllRows(pull.nights, true).filter(rrIsGone);
+  var goneNs = gone.filter(function(r){ return r.state === 'noshow'; }).length;
+  var goneCx = gone.length - goneNs;
   var ch = {}, order = [];
   var totB = 0, totC = 0, totG = 0, totWith = 0;
+  var months = rrMonthsIn(rows);
   rows.forEach(function(r){
     var k = String(r.booked_by || '').trim() || 'Not recorded';
-    var c = ch[k] || (ch[k] = { k:k, bookings:0, covers:0, gross:0, heads:0, withCheck:0 });
+    var c = ch[k] || (ch[k] = { k:k, bookings:0, covers:0, gross:0, heads:0, withCheck:0, m:{} });
     if(!c.bookings) order.push(k);
     c.bookings++; totB++;
     var pax = Number(r.pax)||0;
     c.covers += pax; totC += pax;
+    var ml = rrMonthLabel(rrMonth(r.date));
+    var mm = c.m[ml] || (c.m[ml] = { b:0, c:0 });
+    mm.b++; mm.c += pax;
     var g = resGrossOf(r);
     if(g){ c.gross += g; c.heads += resHeads(r); c.withCheck++; totG += g; totWith++; }
   });
@@ -550,6 +641,10 @@ function rrRepChannel(pull, opt, money){
     var line = [k, c.bookings, rrPct(c.bookings, totB), c.covers, rrPct(c.covers, totC)];
     if(money) line = line.concat([
       c.withCheck,
+      // The coverage, not just the count. The big money total lives on this
+      // report and this is the column that says how much of it is real — the
+      // "Spend per guest" report already worked this way, so now they match.
+      rrPct(c.withCheck, c.bookings),
       c.gross ? Math.round(c.gross*100)/100 : null,
       c.gross ? Math.round(resNet(c.gross)*100)/100 : null,
       (c.gross && c.heads) ? Math.round(resNet(c.gross)/c.heads*100)/100 : null
@@ -557,20 +652,59 @@ function rrRepChannel(pull, opt, money){
     return line;
   });
   var tot = ['TOTAL', totB, 100, totC, 100];
-  if(money) tot = tot.concat([totWith, Math.round(totG*100)/100, Math.round(resNet(totG)*100)/100, null]);
+  if(money) tot = tot.concat([totWith, rrPct(totWith, totB),
+    Math.round(totG*100)/100, Math.round(resNet(totG)*100)/100, null]);
   out.push(tot);
-  var head = ['Channel','Bookings','% of bookings','Covers','% of covers'];
-  var widths = [30,11,13,10,12];
-  if(money){ head = head.concat(['Bookings with a check','Gross (AED)','Net (AED)','Net per guest (AED)']);
-             widths = widths.concat([18,14,14,17]); }
+  var head = ['Channel','Bookings that happened','% of those','Covers','% of covers'];
+  var widths = [30,18,12,10,12];
+  if(money){ head = head.concat(['With a check','% with a check','Gross (AED)','Net (AED)','Net per guest (AED)']);
+             widths = widths.concat([13,15,14,14,17]); }
+
+  // Month by month, so "which channel dropped in July" is one look rather than
+  // three runs stitched together in Excel.
+  function byMonth(pick, label){
+    var h = ['Channel'].concat(months).concat(['Total']);
+    var w = [30].concat(months.map(function(){ return 13; })).concat([11]);
+    var body = order.map(function(k){
+      var c = ch[k], line = [k], t = 0;
+      months.forEach(function(ml){ var v = c.m[ml] ? c.m[ml][pick] : 0; t += v; line.push(v || null); });
+      line.push(t);
+      return line;
+    });
+    var tr = ['TOTAL'], gt = 0;
+    months.forEach(function(ml){
+      var v = 0;
+      order.forEach(function(k){ if(ch[k].m[ml]) v += ch[k].m[ml][pick]; });
+      gt += v; tr.push(v);
+    });
+    tr.push(gt);
+    body.push(tr);
+    return { name: label, head: h, widths: w,
+             num: h.map(function(_, i){ return i; }).filter(function(i){ return i > 0; }),
+             rows: body,
+             note: 'Same order as the table above. A blank means that channel brought nothing that month — not that we did not look.' };
+  }
+
   return {
     title: 'Where our bookings come from',
     sub: 'The channel SevenRooms recorded on each booking, exactly as it recorded it.',
-    tables: [ { name:'By channel', head:head, widths:widths,
-                num:[1,3].concat(money?[5]:[]), pct:[2,4], money: money?[6,7,8]:[], rows: out,
-                note:'Sorted by covers. "Not recorded" is shown as its own line rather than dropped.' } ],
+    tables: [
+      { name:'By channel', head:head, widths:widths,
+        num:[1,3].concat(money?[5]:[]), pct:[2,4].concat(money?[6]:[]), money: money?[7,8,9]:[], rows: out,
+        note:'Sorted by covers. "Not recorded" is shown as its own line rather than dropped. '
+           + 'THESE ARE THE TABLES THAT CAME. The no-show report counts every booking that was MADE, '
+           + 'so the same channel shows a bigger number there: ' + resNum(totB) + ' happened + '
+           + resNum(goneNs) + ' no-shows + ' + resNum(goneCx) + ' cancelled = '
+           + resNum(totB + gone.length) + '. Same book, two different questions.' },
+      byMonth('b', 'Bookings by month'),
+      byMonth('c', 'Covers by month')
+    ],
     notes: ['Exact — this is one clean field on the booking, nothing is interpreted or parsed.',
-            'Cancellations and no-shows are NOT in these counts; this is the book that happened. For those, run the cancellation reports.'
+            'Cancellations and no-shows are NOT in these counts; this is the book that happened. '
+            + 'For those, run the cancellation reports — and expect bigger numbers there, for the reason under the first table.',
+            'A word of warning about what this field actually is: it records WHO KEYED the booking, not what made the guest choose us. '
+            + '"Instagram" means the booking arrived through the Instagram link — someone who saw the post and then walked in is counted as a walk-in. '
+            + 'It is a channel-of-entry report, not marketing attribution, and no amount of work here would change that.'
            ].concat(money ? RR_MONEY_NOTE : [])
   };
 }
@@ -589,13 +723,21 @@ function rrRepWalkin(pull, opt){
     if(isW(r)){ m.wb++; m.wc += pax; if(rrIsPlaceholder(r.name)) m.ph++; }
   });
   order.sort();
+  // Average party size, month by month. Added 31 Jul 2026 because it turned out
+  // to be the single clearest fact about a quarter — covers fell 24% while
+  // bookings fell only 10%, which is smaller tables, not fewer of them — and it
+  // was the one thing she had to work out on a calculator. It is two divisions
+  // of numbers already on the row.
+  var avg = function(c, b){ return b ? Math.round(c / b * 100) / 100 : null; };
   var share = order.map(function(ym){
     var m = months[ym];
-    return [rrMonthLabel(ym), m.b, m.wb, rrPct(m.wb, m.b), m.c, m.wc, rrPct(m.wc, m.c), m.ph];
+    return [rrMonthLabel(ym), m.b, m.wb, rrPct(m.wb, m.b), m.c, m.wc, rrPct(m.wc, m.c),
+            avg(m.c, m.b), avg(m.wc, m.wb), m.ph];
   });
   var T = { b:0,c:0,wb:0,wc:0,ph:0 };
   order.forEach(function(ym){ var m=months[ym]; T.b+=m.b; T.c+=m.c; T.wb+=m.wb; T.wc+=m.wc; T.ph+=m.ph; });
-  share.push(['TOTAL', T.b, T.wb, rrPct(T.wb,T.b), T.c, T.wc, rrPct(T.wc,T.c), T.ph]);
+  share.push(['TOTAL', T.b, T.wb, rrPct(T.wb,T.b), T.c, T.wc, rrPct(T.wc,T.c),
+              avg(T.c, T.b), avg(T.wc, T.wb), T.ph]);
 
   // Do they come back? Only guests we could NAME can be followed at all.
   var L = rrLedger(pull.nights);
@@ -616,8 +758,10 @@ function rrRepWalkin(pull, opt){
     sub: 'A walk-in is a booking SevenRooms recorded as "Walk In".',
     tables: [
       { name:'Share of the business',
-        head:['Month','Bookings','Walk-in bookings','%','Covers','Walk-in covers','%','Walk-ins with no name taken'],
-        widths:[22,11,16,8,10,15,8,24], num:[1,2,4,5,7], pct:[3,6], rows: share },
+        head:['Month','Bookings','Walk-in bookings','%','Covers','Walk-in covers','%',
+              'Average party','Walk-in average party','Walk-ins with no name taken'],
+        widths:[22,11,16,8,10,15,8,14,18,24], num:[1,2,4,5,9], pct:[3,6], dec:[7,8], rows: share,
+        note:'Average party is covers ÷ bookings. Watch it beside the covers column — covers falling faster than bookings means smaller tables, not fewer of them, and those are two completely different problems.' },
       { name:'Do they come back',
         head:['How we first met them','Guests we could name','Came back at least once','%'],
         widths:[28,20,22,8], num:[1,2], pct:[3], rows: ret,
@@ -850,7 +994,15 @@ function rrRepCancellations(pull, opt){
       widths:[13,12,8,15,26,9,20,14,22,12,12,11], num:[5,11], rows: out,
       note:'Sorted by night, then by the time the table was due.' } ],
     notes: [
-      'This is the same list SevenRooms shows you. Reconciled against its own screen on 30 July 2026: the feed sent 55 bookings for that night — 45 completed, 8 no-shows and 2 cancellations — which is exactly what the SevenRooms screen showed.',
+      // Written as HISTORY, deliberately. It used to be phrased in the present
+      // tense — "Reconciled against its own screen..." — and printed identically
+      // whether you ran May or last week, so it read as "this report has been
+      // checked" when it meant "a check was done once, on one night, when this
+      // was built". True, worth knowing, and not a property of the report in
+      // front of you. If you want the check for YOUR dates, the next line says
+      // how to do it in a minute.
+      'This is the same list SevenRooms shows you. When it was built on 31 July 2026 it was held against the SevenRooms screen for one night, 30 July: the feed sent 55 bookings — 45 completed, 8 no-shows and 2 cancellations — and the screen showed the same. That was one night, once, and it is not a check of the dates you have just run.',
+      'To check it for your own dates, pick a single night here and open that night in SevenRooms. The completed count plus the no-shows plus the cancellations should equal what SevenRooms sends for that night, and the Reservations book in this app shows the completed ones on their own.',
       'Until 31 July 2026 the app threw these rows away before they reached any screen, because the Reservations book was built to show tonight\'s service. Nothing was ever missing from SevenRooms. That filter is now optional and this report asks for them.',
       'Phone is the last four digits only. The full number, the email and the address are never sent to this app at all.',
       '"Days ahead" is how long before the night the booking was made. It is on every booking — checked on all 4,201 bookings in a quarter, none missing.'
@@ -1057,7 +1209,17 @@ async function rrRun(show){
   var dates = rrDates(win.from, win.to);
   if(!dates.length){ RR.err = 'Pick a from and a to date.'; rrPaint(); return; }
 
-  RR.busy = true; RR.err = ''; RR.done = 0; RR.total = dates.length;
+  // TWO PHASES, AND THE BAR HAS TO FOLLOW THE ONE THAT IS ACTUALLY RUNNING.
+  // Found 31 Jul 2026: a one-visit report over a quarter took about eleven
+  // minutes, and for nine of them the bar sat at 100% with "92 of 92 nights
+  // read" underneath, because both were driven off the nights counter, which
+  // had finished. The only thing still moving was a line of text. Anyone sane
+  // closes that window — and closing it throws away the whole pull, because the
+  // nights are only cached while the page is open. So she would pay for all of
+  // it twice.
+  RR.phase = 'nights'; RR.busy = true; RR.err = '';
+  RR.done = 0; RR.total = dates.length;
+  RR.gdone = 0; RR.gtotal = 0;
   RR.note = 'Reading the book…';
   rrPaint();
   try{
@@ -1076,15 +1238,18 @@ async function rrRun(show){
       return;
     }
     if(rep.profiles){
-      RR.note = 'Reading guest histories…';
-      rrPaint();
       var L = rrLedger(pulled.nights);
       var ids = Object.keys(L.guests).filter(function(id){ return !L.guests[id].placeholder; });
+      RR.phase = 'guests'; RR.gdone = 0; RR.gtotal = ids.length;
+      RR.note = 'Reading guest histories…';
+      rrPaint();
       await rrProfiles(ids, rrVenueOf(pulled.nights), function(done, total){
-        RR.note = 'Reading guest histories… ' + done + ' of ' + total;
+        RR.gdone = done; RR.gtotal = total || ids.length;
+        RR.note = 'Reading guest histories…';
         rrPaint();
       });
     }
+    RR.phase = 'working';
     RR.note = 'Working it out…';
     rrPaint();
     var pull = { nights: pulled.nights, failed: pulled.failed, from: win.from, to: win.to };
@@ -1096,6 +1261,7 @@ async function rrRun(show){
       rep: rep, out: out, money: money,
       from: RR.from, to: RR.to, pullFrom: win.from, pullTo: win.to,
       nights: Object.keys(pulled.nights).length,
+      shape: rrPullShape(pulled.nights),
       failed: pulled.failed, built: new Date()
     };
     if(show){ RR.open = false; }
@@ -1151,10 +1317,14 @@ function rrXlSheet(wb, C, name, t, subText){
     };
   });
   var headerRowNo = hdr.number;
-  var isMoney = {}, isPct = {}, isNum = {};
+  var isMoney = {}, isPct = {}, isNum = {}, isDec = {};
   (t.money||[]).forEach(function(i){ isMoney[i] = 1; });
   (t.pct||[]).forEach(function(i){ isPct[i] = 1; });
   (t.num||[]).forEach(function(i){ isNum[i] = 1; });
+  // A plain two-decimal number that is neither money nor a percentage -- an
+  // average party size. Without this it lands on Excel's General format and the
+  // same column prints 3.2 on one row and 2.54 on the next.
+  (t.dec||[]).forEach(function(i){ isDec[i] = 1; });
   // A header that says (AED) is money whether or not the report remembered to
   // list it — one rule, so a new column can't silently print 127.35000000001.
   head.forEach(function(h, i){ if(/\(AED/.test(h)) isMoney[i] = 1; if(/^%|%$/.test(h)) isPct[i] = 1; });
@@ -1169,15 +1339,28 @@ function rrXlSheet(wb, C, name, t, subText){
         font:{bold:true, size:9.5, color:{argb:'FF'+C.SABBIA}, name:'Calibri'},
         fill:{type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.VINO}},
         border: resXlBorder(C.GOLD),
-        alignment:{horizontal: (isMoney[c]||isPct[c]||isNum[c]) ? 'right' : 'left', vertical:'middle'}
+        alignment:{horizontal: (isMoney[c]||isPct[c]||isNum[c]||isDec[c]) ? 'right' : 'left', vertical:'middle'}
       } : {
         font:{size:9, name:'Calibri', color:{argb:'FF'+C.DARK}},
         fill: (i % 2 === 1) ? {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+C.LIGHT}} : undefined,
         border: resXlBorder('E2D9C9', 'hair'),
-        alignment:{ vertical:'top', horizontal: isMoney[c] ? 'right' : (isPct[c]||isNum[c] ? 'center' : 'left') }
+        alignment:{ vertical:'top', horizontal: isMoney[c] ? 'right' : (isPct[c]||isNum[c]||isDec[c] ? 'center' : 'left') }
       };
       if(isMoney[c]) cell.numFmt = '#,##0.00';
-      else if(isPct[c]) cell.numFmt = '0.0';
+      // A PERCENTAGE MUST CARRY ITS SIGN IN THE FILE, and this format is chosen
+      // carefully. It was plain '0.0', which printed a bare 11.4 sitting beside
+      // a 1,884 and a 215 — read as a count the moment the heading stops
+      // travelling with it, which is what happens when someone copies the
+      // figures into a deck. Worse, selecting the column and pressing Excel's %
+      // button — the obvious thing to do — turned 11.4 into 1140%.
+      //
+      // '0.0"%"' displays 11.4% while the underlying value stays 11.4, so she
+      // can still sum, sort and chart it, and the % button can no longer do any
+      // damage. A real Excel percentage type would have needed every value
+      // divided by 100 and would have quietly broken every existing formula
+      // pointed at these files.
+      else if(isPct[c]) cell.numFmt = '0.0"%"';
+      else if(isDec[c]) cell.numFmt = '0.00';
       else if(isNum[c]) cell.numFmt = '0';
     });
   });
@@ -1213,11 +1396,21 @@ function rrXlReadme(wb, C, R){
   var facts = [
     ['Report', R.out.title],
     ['Period', resDateLabel(R.from) + '  to  ' + resDateLabel(R.to)],
-    ['Nights read', R.nights],
+    // Split, not just a total. "92 nights read" is exactly the number somebody
+    // divides by for a per-night average, and twelve of them were Sundays.
+    ['Nights read', rrShapeLine(R.shape) || String(R.nights)],
     ['Book read', resDateLabel(R.pullFrom) + '  to  ' + resDateLabel(R.pullTo)],
     ['Built', R.built.toLocaleString('en-GB')],
     ['Source', 'The SevenRooms nightly book, one call per night. There is no other source and no stored copy.']
   ];
+  if(R.shape && R.shape.closed.length){
+    facts.push(['Closed nights', 'We are shut on Sundays. ' + R.shape.closed.length
+      + ' of the nights read carried no bookings at all, so a "per night" average has to divide by '
+      + R.shape.trading + ', not ' + R.shape.read + '.']);
+  }
+  if(R.shape && R.shape.unfinished.length){
+    facts.push(['⚠ Unfinished nights', rrUnfinishedLine(R.shape)]);
+  }
   if(!R.money) facts.push(['Money columns', 'Hidden — your access does not include Revenue.']);
   facts.forEach(function(f){
     var r = ws.addRow(f);
@@ -1330,6 +1523,12 @@ function rrPopHtml(){
   var win = rrPullWindow(rep, RR.from, RR.to);
   var nights = rrDates(win.from, win.to).length;
   var mins = Math.max(1, Math.round(nights * 7 / RR_PARALLEL / 60 * 10) / 10);
+  // The guest-history leg, estimated up front instead of arriving as a surprise.
+  // Measured 31 Jul 2026 on a real quarter: 92 nights produced 3,562 guest
+  // records — about 39 a night — and reading them took roughly nine minutes,
+  // near enough 0.15s each. Quoting "2.1 min" and then running for eleven is how
+  // somebody closes the window and loses the whole pull.
+  var gMins = rep.profiles ? Math.max(1, Math.round(nights * 39 * 0.15 / 60)) : 0;
   var bad = (RR.from && RR.to && RR.from > RR.to) ? 'The "from" date is after the "to" date.' : '';
 
   var h = ['<div class="rg-card rr-card" role="dialog" aria-modal="true" aria-label="Run a report">'];
@@ -1386,7 +1585,7 @@ function rrPopHtml(){
     h.push('<div class="resr-bad">'+resEsc(bad)+'</div>');
   } else if(nights){
     h.push('<div class="resr-note">'+nights+' night'+(nights===1?'':'s')+' to read &middot; about '+mins+' min'
-      + (rep.profiles ? ' &middot; plus the guest histories' : '')
+      + (gMins ? ', <b>then about '+gMins+' min more</b> for the guest histories' : '')
       + (win.from !== RR.from || win.to !== RR.to
           ? '<br><i>Reads '+resEsc(resDateLabel(win.from))+' to '+resEsc(resDateLabel(win.to))
             + (rep.lookback ? ' — the extra months are the look-back' : ' — the extra days are so “did they come back” has something to find') + '.</i>'
@@ -1396,10 +1595,22 @@ function rrPopHtml(){
   h.push('<div class="resr-note resr-quiet">Nights already read for another report are reused, so a second report over the same dates is instant.</div>');
 
   if(RR.busy){
+    // The bar and the caption both follow the phase that is actually running.
+    var pct = 0, cap = '';
+    if(RR.phase === 'guests'){
+      pct = RR.gtotal ? Math.round(RR.gdone / RR.gtotal * 100) : 0;
+      cap = resNum(RR.gdone) + ' of ' + resNum(RR.gtotal) + ' guest histories read'
+          + ' &middot; all ' + RR.total + ' nights done';
+    } else if(RR.phase === 'working'){
+      pct = 100; cap = 'Working out the numbers';
+    } else {
+      pct = RR.total ? Math.round(RR.done / RR.total * 100) : 0;
+      cap = RR.done + ' of ' + RR.total + ' nights read';
+    }
     h.push('<div class="resr-prog"><b>'+resEsc(RR.note||'Working…')+'</b>'
-      + '<div class="resr-bar"><i style="width:'+(RR.total?Math.round(RR.done/RR.total*100):0)+'%"></i></div>'
-      + '<span>'+RR.done+' of '+RR.total+' nights read</span></div>');
-    h.push('<div class="resr-note resr-quiet">Keep this window open until it finishes.</div>');
+      + '<div class="resr-bar"><i style="width:'+pct+'%"></i></div>'
+      + '<span>'+cap+'</span></div>');
+    h.push('<div class="resr-note resr-quiet">Keep this window open until it finishes &mdash; closing it loses the nights already read.</div>');
   }
   if(RR.err) h.push('<div class="resr-bad">'+resEsc(RR.err)+'</div>');
 
@@ -1421,6 +1632,7 @@ function rrCell(v, kind){
   if(typeof v === 'number'){
     if(kind === 'money') return resNum(Math.round(v));
     if(kind === 'pct') return (Math.round(v*10)/10) + '<small>%</small>';
+    if(kind === 'dec') return (Math.round(v*100)/100).toFixed(2);
     return resNum(v);
   }
   return resEsc(v);
@@ -1430,6 +1642,7 @@ function rrTableHtml(t){
   (t.money||[]).forEach(function(i){ kinds[i] = 'money'; });
   (t.pct||[]).forEach(function(i){ kinds[i] = 'pct'; });
   (t.num||[]).forEach(function(i){ kinds[i] = 'num'; });
+  (t.dec||[]).forEach(function(i){ kinds[i] = 'dec'; });
   t.head.forEach(function(h, i){ if(/\(AED/.test(h)) kinds[i] = 'money'; if(/^%|%$/.test(h)) kinds[i] = 'pct'; });
   var h = ['<div class="rr-tblwrap"><div class="rr-tblname">'+resEsc(t.name)+'</div>'];
   h.push('<div class="rr-scroll"><table class="rr-tbl"><thead><tr>');
@@ -1487,8 +1700,15 @@ function renderResReports(){
   h.push('<div class="rr-res-h"><div><div class="rr-res-t">'+resEsc(R.out.title)+'</div>');
   h.push('<div class="rr-res-s">'+resEsc(R.out.sub)+'</div></div>');
   h.push('<div class="rr-res-m">'+resEsc(resDateLabel(R.from))+' &ndash; '+resEsc(resDateLabel(R.to))
-    + '<i>'+R.nights+' night'+(R.nights===1?'':'s')+' read &middot; built '+R.built.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</i></div>');
+    + '<i>'+resEsc(rrShapeLine(R.shape) || (R.nights+' nights read'))
+    + ' &middot; built '+R.built.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</i></div>');
   h.push('</div>');
+
+  // An unfinished night bends every rate on the page downwards, so it is said
+  // here rather than left for someone to notice.
+  if(R.shape && R.shape.unfinished.length){
+    h.push('<div class="rr-bad">'+resEsc(rrUnfinishedLine(R.shape))+'</div>');
+  }
 
   if(R.failed && R.failed.length){
     h.push('<div class="rr-bad"><b>'+R.failed.length+' night'+(R.failed.length===1?'':'s')
