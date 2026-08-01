@@ -623,7 +623,8 @@ function loadAdminUsers(){
     sb.from('foh_staff').select('*').eq('active',true),
     sbKitchen.from('staff').select('*').eq('active',true),
     sb.from('app_config').select('value').eq('key','signers').limit(1),
-    sb.from('app_config').select('value').eq('key','vip_scan').limit(1)
+    sb.from('app_config').select('value').eq('key','vip_scan').limit(1),
+    sb.from('app_config').select('value').eq('key','reviews_competitors').limit(1)
   ]).then(function(res){
     state.adminUsers   = res[0].error ? [] : (res[0].data||[]);
     state.adminFoh     = res[1].error ? [] : (res[1].data||[]);
@@ -633,6 +634,9 @@ function loadAdminUsers(){
     // the settings screen says so in words rather than showing a switch that
     // silently fails to save.
     state.admVipCfg    = (res[4] && res[4].data && res[4].data[0]) ? (res[4].data[0].value||{}) : null;
+    // No row yet = the collector has never run under the timer. The settings
+    // card then shows its own default (7 days) rather than reading as broken.
+    state.admRevCfg    = (res[5] && res[5].data && res[5].data[0]) ? (res[5].data[0].value||{}) : null;
     state.adminLoaded  = true;
     if(res[0].error || res[1].error || res[2].error){
       console.error('Admin data load error:', res[0].error||res[1].error||res[2].error);
@@ -727,6 +731,15 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.adm-set-note code{background:#F5F0E8;padding:1px 5px;border-radius:4px;font-size:11px;}'
   +'.adm-set-off{font-size:11px;font-weight:600;color:#8A5A12;background:#FBF1DF;border:1px solid #E9D2A6;'
     +'border-radius:5px;padding:4px 9px;white-space:nowrap;flex:none;}'
+  // A dropdown rather than a switch: this setting has five sensible positions,
+  // not two. Sized to the touch target the rest of Admin uses on a phone.
+  +'.adm-set-sel{flex:none;font:inherit;font-size:13px;color:#400207;background:#FFF;'
+    +'border:1px solid #E0D3C2;border-radius:7px;padding:8px 10px;min-height:38px;cursor:pointer;}'
+  +'.adm-set-sel:focus{outline:2px solid #96343D;outline-offset:1px;}'
+  // The cost line turns to a warning when the chosen gap would overrun the
+  // monthly allowance - the number alone would not read as a problem.
+  +'.adm-set-warn{color:#8A2A12;background:#FBEDE9;border-top-color:#EFCFC5;'
+    +'margin-left:-18px;margin-right:-18px;padding:11px 18px 0;}'
   // A real switch, not a checkbox: this is a house-wide on/off and it should
   // read as one across the room.
   +'.adm-switch{position:relative;display:inline-block;width:46px;height:26px;flex:none;cursor:pointer;}'
@@ -1030,8 +1043,87 @@ function admSettingsHTML(){
     h.push('<div class="adm-set-note">Off. No guest name leaves the app while this is off.</div>');
   }
   h.push('</div>');
+
+  h.push(admReviewsCadenceHTML());
+
   h.push('</div>');
   return h.join('');
+}
+
+/* ── How often we collect competitors' reviews ──────────────────────────
+   Guest Reviews reads competitors through a paid search service with a
+   250-a-month free allowance. Collecting all seven venues every night costs
+   about 248 of those 250, which is why this dial exists: Roberto's is always
+   nightly, the six competitors run on this timer. Changing it here takes
+   effect on the next morning's collection — no redeploy, no code change.
+   The running total is shown because the whole point of the setting is cost,
+   and a setting whose consequence you cannot see is a guess. */
+var ADM_CADENCE = [
+  { d:1,  label:'Every night' },
+  { d:2,  label:'Every 2 days' },
+  { d:3,  label:'Every 3 days' },
+  { d:7,  label:'Once a week' },
+  { d:14, label:'Every 2 weeks' }
+];
+// Roberto's: 2 searches a night (page 1 + page 2). Competitors: 6 venues x 2
+// pages per round. Same arithmetic the edge function bills against.
+function admCadenceCost(days){
+  return Math.round(2*30.4 + (6*2) * (30.4/Math.max(1,days)));
+}
+function admReviewsCadenceHTML(){
+  var cfg  = state.admRevCfg;
+  var days = (cfg && Number(cfg.days) >= 1) ? Math.round(Number(cfg.days)) : 7;
+  var cost = admCadenceCost(days);
+  // Three states, not two. "Under 250" is not the same as "safe": the setting
+  // that caused the August overrun came to 243 of 250 — technically inside the
+  // allowance, but one re-run or one manual test tipped it over with two weeks
+  // still to go. Anything above 200 gets called tight, in those words.
+  var over  = cost > 250;
+  var tight = !over && cost > 200;
+  var h = ['<div class="adm-card">'];
+  h.push('<div class="adm-set-row">');
+  h.push('<div class="adm-set-txt">');
+  h.push('<div class="adm-set-t">How often to collect competitors&rsquo; reviews</div>');
+  h.push('<div class="adm-set-d">Guest Reviews collects Roberto&rsquo;s own reviews <b>every night</b> &mdash; '
+    + 'that never changes. The six competitors are collected on this timer instead, because collecting '
+    + 'all seven every night costs more than the free monthly allowance. '
+    + 'Collecting less often does not lose any review: each round still reads their whole last 7 days. '
+    + 'It only means a competitor&rsquo;s review can take up to this long to appear.</div>');
+  h.push('</div>');
+  h.push('<select class="adm-set-sel" onchange="admSaveRevCadence(this.value)">'
+    + ADM_CADENCE.map(function(o){
+        return '<option value="'+o.d+'"'+(o.d===days?' selected':'')+'>'+o.label+'</option>';
+      }).join('')
+    + '</select>');
+  h.push('</div>');
+
+  h.push('<div class="adm-set-note'+(over||tight?' adm-set-warn':'')+'">'
+    + 'At this setting the month costs about <b>'+cost+'</b> of the 250 searches included. '
+    + (over  ? 'That is over the allowance &mdash; the collection would stop part-way through the month. Choose a longer gap.'
+    : (tight ? 'That leaves only about '+(250-cost)+' spare, which is too thin &mdash; one repeat collection would use it up and the rest of the month would go uncollected. Choose a longer gap.'
+             : 'That leaves about '+(250-cost)+' spare.'))
+    + (cfg && cfg.last ? ' Competitors were last collected on <b>'+admEsc(admCadenceDate(cfg.last))+'</b>.' : '')
+    + '</div>');
+  h.push('</div>');
+  return h.join('');
+}
+function admCadenceDate(d){
+  try{ return new Date(String(d).slice(0,10)+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+  catch(e){ return String(d||''); }
+}
+async function admSaveRevCadence(v){
+  var days = Math.max(1, Math.min(30, Math.round(Number(v)||7)));
+  // Keep whatever "last" is already recorded — it belongs to the collector,
+  // not to this screen. Overwriting it here would either re-run the round
+  // immediately or silently postpone it by up to two weeks.
+  var next = Object.assign({}, state.admRevCfg||{}, { days: days });
+  var res = await sb.from('app_config').upsert(
+    { key:'reviews_competitors', value: next, updated_at: new Date().toISOString() }, { onConflict:'key' });
+  if(res.error){ toast('Could not save that: '+res.error.message, true); return; }
+  state.admRevCfg = next;
+  var lab = (ADM_CADENCE.find(function(o){ return o.d===days; })||{label:'every '+days+' days'}).label;
+  toast('Saved — competitors will be collected ' + lab.toLowerCase() + '.');
+  renderMain();
 }
 
 async function admToggleVipScan(on){

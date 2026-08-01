@@ -20,11 +20,18 @@
 //                                          google_reviews_pace - OUR derived
 //                                          measurement, kept long-term (see the
 //                                          licence note in that SQL file).
-//                                          Idempotent: safe to call many times a
-//                                          day. Meant to run each morning; the
-//                                          app also calls it when today's rows
-//                                          are missing, so the board is never
-//                                          blank.
+//                                          Runs once a day and then REFUSES:
+//                                          a second call the same day returns
+//                                          {skipped} without spending a search
+//                                          (see the once-a-day guard below -
+//                                          the writes were always idempotent,
+//                                          the SerpApi bill was not). Meant to
+//                                          run each morning; the app also calls
+//                                          it when today's rows are missing, so
+//                                          the board is never blank.
+//                                          Roberto's is collected every night;
+//                                          the six competitors on a timer set
+//                                          in Admin. {force:true} overrides.
 //   POST {mode:"reviews", venue:"zuma"}  - the 5 reviews Google returns for that
 //                                          one venue, fetched live on demand.
 //                                          NOTE 15 Jul PM: the UI no longer
@@ -260,16 +267,74 @@ Deno.serve(async (req) => {
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     const seen: Record<string, unknown>[] = [];
 
+    // ── ONCE-A-DAY GUARD (cost, 1 Aug 2026) ───────────────────────────
+    // The header above calls this mode "idempotent, safe to call many times
+    // a day". That was true of the DATABASE - every write is an upsert - but
+    // NOT of the money: each call spends one SerpApi search per venue.
+    // On 31 Jul the day cost 16 searches instead of 8, because the app fired
+    // a pull just after midnight (grLoad triggers whenever today's rows are
+    // missing, and the Dubai date rolls over six hours before the 6am cron)
+    // and the cron then collected the very same day again.
+    // So: if today is already collected, say so and spend nothing.
+    // A PARTIAL day (some venues failed) still re-runs - that is recovery,
+    // not waste. {force:true} is the diagnostic door.
+    let already = 0;
+    try {
+      const gR = await fetch(
+        supaUrl + "/rest/v1/google_reviews_daily?select=venue_key&snapshot_date=eq." + today,
+        { headers: { apikey: svcKey, Authorization: "Bearer " + svcKey } },
+      );
+      if (gR.ok) { const g = await gR.json(); already = Array.isArray(g) ? g.length : 0; }
+    } catch (_e) { /* cannot read = carry on and pull; never block the board */ }
+    if (already >= VENUES.length && body.force !== true) {
+      return json({ date: today, skipped: "already collected today", written: 0, searches_spent: 0 });
+    }
+
+    // ── COMPETITOR PULL INTERVAL (cost, 1 Aug 2026) ───────────────────
+    // 7 venues x 1 search a night is ~217 searches/month against SerpApi's
+    // 250 free tier, and Roberto's page 2 takes it to ~248. There is no
+    // version of "all 7 venues, every night" that fits. So:
+    //   - OUR OWN venue stays NIGHTLY. A 1-star about us is worth knowing
+    //     tomorrow morning, not next week. Never put robertos on the timer.
+    //   - The six competitors are pulled every N days, N set in Admin so the
+    //     cadence can change without a redeploy.
+    //
+    // A spaced pull costs FRESHNESS, not CONTENT. Page 1 is sorted
+    // newest-first, and competitors are now paginated too (8 + 20 = 28 rows),
+    // which reaches back much further than any DIFC venue fills in N days -
+    // the busiest, Zuma, runs about 16 a week. Every pull re-reads the whole
+    // 7-day window, so consecutive pulls overlap and a failed round is
+    // covered by the next one. If a venue ever did outrun 28 rows inside the
+    // window it lands in serp_capped_venues rather than being silently cut.
+    let compDays = 7;              // default until Admin says otherwise
+    let compLast: string | null = null;
+    try {
+      const cR = await fetch(
+        supaUrl + "/rest/v1/app_config?key=eq.reviews_competitors&select=value",
+        { headers: { apikey: svcKey, Authorization: "Bearer " + svcKey } },
+      );
+      if (cR.ok) {
+        const c = await cR.json();
+        const val = Array.isArray(c) && c[0] ? c[0].value : null;
+        if (val && Number(val.days) >= 1) compDays = Math.min(30, Math.round(Number(val.days)));
+        if (val && val.last) compLast = String(val.last).slice(0, 10);
+      }
+    } catch (_e) { /* missing row = the default above, never a failure */ }
+    const compAge = compLast ? Math.round((Date.parse(today) - Date.parse(compLast)) / 86400000) : 9999;
+    const compDue = compAge >= compDays;   // never seen = due now
+
     // ── PRIMARY NET: SerpApi (Francesco's informed go, 16 Jul) ─────────
     // Returns the actual NEWEST reviews per venue - the thing Google's own
-    // API refuses to do. ~210 calls/month fits their free tier. It works by
+    // API refuses to do. Cost is capped by the two rules above (once a day,
+    // competitors on a timer): about 113/month at a weekly competitor round,
+    // 182 at every 3 days, against a 250 free tier. It works by
     // scraping Google (their ToS risk, provider-side); the decision and the
     // trade-off are recorded in the module memory - do not silently remove
     // OR silently expand. When the key is set and delivers, the Google
     // rotating-five harvest below is SKIPPED so the same review can never
     // land under two different keys (which would display twice).
     const SERP = Deno.env.get("SERPAPI_KEY");
-    let serpKept = 0, serpFail = 0;
+    let serpKept = 0, serpFail = 0, serpSearches = 0, serpTried = 0;
     const serpCapped: string[] = [];
     if (SERP) {
       // SerpApi's page 1 is HARD-LOCKED to 8 rows - their docs, verbatim:
@@ -308,26 +373,30 @@ Deno.serve(async (req) => {
       const oldestOf = (list: any[]) =>
         list.length ? Date.parse(list[list.length - 1].iso_date || "") : 0;
 
-      await Promise.all(VENUES.map(async (v) => {
+      // Us every night; the competitors only when their timer is up.
+      const pullList = VENUES.filter((v) => v.us || compDue);
+      serpTried = pullList.length;
+      await Promise.all(pullList.map(async (v) => {
         try {
           const base = "https://serpapi.com/search.json?engine=google_maps_reviews&place_id=" +
             v.place_id + "&sort_by=newestFirst&hl=en&api_key=" + SERP;
+          serpSearches++;
           const r1 = await fetch(base);
           const d1 = await r1.json();
           if (!r1.ok || d1.error) { serpFail++; return; }
           const p1 = Array.isArray(d1.reviews) ? d1.reviews : [];
           take(v, p1);
-          // COST RULE (Francesco, 16 Jul: "stay free"): page 2 is one extra
-          // search, and paginating all 7 would need ~330/month against the
-          // 250 free tier. So only OUR OWN venue is paginated to a complete
-          // week - that is the one where a missed review matters. Competitors
-          // keep page 1's 8 newest, and the UI says so rather than implying
-          // it is their whole week. Their RATINGS (the board, the race) come
-          // from Google's own free API and are unaffected by this.
-          if (!v.us) return;
-          // Page 1 exhausted the week? Then we have the venue's full week.
+          // Page 2 (one more search, up to 20 rows) fires for ANY venue whose
+          // page 1 did not reach past the 7-day edge - i.e. only when the week
+          // is provably truncated, so a quiet venue still costs one search.
+          // Competitors were excluded from this until 1 Aug 2026, when they
+          // moved off the nightly timer: pulling them every N days makes the
+          // second page the thing that keeps the catch COMPLETE, and the lower
+          // frequency more than pays for it. Their RATINGS (the board, the
+          // race) come from Google's own free API and never touch SerpApi.
           const tok = d1.serpapi_pagination && d1.serpapi_pagination.next_page_token;
           if (!tok || !p1.length || oldestOf(p1) < weekAgo) return;
+          serpSearches++;
           const r2 = await fetch(base + "&num=20&next_page_token=" + encodeURIComponent(tok));
           const d2 = await r2.json();
           if (!r2.ok || d2.error) { serpCapped.push(v.key); return; } // page 2 refused: week may be short
@@ -337,8 +406,34 @@ Deno.serve(async (req) => {
           if (p2.length >= 20 && oldestOf(p2) > weekAgo) serpCapped.push(v.key);
         } catch (_e) { serpFail++; }
       }));
+      // Stamp the competitor round so the next N days skip it. Only when it
+      // actually ran, and never when every venue failed - a SerpApi outage
+      // must not buy itself another N days of silence.
+      if (compDue && serpFail < pullList.length) {
+        try {
+          await fetch(supaUrl + "/rest/v1/app_config?on_conflict=key", {
+            method: "POST",
+            headers: {
+              apikey: svcKey,
+              Authorization: "Bearer " + svcKey,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates,return=minimal",
+            },
+            body: JSON.stringify({
+              key: "reviews_competitors",
+              value: { days: compDays, last: today },
+              updated_at: new Date().toISOString(),
+            }),
+          });
+        } catch (_e) { /* worst case the round repeats tomorrow - never fatal */ }
+      }
     }
-    const useGoogleNet = !SERP || serpKept === 0 && serpFail >= VENUES.length; // fallback if SerpApi is absent or fully down
+    // Fall back to Google's own net only when SerpApi is absent or every venue
+    // we ACTUALLY TRIED failed. This must count the attempted venues, not all
+    // seven: since 1 Aug most nights try only Roberto's, so a hard-coded 7 here
+    // would mean a total SerpApi outage looked like "1 failure out of 7" and
+    // the fallback would never fire on a competitors-not-due night.
+    const useGoogleNet = !SERP || (serpKept === 0 && serpTried > 0 && serpFail >= serpTried);
 
     const results = await Promise.all(VENUES.map(async (v) => {
       try {
@@ -526,6 +621,13 @@ Deno.serve(async (req) => {
       source: SERP ? (useGoogleNet ? "google-net (serpapi down)" : "serpapi") : "google-net",
       serp_kept: serpKept, serp_failed_venues: serpFail,
       serp_capped_venues: serpCapped,
+      // Cost, in the open: what this call actually spent, and where the
+      // competitor timer stands. serp_capped_venues is the one to watch - a
+      // name in there means that venue outran 28 rows and its week IS short.
+      searches_spent: serpSearches,
+      competitors_pulled: compDue,
+      competitor_interval_days: compDays,
+      competitors_last_pulled: compDue ? today : compLast,
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e).slice(0, 200) }, 500);

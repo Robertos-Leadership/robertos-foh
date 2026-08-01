@@ -46,7 +46,20 @@ var GR_VENUES = [
   { key:'gattopardo', name:'Il Gattopardo' },
   { key:'chicnonna',  name:'Chic Nonna' }
 ];
-var GR = { loading:false, loaded:false, rows:null, err:null, open:null, week:null, weekErr:null, pace:null, paceErr:null, raceView:'30' };
+var GR = { loading:false, loaded:false, rows:null, err:null, open:null, week:null, weekErr:null, pace:null, paceErr:null, raceView:'30', comp:null };
+
+// Competitors are collected on a timer (see the cost note in the edge
+// function). One sentence, reused by both the list and the empty state, so the
+// two can never drift apart and tell a manager different things.
+function grCompCadence(){
+  var d = GR.comp && Number(GR.comp.days);
+  if(!d || d < 1) return 'every few days';
+  return d === 1 ? 'every night' : d === 7 ? 'once a week' : 'every '+d+' days';
+}
+function grCompLastSeen(){
+  var l = GR.comp && GR.comp.last;
+  return l ? 'last checked '+grDate(l) : '';
+}
 
 function grName(k){ var v=GR_VENUES.find(function(x){ return x.key===k; }); return v?v.name:k; }
 // The one Google deep link that needs no fetch and never expires: built from
@@ -119,6 +132,15 @@ async function grLoad(){
     GR.pace = [];
     GR.paceErr = String((e3 && e3.message) || e3);
   }
+  // How often the competitors are actually collected, and when we last looked.
+  // The screen MUST say this: from 1 Aug 2026 they are on a timer, not nightly,
+  // so a short competitor list can mean "quiet week" OR "we have not looked
+  // since Monday" — and those two read identically unless we print the date.
+  // Same fail-alone rule: no row (or no table) just means the line is omitted.
+  try{
+    var cc = await sb.from('app_config').select('value').eq('key','reviews_competitors').limit(1);
+    GR.comp = (!cc.error && cc.data && cc.data[0]) ? (cc.data[0].value||null) : null;
+  }catch(e4){ GR.comp = null; }
   GR.loading = false;
   if(state.currentTab==='reviews') renderMain();
 }
@@ -528,8 +550,17 @@ function grWeekHTML(key){
   }
   var list = grWeekFor(key);
   if(!list.length){
-    return '<div class="gr-card"><div class="gr-note">No review under a week old has been written'+(mine?' for us':' for '+grEsc(grName(key)))+' — quiet weeks happen. '
-      + 'The nightly collection brings anything new in by the next morning.</div></div>';
+    // An empty competitor list has TWO possible causes — a genuinely quiet
+    // week, or simply that we have not looked since the last round. Saying
+    // "quiet weeks happen" alone would let a manager read the second as the
+    // first, so the date we last looked is part of the sentence, not a detail.
+    var why = mine
+      ? 'No review under a week old has been written for us — quiet weeks happen. '
+        + 'The nightly collection brings anything new in by the next morning.'
+      : 'Nothing collected for '+grEsc(grName(key))+' in the last 7 days. '
+        + 'We check them '+grCompCadence()+(grCompLastSeen() ? ' — '+grCompLastSeen() : '')
+        + ', so this can mean a quiet week or simply that nothing has been collected since then.';
+    return '<div class="gr-card"><div class="gr-note">'+why+'</div></div>';
   }
   var h = [];
   h.push(grSplit(list));
@@ -541,12 +572,14 @@ function grWeekHTML(key){
     }
   }
   h.push(list.slice(0, mine?20:10).map(function(x){ return grReviewHTML(grWeekRow(x), mine); }).join(''));
-  // Honesty about scope: our own week is fetched to completion; for a
-  // competitor we deliberately take only the 8 newest a night (cost), so
-  // never let their list imply "this is their whole week".
+  // Honesty about scope. Both lists now reach the full 7 days (competitors are
+  // paginated too), so the caveat is no longer "this is only a sample" — it is
+  // "this is current as of the last time we looked". Say when that was.
   h.push('<div class="gr-attrib gr-attrib-sm">'
     + (mine ? 'Every review written in the last 7 days, collected nightly — newest first, kept 30 days, then deleted.'
-            : 'Their newest reviews, up to 8 a night — a sample of their week, not all of it. Their rating and count above are complete.')
+            : 'Their reviews from the last 7 days. We check them '+grCompCadence()
+              + (grCompLastSeen() ? ' — '+grCompLastSeen() : '')
+              + ', so anything posted since then is not here yet. Their rating and count above are updated nightly.')
     + '</div>');
   return h.join('');
 }
