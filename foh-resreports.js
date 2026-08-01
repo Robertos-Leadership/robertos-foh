@@ -25,7 +25,7 @@
 //
 // THE ONE THING THAT MAKES ALL OF THIS POSSIBLE — and the trap that had to be
 // avoided. A guest profile's `visits` is LIFETIME AS OF RIGHT NOW, not as of a
-// date, and there is no per-visit history anywhere in the API. So "guests who
+// date, and the PROFILE carries no per-visit history. So "guests who
 // came once in the last three months" CANNOT be answered by filtering on
 // visits == 1. Measured 31 Jul 2026 over 1 May - 31 Jul: 3,358 guests came
 // exactly once in that window and only 2,347 of them carry visits == 1 — the
@@ -34,8 +34,26 @@
 //
 // So every "how many guests" answer here is rebuilt from the nightly book:
 // group every booking by its SevenRooms client id, count DISTINCT DATES. That
-// is a real visit ledger, which the guest API does not give us. rrLedger()
+// is a real visit ledger, which the guest PROFILE does not give us. rrLedger()
 // below is that, and nothing else in this file counts guests any other way.
+//
+// ⚠ CORRECTION, 1 Aug 2026 — this comment used to read "there is no per-visit
+// history anywhere in the API", and that was WRONG. It was measured on the
+// guest profile and then written as a fact about the whole API. It is not:
+// /reservations?client_id=<id> returns a guest's real per-visit history and is
+// what the "Last here" popup in the Reservations module now uses. What remains
+// true is the narrow claim above -- the PROFILE has no per-visit history, so
+// these reports are still right to rebuild from the book.
+//
+// The cost of the overgeneralisation was real: it nearly bought a nightly
+// capture job and a historical backfill for data SevenRooms serves in one call.
+// Scope a finding to what was actually tested. See the ask-the-api-before-
+// building-storage note.
+//
+// STILL OPEN (not done, deliberately): now that a per-guest query exists, parts
+// of the whole-window book scan below MAY be answerable more cheaply. Nobody
+// has measured that. Do not assume it -- measure before changing anything here,
+// because these numbers go to Nicole and the Chairman.
 //
 // WHAT IS DELIBERATELY NOT USED:
 //   * the guest profile's `visits` for a windowed count      (see above)
