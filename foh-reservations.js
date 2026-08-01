@@ -294,7 +294,12 @@ function resOpenGuest(id, time){
   }
   if(!RESG.row){ for(var j=0;j<list.length;j++){ if(list[j].client === id){ RESG.row = list[j]; break; } } }
   RESG.open = true; RESG.id = id; RESG.err = null;
-  if(RESG.cache[id]){ RESG.data = RESG.cache[id]; RESG.loading = false; resPaintGuest(); return; }
+  // Keyed by id AND date: the visit list is "everything before this night", so
+  // the same guest viewed on a different night is a different answer. Keying on
+  // id alone would show last Tuesday's book a history that stops at Monday.
+  if(RESG.cache[id + '|' + (RES.date||'')]){
+    RESG.data = RESG.cache[id + '|' + (RES.date||'')]; RESG.loading = false; resPaintGuest(); return;
+  }
   RESG.data = null; RESG.loading = true;
   resPaintGuest();
   // The venue comes off the booking, never from a constant here: the guest's
@@ -318,15 +323,20 @@ if(!window._resGuestKey){
 
 async function resLoadGuest(id, venue){
   try{
+    // `before` is the night being viewed, not today: the edge function returns
+    // visits strictly before it, so tonight never appears in its own history --
+    // which is the entire point, since SevenRooms stamps today onto the guest
+    // the moment they sit down.
     var r = await fetch(KITCHEN_URL + '/functions/v1/sevenrooms-sync?guest=' + encodeURIComponent(id)
-        + (venue ? '&venue=' + encodeURIComponent(venue) : ''), {
+        + (venue ? '&venue=' + encodeURIComponent(venue) : '')
+        + (RES.date ? '&before=' + encodeURIComponent(RES.date) : ''), {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET }
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
     var j = await r.json();
     if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
-    RESG.cache[id] = j;
+    RESG.cache[id + '|' + (RES.date||'')] = j;
     if(RESG.id === id){ RESG.data = j; RESG.err = null; }
   }catch(e){
     console.warn('[reservations] guest load failed', e);
