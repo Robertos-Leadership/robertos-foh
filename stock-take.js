@@ -61,6 +61,27 @@ function stCanLock(){ return !!(stUser && stUser.emp_id==='0000'); }
 // number while counting (which would anchor them into "confirming" it).
 function stCanCompare(){ return !!(stUser && stUser.emp_id==='0000'); }
 
+// ── history fallback for the July 2026 section split ──────────────────────
+// Until June 2026 the whole bar was counted on ONE list, stored under the old
+// combined dept 'beverage' ("Stock Take List -R's Bar 30.06.2026.xls", 884
+// items, locked). In July it was split into Alcoholic / Non Alcoholic / Wine /
+// Coffee & Tea. Those four therefore have NO earlier sheet under their own
+// dept, and without this map the comparison would say "no earlier stock take"
+// for them forever — even though June's numbers are sitting right there.
+//
+// Matching is by article code, so the combined sheet lines up item-for-item.
+// Verified against the live data 1 Aug 2026: of this month's items, Wine finds
+// a June count for 385 of 424, Alcoholic 327 of 342, Non Alcoholic 28 of 60.
+// Bar Food and Coffee & Tea find none — they were not on June's bar list — so
+// they are deliberately left out and keep saying there is nothing to compare.
+//
+// CRITICAL: when the fallback is used, June rows that belong to a DIFFERENT
+// section are dropped (see stLoadPrevMonth). Otherwise Wine would inherit
+// hundreds of alcoholic lines as "not on this month's list", and the "June
+// closing" figure would be the whole bar's value shown against Wine alone.
+var STOCK_PREV_FALLBACK = { wine:'beverage', alcoholic:'beverage', nonalc:'beverage' };
+var STOCK_DEPT_LEGACY_LABEL = { beverage:"R's Bar — the one combined bar list" };
+
 // Previous-month reference (the grey "Last month: …" line + last-month closing
 // total) is BUILT but hidden for now. Flip to true to switch it back on — planned
 // for July once June's inventory is done. When false, no prior-month data is even
@@ -87,6 +108,9 @@ var stPrevRef   = {};        // ref-key -> { qty, unit, value }
 var stPrevTotal = 0;         // previous month's closing total value
 var stPrevMonth = null;      // 'YYYY-MM' of the previous sheet (null if none)
 var stPrevLabel = '';        // e.g. 'May 2026'
+var stPrevSrcDept  = null;   // which dept the prior sheet actually came from
+var stPrevFallback = false;  // true = pulled from the old combined list, not this section's own history
+var stPrevMatched  = 0;      // how many of THIS month's items found a prior count
 
 function stActive(){ return typeof state==='object' && state && state.currentTab==='stocktake'; }
 function stDeptLabel(){ var d=STOCK_DEPTS.find(function(x){return x.key===stDept;}); return d?d.label:stDept; }
@@ -199,6 +223,7 @@ async function stLoadCounts(){
 // build a per-item lookup of what it closed at. Read-only history — no realtime. ──
 async function stLoadPrevMonth(){
   stPrevRef = {}; stPrevTotal = 0; stPrevMonth = null; stPrevLabel = '';
+  stPrevSrcDept = null; stPrevFallback = false; stPrevMatched = 0;
   // Loaded when the per-item reference is switched on (STOCK_SHOW_PREV) OR when
   // Aung is signed in and needs the compare panel. Nobody else pays for the
   // extra two queries, and no prior number reaches the counting screen.
@@ -206,33 +231,67 @@ async function stLoadPrevMonth(){
   // OWN last month — switching section reloads this via stOpen().
   if(!STOCK_SHOW_PREV && !stCanCompare()) return;
   if(!stMonth) return;
+  var srcDept = stDept, fallback = false;
   var sres = await sb.from('stock_take_sheets').select('month')
-    .eq('venue_id',STOCK_VENUE).eq('dept',stDept).lt('month',stMonth)
+    .eq('venue_id',STOCK_VENUE).eq('dept',srcDept).lt('month',stMonth)
     .order('month',{ascending:false}).limit(1);
   var prev = sres.data && sres.data[0];
+  // No history under this section's own key? Fall back to the old combined bar
+  // list it was split out of (see STOCK_PREV_FALLBACK). Own history always wins,
+  // so this stops being used the moment the section has a month of its own.
+  if(!prev && STOCK_PREV_FALLBACK[stDept]){
+    srcDept = STOCK_PREV_FALLBACK[stDept];
+    var fres = await sb.from('stock_take_sheets').select('month')
+      .eq('venue_id',STOCK_VENUE).eq('dept',srcDept).lt('month',stMonth)
+      .order('month',{ascending:false}).limit(1);
+    prev = fres.data && fres.data[0];
+    fallback = !!prev;
+  }
   if(!prev) return;
   stPrevMonth = prev.month;
+  stPrevSrcDept = srcDept; stPrevFallback = fallback;
   stPrevLabel = new Date(stPrevMonth+'-01T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   var ires = await stFetchAllPaged(function(){
     return sb.from('stock_take_items').select('id,code,name,item_group,unit,price,units')
-      .eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',stPrevMonth).eq('active',true);
+      .eq('venue_id',STOCK_VENUE).eq('dept',srcDept).eq('month',stPrevMonth).eq('active',true);
   });
   var cres = await stFetchAllPaged(function(){
     return sb.from('stock_take_counts').select('item_id,qty,unit')
-      .eq('venue_id',STOCK_VENUE).eq('dept',stDept).eq('month',stPrevMonth);
+      .eq('venue_id',STOCK_VENUE).eq('dept',srcDept).eq('month',stPrevMonth);
   });
+  // On the fallback path the source sheet covers the WHOLE bar, so keep only the
+  // articles that are on this section's list. Without this filter Wine would show
+  // every alcoholic line as "not on this month's list", and the June closing
+  // figure would be the whole bar's value presented as Wine's.
+  var keep = null;
+  if(fallback){ keep = {}; stItems.forEach(function(it){ keep[stRefKey(it)] = 1; }); }
   var countByItem = {};
   (cres.data||[]).forEach(function(c){ if(c.qty!=null) countByItem[c.item_id] = c; });
   (ires.data||[]).forEach(function(it){
     var c = countByItem[it.id]; if(!c) return;
-    var val = stPriceForUnit(it, c.unit) * Number(c.qty);
+    var k = stRefKey(it);
+    if(keep && !keep[k]) return;                 // belongs to another section
+    // rounded per line, same as stLineValue, so the prior-month side of every
+    // comparison ties to the fil too
+    var val = Math.round(stPriceForUnit(it, c.unit) * Number(c.qty) * 100)/100;
     // name/group carried too: an item counted last month can be MISSING from this
     // month's uploaded list entirely, and the compare panel still has to name it.
-    var k = stRefKey(it), ex = stPrevRef[k];
+    var ex = stPrevRef[k];
     if(ex){ ex.qty = Number(ex.qty)+Number(c.qty); ex.value += val; }   // same article twice in a list — sum, never overwrite
     else stPrevRef[k] = { qty:c.qty, unit:c.unit||it.unit||'', value:val, name:it.name||'', group:it.item_group||'Other' };
     stPrevTotal += val;
   });
+  stPrevMatched = Object.keys(stPrevRef).length;
+}
+// One line naming exactly where the "last month" numbers came from. Shown in the
+// panel and written into the Excel — a comparison against a differently-shaped
+// sheet must never look like a like-for-like one.
+function stPrevSourceNote(){
+  if(!stPrevMonth) return '';
+  if(!stPrevFallback) return '';
+  var lbl = STOCK_DEPT_LEGACY_LABEL[stPrevSrcDept] || stPrevSrcDept;
+  return 'Before the sections were split, '+stDeptLabel()+' was counted inside '+lbl+
+         '. '+stPrevMatched+' of this month\'s '+stItems.length+' items were found on that sheet and are compared below; the rest show as new.';
 }
 
 // ── realtime: live multi-person counting (per dept + month) ──
@@ -374,7 +433,13 @@ function stFilteredItems(){
   return out;
 }
 function stCats(){ return Array.from(new Set(stItems.map(function(i){ return i.item_group||'Other'; }))); }
-function stLineValue(it){ var c = stCounts[it.id]; if(!c||c.qty==null) return 0; return stItemPrice(it)*Number(c.qty); }
+// Line value = EXACTLY the Excel line (qty × price, rounded to fils per line), so
+// the screen, the email, the Excel and the compare panel all agree to the fil.
+// It was unrounded here while the Excel already rounded per line, so a long list
+// drifted a couple of fils between the two — and in the compare panel the per-item
+// differences did not add up to the headline difference (Wine: 6,422.01 of rows
+// against a 6,422.03 header, 1 Aug 2026). Matches Kitchen, which fixed this first.
+function stLineValue(it){ var c = stCounts[it.id]; if(!c||c.qty==null) return 0; return Math.round(stItemPrice(it)*Number(c.qty)*100)/100; }
 function stGrandTotal(){ var t=0; stItems.forEach(function(it){ t+=stLineValue(it); }); return t; }
 function stCountedCount(){ var n=0; stItems.forEach(function(it){ var c=stCounts[it.id]; if(c&&c.qty!=null) n++; }); return n; }
 function stCategoryTotal(){ var t=0; stItems.forEach(function(it){ if(!stCatFilters.length||stCatFilters.indexOf(it.item_group||'Other')>-1) t+=stLineValue(it); }); return t; }
@@ -974,7 +1039,8 @@ function stShowCompare(){
     box.innerHTML='<div class="st-cmp-box" onclick="event.stopPropagation()">'+
       '<div class="st-cmp-head">'+
         '<div><div class="st-cmp-title">'+stEsc(stDeptLabel())+' · '+stEsc(stPrevLabel)+' → this month</div>'+
-        '<div class="st-cmp-sub">Closing count vs closing count, for <b>'+stEsc(stDeptLabel())+'</b> only. This is <b>movement</b>, not usage or loss — this app holds counts only, not purchases or sales.</div></div>'+
+        '<div class="st-cmp-sub">Closing count vs closing count, for <b>'+stEsc(stDeptLabel())+'</b> only. This is <b>movement</b>, not usage or loss — this app holds counts only, not purchases or sales.'+
+          (stPrevFallback ? '<br><b>'+stEsc(stPrevSourceNote())+'</b>' : '')+'</div></div>'+
         '<button class="st-btn" style="flex:none" onclick="document.getElementById(\'st-cmp-modal\').remove()">Close</button>'+
       '</div>'+
       '<div id="st-cmp-body"></div>'+
@@ -997,7 +1063,8 @@ function stRenderCompare(){
 
   var head =
     '<div class="st-cmp-cards">'+
-      '<div class="st-cmp-card"><div class="st-cmp-num">'+stMoney(stPrevTotal)+'</div><div class="st-cmp-lbl">'+stEsc(stPrevLabel)+' closing</div></div>'+
+      '<div class="st-cmp-card"><div class="st-cmp-num">'+stMoney(stPrevTotal)+'</div>'+
+        '<div class="st-cmp-lbl">'+stEsc(stPrevLabel)+' closing'+(stPrevFallback?' · matched items only':'')+'</div></div>'+
       '<div class="st-cmp-card"><div class="st-cmp-num">'+stMoney(curTotal)+'</div><div class="st-cmp-lbl">This month so far</div></div>'+
       '<div class="st-cmp-card '+(dTotal<0?'down':'up')+'"><div class="st-cmp-num">'+stCmpMoneySigned(dTotal)+'</div>'+
         '<div class="st-cmp-lbl">Difference'+(dPct==null?'':' · '+(dPct>0?'+':'')+dPct+'%')+'</div></div>'+
@@ -1043,8 +1110,9 @@ function stCompareAoa(){
   var rows = stCompareRows();
   var curTotal = stGrandTotal();
   var aoa = [["ROBERTO'S DIFC"], [stDeptLabel()+' Stock Take — '+stPrevLabel+' vs '+monLabel],
-    ['Closing count vs closing count. This is movement between two counts — NOT usage, wastage or loss.'], [],
-    [stPrevLabel+' closing value', Math.round(stPrevTotal*100)/100],
+    ['Closing count vs closing count. This is movement between two counts — NOT usage, wastage or loss.'],
+    [stPrevFallback ? stPrevSourceNote() : ''], [],
+    [stPrevLabel+' closing value'+(stPrevFallback?' (matched items only)':''), Math.round(stPrevTotal*100)/100],
     [monLabel+' counted value', Math.round(curTotal*100)/100],
     ['Difference', Math.round((curTotal-stPrevTotal)*100)/100],
     ['Flag threshold (AED)', Number(stCmpMinAed)||0],
