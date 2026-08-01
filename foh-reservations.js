@@ -381,7 +381,12 @@ function resVisitsHtml(g, money){
     h.push('<b>' + resEsc(resVisitLabel(v.date)) + '</b>');
     var bits = [];
     if(v.covers) bits.push(resNum(v.covers) + ' cover' + (v.covers === 1 ? '' : 's'));
-    if(v.tables) bits.push('table ' + resEsc(String(v.tables)));
+    // SevenRooms' own table numbers carry trailing dots on historic bookings
+    // ("137..", "22." on the live record, 1 Aug 2026) -- an artefact of how the
+    // table was typed years ago, not part of the name. Trimmed here rather than
+    // in the edge function so a cosmetic fix never needs a redeploy of it.
+    var tbl = String(v.tables||'').replace(/[.\s]+$/, '').trim();
+    if(tbl) bits.push('table ' + resEsc(tbl));
     // A cancelled night is shown as cancelled and never carries a spend figure
     // beside it — a host reading "24 Aug · AED 0" would take it as a guest who
     // came and spent nothing, which is a different guest entirely.
