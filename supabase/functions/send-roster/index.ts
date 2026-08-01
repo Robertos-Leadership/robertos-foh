@@ -111,15 +111,24 @@ serve(async (req) => {
     // update:true means this week was already sent — tell HR to discard the old one.
     const isUpdate = update === true;
 
-    const to = HR_TO;
-    const managed = await ccFromAppUsers(notifyKey);
-    const usedFallback = managed === null;
+    // A test send goes to ONE address and nobody else — not HR, not the Cc list.
+    // Without this the only way to check the roster email was to send a real one
+    // to HR, which is not a test, it is a mistake with a nice name. Anything
+    // that is not a single sane address is ignored rather than half-honoured.
+    const testTo = typeof body.testTo === "string" && body.testTo.includes("@")
+      ? body.testTo.trim().toLowerCase() : null;
+
+    const to = testTo ? [testTo] : HR_TO;
+    const managed = testTo ? [] : await ccFromAppUsers(notifyKey);
+    const usedFallback = !testTo && managed === null;
     // Never copy the addressee back to itself — it reads as a mistake to HR.
-    const cc = (managed || FALLBACK_CC[notifyKey] || [])
+    const cc = testTo ? [] : (managed || FALLBACK_CC[notifyKey] || [])
       .filter((e) => !to.includes(e));
     const replyTo = isFOH ? "mpetrosino@robertos.ae" : "dvalla@robertos.ae";
 
-    const subject = (isUpdate ? "UPDATED — " : "") + subjLabel + ": " + weekStr;
+    // A test must be unmistakable in the inbox. If it ever did reach HR by
+    // accident, the subject line alone tells them to ignore it.
+    const subject = (testTo ? "TEST — " : "") + (isUpdate ? "UPDATED — " : "") + subjLabel + ": " + weekStr;
 
     const banner = isUpdate
       ? "<p style=\"background:#fbeaea;border-left:4px solid #b91c1c;padding:10px 14px;color:#7f1d1d;font-weight:bold;border-radius:4px\">⚠️ UPDATED ROSTER — this replaces the version sent earlier for this week. Please discard the previous roster and use this latest one.</p>"
