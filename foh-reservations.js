@@ -339,6 +339,51 @@ async function resLoadGuest(id, venue){
 
 function resMoney(n){ return '<small>AED </small>' + resNum(Math.round(Number(n)||0)); }
 
+// ── THEIR LAST VISITS ─────────────────────────────────────────────────────
+// The three nights before this one, from SevenRooms' own reservation history
+// on the guest profile — the same list the hosts read in SevenRooms, not a
+// ledger we built.
+//
+// TONIGHT IS EXCLUDED, and that is the entire point of the feature. Once a
+// guest is seated SevenRooms writes today into their history and into the
+// last-visit date, so the "Last here" column starts reading "today" for every
+// guest in the room and the previous visit — the one a manager actually wants
+// before they walk to the table — disappears from the screen. Filtering on the
+// date being viewed (not on "today") also keeps this honest when a manager is
+// looking back at a past night's book.
+//
+// Three, because that is what was asked for and because a host reads this
+// standing next to a table. The edge function returns up to 12, so a longer
+// list is a display change here and not another deploy.
+function resVisitsHtml(g, money){
+  if(!g || !g.visits_have){
+    // "SevenRooms didn't send a list" and "this guest has never been" are the
+    // same empty array, and printing "no previous visits" for a 63-visit guest
+    // would be a lie the hosts would catch. Say nothing rather than say wrong.
+    return '';
+  }
+  var here = (RES && RES.date) || '';
+  var past = (g.visits_recent || []).filter(function(v){ return v.date && v.date !== here; });
+  if(!past.length) return '';
+  var h = ['<div class="rg-visits"><div class="rg-visits-h">Last visits</div>'];
+  past.slice(0, 3).forEach(function(v){
+    h.push('<div class="rg-visit' + (v.cancelled ? ' rg-visit-x' : '') + '">');
+    h.push('<b>' + resEsc(resVisitLabel(v.date)) + '</b>');
+    var bits = [];
+    if(v.covers) bits.push(resNum(v.covers) + ' cover' + (v.covers === 1 ? '' : 's'));
+    if(v.tables) bits.push('table ' + resEsc(String(v.tables)));
+    // A cancelled night is shown as cancelled and never carries a spend figure
+    // beside it — a host reading "24 Aug · AED 0" would take it as a guest who
+    // came and spent nothing, which is a different guest entirely.
+    if(v.cancelled) bits.push('cancelled');
+    else if(money && Number(v.spend) > 0) bits.push(resMoney(v.spend));
+    h.push('<span>' + bits.join(' &middot; ') + '</span>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+  return h.join('');
+}
+
 function resGuestHtml(){
   var row = RESG.row || {};
   var g = RESG.data;
@@ -395,6 +440,7 @@ function resGuestHtml(){
       if(g.last_visit){
         h.push('<div class="rg-last">Last visit '+resEsc(resVisitLabel(g.last_visit))+'</div>');
       }
+      h.push(resVisitsHtml(g, money));
     }
     if(g.note) h.push('<div class="rg-note"><span>Note on file</span>'+resEsc(g.note)+'</div>');
     if(g.tags && g.tags.length){
@@ -557,10 +603,26 @@ function resHistCells(r, money){
       + (bold && has ? '<b>' + body + '</b>' : body) + '</div>';
   };
   var lastKnown = !first && g && g.last_visit;
+  // TAPPING "Last here" OPENS THE VISITS. Asked for by Francesco 1 Aug 2026,
+  // and the reason is a real failure of this cell: SevenRooms moves the guest's
+  // last-visit date to TODAY the moment they are seated, so from mid-service
+  // onwards this column tells a host "last here: today" -- which they can see --
+  // and the visit that actually mattered is gone from the screen. The panel
+  // behind the tap keeps the previous ones.
+  //
+  // Only where there is history to open: a first-timer's cell is not a button,
+  // because a button that opens "nothing here" is worse than plain text.
+  var lvBody = first ? '<i>first visit</i>'
+    : (lastKnown ? resEsc(resVisitShort(g.last_visit)) : '<i>&mdash;</i>');
+  if(lastKnown && r.client){
+    lvBody = '<button class="res-lv-btn" onclick="resOpenGuest(\''
+      + String(r.client).replace(/[^A-Za-z0-9_-]/g,'') + '\',\'' + resEsc(r.time||'')
+      + '\')" title="See their last visits">' + lvBody + '</button>';
+  }
   // Blank, not "0", on a first visit: the cell beside it already says "first
   // visit", and "first visit / 0" reads as two different facts.
   return '<div class="res-lv' + ((first || lastKnown) ? '' : ' rm-none') + '">'
-      + (first ? '<i>first visit</i>' : (lastKnown ? resEsc(resVisitShort(g.last_visit)) : '<i>&mdash;</i>')) + '</div>'
+      + lvBody + '</div>'
     + '<div class="res-vc">' + ((g && !first) ? resNum(g.visits) : '') + '</div>'
     + (money ? cell('res-m1', g && g.spend, true)
              + cell('res-m2', g && g.per_cover)
