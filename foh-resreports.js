@@ -110,9 +110,43 @@ function rrDates(from, to){
   return out;
 }
 function rrMonth(iso){ return String(iso||'').slice(0,7); }
-function rrMonthLabel(ym){
-  try{ return new Date(ym+'-01T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'}); }
+// A month row must say WHAT PART of the month it is, or it lies by omission.
+//
+// Found 1 Aug 2026 running the no-show report over 25 Jul - 1 Aug. The table
+// read "August 2026 - 30 bookings - 0% no-shows". That "month" was ONE evening,
+// still being served. Crop that row into a slide and you have published a
+// monthly no-show rate for August off a service that had not finished.
+//
+// It was never a one-off: the same bare "July 2026" was printed over 31 Jul
+// alone (69 bookings), 1-15 Jul (800) and 1-31 Jul (1,721). Three different
+// numbers, one label. The period IS printed above the table, but a period line
+// does not travel with a row that gets cropped or pasted into a deck -- and
+// rows get pasted into decks.
+//
+// So the label is told the window it was read over. A month reads plainly ONLY
+// when the window covers it end to end AND the month has actually finished;
+// anything else is annotated. from/to are optional so a caller that genuinely
+// has no window still gets the old behaviour rather than throwing.
+function rrMonthLabel(ym, from, to){
+  var base;
+  try{ base = new Date(ym+'-01T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'}); }
   catch(e){ return ym; }
+  if(!from || !to) return base;
+  var mStart = ym + '-01', mEnd = rrMonthEnd(ym);
+  // The slice of this month the window actually read.
+  var a = from > mStart ? from : mStart;
+  var b = to   < mEnd   ? to   : mEnd;
+  if(a > b) return base;                       // no overlap -- nothing to qualify
+  // A month containing today cannot be complete however wide the window is:
+  // tonight is still being served. This is the August case above.
+  var today = rrToday();
+  if(mEnd >= today){
+    var n = rrDaysBetween(a, b) + 1;
+    return base + ' (' + n + ' night' + (n === 1 ? '' : 's') + ' so far)';
+  }
+  if(a === mStart && b === mEnd) return base;  // genuinely the whole month
+  var d1 = Number(a.slice(8,10)), d2 = Number(b.slice(8,10));
+  return base + (d1 === d2 ? ' (' + d1 + ' only)' : ' (' + d1 + '–' + d2 + ' only)');
 }
 function rrDaysBetween(a, b){
   return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00')) / 86400000);
@@ -120,6 +154,15 @@ function rrDaysBetween(a, b){
 function rrAddDays(iso, n){ return resShiftDate(iso, n); }
 function rrToday(){ return (typeof chkToday==='function') ? chkToday().iso : new Date().toISOString().slice(0,10); }
 function rrPct(n, d){ return d ? Math.round(n/d*1000)/10 : null; }
+// Seconds, said the way a person would. A single night takes about seven
+// seconds and used to be advertised as "about 1 min", because the estimate had
+// a one-minute floor -- cautious in a way that makes you hesitate before
+// pressing, which is the opposite of what a floor is for.
+function rrEta(secs){
+  if(secs < 45) return Math.max(5, Math.round(secs/5)*5) + ' seconds';
+  if(secs < 90) return 'a minute';
+  return (Math.round(secs/60*10)/10) + ' min';
+}
 
 // Pull a list of nights with a small amount of parallelism.
 //
@@ -248,8 +291,34 @@ function rrPullShape(nights){
     rows.forEach(function(r){ if(r.state === 'upcoming' || r.state === 'seated') pending++; });
     if(pending) unfinished.push({ date: d, pending: pending });
   });
+  // Was EVERY Sunday in this window empty? Not "were the empty nights Sundays"
+  // — that is true by coincidence in windows where Sunday trading was normal
+  // (1 Feb - 30 Apr 2026: 2 empty nights, both Sundays, yet 11 other Sundays
+  // traded and one did 72 bookings). Only the stronger question earns the
+  // remark, or the file quietly implies a closure that was not in force.
+  var sun = 0, sunClosed = 0;
+  dates.forEach(function(d){
+    if(new Date(d + 'T12:00:00').getDay() !== 0) return;
+    sun++;
+    if(!(nights[d] || []).length) sunClosed++;
+  });
   return { read: dates.length, closed: closed, trading: dates.length - closed.length,
-           unfinished: unfinished };
+           unfinished: unfinished,
+           sundays: sun, sundaysClosed: sunClosed };
+}
+// Were the empty nights in THIS window all Sundays? Asked rather than assumed:
+// Sunday closure only began around mid-April 2026, so a historic window can
+// hold Sundays that traded hard (1 Feb - 30 Apr 2026: 11 of 13 Sundays traded,
+// the busiest 72 bookings). Only when it is true of the window we actually read
+// do we say it.
+function rrAllClosedAreSundays(s){
+  if(!s || !s.closed || !s.closed.length || !s.sundays) return false;
+  // Both halves, or the sentence misleads: every empty night was a Sunday AND
+  // no Sunday in the window traded.
+  if(s.sundaysClosed !== s.sundays) return false;
+  return s.closed.every(function(d){
+    return new Date(d + 'T12:00:00').getDay() === 0;
+  });
 }
 // The one sentence that goes on the screen and into every workbook.
 function rrShapeLine(s){
@@ -394,7 +463,7 @@ function rrRepOneVisit(pull, opt){
   order.forEach(function(ym){
     var m = months[ym], n = Object.keys(m.guests).length;
     totEver += m.onceEver; totKnown += m.everKnown; totVisits += m.visits;
-    rows.push([rrMonthLabel(ym), n, m.visits, m.once, rrPct(m.once, n), rrPct(m.once, m.visits),
+    rows.push([rrMonthLabel(ym, pull.from, pull.to), n, m.visits, m.once, rrPct(m.once, n), rrPct(m.once, m.visits),
                m.everKnown ? m.onceEver : null,
                m.everKnown ? rrPct(m.onceEver, m.everKnown) : null]);
   });
@@ -436,7 +505,7 @@ function rrRepOneVisit(pull, opt){
     });
     var monthEnd = rrMonthEnd(ym);
     var runDays = Math.max(0, rrDaysBetween(monthEnd > pull.to ? pull.to : monthEnd, pull.to));
-    runway.push([rrMonthLabel(ym), first, back, rrPct(back, first), runDays]);
+    runway.push([rrMonthLabel(ym, pull.from, pull.to), first, back, rrPct(back, first), runDays]);
   });
 
   return {
@@ -444,8 +513,14 @@ function rrRepOneVisit(pull, opt){
     sub: 'A visit is a distinct date. Counted from the nightly book, never from the guest profile.',
     tables: [
       { name: 'By month',
-        head: ['Month','Guests who came','Visits','Came once in this window','% of guests','% of visits','Of those, only ever once','%'],
-        widths: [22,14,10,20,12,12,20,8], num:[1,2,3,6], pct:[4,5,7],
+        // The last column was headed just "%", and a one-character header
+        // invites the division that gives the wrong answer: it is NOT "only
+        // ever once" over "came once in this window". The divisor is the guests
+        // whose SevenRooms profile we could actually read, which is smaller and
+        // was printed nowhere. Only 0.2-0.4 of a point out, so nothing turned on
+        // it -- but a header nobody can misread costs nothing.
+        head: ['Month','Guests who came','Visits','Came once in this window','% of guests','% of visits','Of those, only ever once','% of those we could check'],
+        widths: [22,14,10,20,12,12,20,22], num:[1,2,3,6], pct:[4,5,7],
         rows: rows,
         note: 'TWO PERCENTAGES, because there are two honest ways to ask this and they give different answers. "% of guests" divides by the different people who came that month — it is like for like and the one to use. "% of visits" divides by the number of nights they came between them, which is the figure quoted in the questionnaire you answered. Both are here so you can check either.' },
       { name: 'Why the months are not comparable',
@@ -466,10 +541,14 @@ function rrRepOneVisit(pull, opt){
 // The month LABELS present in a set of rows, in date order. Used where a table
 // is keyed by the printed month name — sorting those alphabetically gives
 // "April, August, December" and sorting by volume hides the trend entirely.
-function rrMonthsIn(rows){
+// from/to ride along so the ORDER list carries the same annotated labels the
+// rows do. Without it the bucket order would be built from bare "August 2026"
+// while the rows said "August 2026 (1 night so far)", and every month row would
+// silently fall out of the ordered list.
+function rrMonthsIn(rows, from, to){
   var seen = {};
   (rows||[]).forEach(function(r){ if(r.date) seen[rrMonth(r.date)] = 1; });
-  return Object.keys(seen).sort().map(rrMonthLabel);
+  return Object.keys(seen).sort().map(function(ym){ return rrMonthLabel(ym, from, to); });
 }
 function rrMonthEnd(ym){
   var d = new Date(ym+'-01T12:00:00');
@@ -519,7 +598,7 @@ function rrRepNewReturning(pull, opt){
       // had already seen them, so they are returning.
       if(rrMonth(seenBefore[id]) === ym) nw++; else ret++;
     });
-    rows.push([rrMonthLabel(ym), n, nw, rrPct(nw, n), ret, rrPct(ret, n)]);
+    rows.push([rrMonthLabel(ym, pull.from, pull.to), n, nw, rrPct(nw, n), ret, rrPct(ret, n)]);
   });
 
   return {
@@ -563,7 +642,7 @@ function rrRepReturnWindow(pull, opt){
       for(var i=0;i<g.dates.length;i++){ if(rrMonth(g.dates[i]) === ym){ f = g.dates[i]; break; } }
       if(f) base.push({ g:g, from:f });
     });
-    var line = [rrMonthLabel(ym), base.length];
+    var line = [rrMonthLabel(ym, pull.from, pull.to), base.length];
     WINDOWS.forEach(function(w){
       // Enough clock? The last guest of the month needs w days after the month
       // ends before this figure means anything.
@@ -621,7 +700,7 @@ function rrRepChannel(pull, opt, money){
   var goneCx = gone.length - goneNs;
   var ch = {}, order = [];
   var totB = 0, totC = 0, totG = 0, totWith = 0;
-  var months = rrMonthsIn(rows);
+  var months = rrMonthsIn(rows, pull.from, pull.to);
   rows.forEach(function(r){
     var k = String(r.booked_by || '').trim() || 'Not recorded';
     var c = ch[k] || (ch[k] = { k:k, bookings:0, covers:0, gross:0, heads:0, withCheck:0, m:{} });
@@ -629,7 +708,7 @@ function rrRepChannel(pull, opt, money){
     c.bookings++; totB++;
     var pax = Number(r.pax)||0;
     c.covers += pax; totC += pax;
-    var ml = rrMonthLabel(rrMonth(r.date));
+    var ml = rrMonthLabel(rrMonth(r.date), pull.from, pull.to);
     var mm = c.m[ml] || (c.m[ml] = { b:0, c:0 });
     mm.b++; mm.c += pax;
     var g = resGrossOf(r);
@@ -731,7 +810,7 @@ function rrRepWalkin(pull, opt){
   var avg = function(c, b){ return b ? Math.round(c / b * 100) / 100 : null; };
   var share = order.map(function(ym){
     var m = months[ym];
-    return [rrMonthLabel(ym), m.b, m.wb, rrPct(m.wb, m.b), m.c, m.wc, rrPct(m.wc, m.c),
+    return [rrMonthLabel(ym, pull.from, pull.to), m.b, m.wb, rrPct(m.wb, m.b), m.c, m.wc, rrPct(m.wc, m.c),
             avg(m.c, m.b), avg(m.wc, m.wb), m.ph];
   });
   var T = { b:0,c:0,wb:0,wc:0,ph:0 };
@@ -895,7 +974,14 @@ function rrRepLapsed(pull, opt, money){
     list.push({ name:g.name, p:p, lv:lv });
   });
   list.sort(function(a,b){ return (Number(b.p.visits)||0) - (Number(a.p.visits)||0); });
-  var rows = list.map(function(x, i){
+  // "Give me fifty people to call on Monday" was the question this report could
+  // not answer. It returned all 362 and the only way to cut it was to edit the
+  // workbook by hand -- which leaves the file somebody actually works from
+  // matching nothing. 0 = all, so the default behaviour is unchanged.
+  var top = Number(opt.lapsedTop) || 0;
+  var found = list.length;
+  var shown = top ? list.slice(0, top) : list;
+  var rows = shown.map(function(x, i){
     var line = [i+1, x.name, Number(x.p.visits)||null, Number(x.p.covers)||null,
                 x.lv, Math.round(rrDaysBetween(x.lv, today)/7)];
     if(money) line = line.concat([
@@ -906,19 +992,35 @@ function rrRepLapsed(pull, opt, money){
   });
   var head = ['#','Guest','Lifetime visits','Lifetime covers','Last visit','Weeks since'];
   var widths = [5,28,13,14,12,12];
-  if(money){ head = head.concat(['Lifetime spend (AED, net)','Net per visit (AED)']); widths = widths.concat([20,17]); }
+  // "Net per visit" reads as the two columns beside it divided, and it is not.
+  // SevenRooms divides by the visits that carried a BILL, not by the lifetime
+  // visits printed alongside -- so a guest on 7 visits and AED 1,854 shows AED
+  // 927, and anyone sizing a campaign by multiplying back values her at AED
+  // 6,489. Naming the column after what it actually is stops the multiplication
+  // before it starts.
+  if(money){ head = head.concat(['Lifetime spend (AED, net)','SevenRooms’ average bill (AED)']); widths = widths.concat([20,22]); }
   return {
     title: 'Lapsed regulars',
-    sub: 'At least ' + minVisits + ' visits, and not in for more than ' + weeks + ' weeks.',
+    sub: 'At least ' + minVisits + ' visits, and not in for more than ' + weeks + ' weeks.'
+       + (top && found > top ? '  Showing the top ' + top + ' of ' + found + '.' : ''),
     tables: [ { name:'Win-back list', head:head, widths:widths, num:[0,2,3,5], money: money?[6,7]:[], rows: rows,
-      note:'Ordered by how much of a regular they were. This is the list you would run a campaign from.' } ],
+      note:'Ordered by how much of a regular they were. This is the list you would run a campaign from.'
+         + (top && found > top ? ' Showing the top ' + top + ' of ' + found + ' who qualified — the other ' + (found-top) + ' are not in this file.' : '') } ],
     notes: [
       'HOW THE LIST IS FOUND: we read the book for the dates you picked, take every named guest who appears, then keep the ones SevenRooms says have at least ' + minVisits + ' lifetime visits and have not been in since ' + resDateLabel(cutoff) + '.',
       'That means the dates you pick should be a period they WERE coming — a historic window. Pick the last few months and you will mostly find people who are not lapsed at all. The pop-up defaults to a window that already ended.',
-      'Visits and last-visit both come from the guest profile untouched, so they match the SevenRooms page the hosts read.',
+      'Visits and last-visit both come from the guest profile untouched, so they match the SevenRooms page the hosts read.'
+    ].concat(top && found > top
+      ? ['SHOWING THE TOP ' + top + ' OF ' + found + '. The list is ordered by lifetime visits, so these are the ' + top + ' biggest regulars who have lapsed. The other ' + (found-top) + ' qualified too and are simply not in this file — set "Show top" to All to see them.']
+      : []).concat([
       noProfile ? (noProfile + ' guest' + (noProfile===1?'':'s') + ' in this window could not be read from SevenRooms and could not be tested.') : 'Every guest in this window was read from SevenRooms.',
-      'This report holds guest names. It carries no email, no address and no phone number — those never leave SevenRooms.'
-    ]
+      'This report holds guest names. It carries no email, no address and no phone number — those never leave SevenRooms. It tells you WHO to win back; the hosts still own how.'
+    ]).concat(money ? [
+      // The same sentence the Reservations print-out has carried all along. It
+      // belonged here more than there: this is the report a campaign budget
+      // gets built from.
+      'THE MONEY COLUMNS DO NOT MULTIPLY OUT. Lifetime spend and the average bill are two separate SevenRooms figures, and the average is NOT lifetime spend divided by the visits column beside it — SevenRooms divides by the visits that actually carried a bill. Measured across the guest records behind this report, 59% of guests with 5+ visits disagree with that division, one in twenty by more than half. Read each column as given; never multiply the average back up to value a guest.'
+    ] : [])
   };
 }
 
@@ -941,7 +1043,7 @@ function rrRepVip(pull, opt){
   order.sort(); aOrder.sort();
   var byMonth = order.map(function(ym){
     var m = months[ym];
-    return [rrMonthLabel(ym), m.b, m.v, rrPct(m.v, m.b), m.c, m.vc, rrPct(m.vc, m.c)];
+    return [rrMonthLabel(ym, pull.from, pull.to), m.b, m.v, rrPct(m.v, m.b), m.c, m.vc, rrPct(m.vc, m.c)];
   });
   byMonth.push(['TOTAL', tB, tV, rrPct(tV, tB), tC, tVC, rrPct(tVC, tC)]);
   var byArea = aOrder.map(function(k){
@@ -1073,7 +1175,7 @@ function rrRepNoShowRate(pull, opt){
     tables: [
       // Months read in date order or a trend is invisible. Everything else
       // sorts biggest-first, which is what you act on.
-      bucket(function(r){ return rrMonthLabel(rrMonth(r.date)); }, 'By month', rrMonthsIn(all)),
+      bucket(function(r){ return rrMonthLabel(rrMonth(r.date), pull.from, pull.to); }, 'By month', rrMonthsIn(all, pull.from, pull.to)),
       bucket(function(r){ return String(r.booked_by||'').trim() || 'Not recorded'; }, 'By channel'),
       bucket(function(r){ return paxBand(r.pax); }, 'By party size',
              ['1–2','3–4','5–6','7–10','11+','Not recorded']),
@@ -1145,7 +1247,7 @@ function rrReport(id){
 var RR = {
   pick: null,          // which report the pop-up is configuring
   from: '', to: '',
-  lookback: 3, minVisits: 5, weeks: 12, sortBy: 'spend', limit: 100,
+  lookback: 3, minVisits: 5, weeks: 12, sortBy: 'spend', limit: 100, lapsedTop: 0,
   open: false,         // pop-up showing
   busy: false, done: 0, total: 0, note: '',
   result: null,        // { report, built, from, to, out, failed }
@@ -1255,7 +1357,8 @@ async function rrRun(show){
     var pull = { nights: pulled.nights, failed: pulled.failed, from: win.from, to: win.to };
     var out = rep.run(pull, {
       from: RR.from, to: RR.to, lookback: RR.lookback,
-      minVisits: RR.minVisits, weeks: RR.weeks, sortBy: RR.sortBy, limit: RR.limit
+      minVisits: RR.minVisits, weeks: RR.weeks, sortBy: RR.sortBy, limit: RR.limit,
+      lapsedTop: RR.lapsedTop
     }, money);
     RR.result = {
       rep: rep, out: out, money: money,
@@ -1404,9 +1507,16 @@ function rrXlReadme(wb, C, R){
     ['Source', 'The SevenRooms nightly book, one call per night. There is no other source and no stored copy.']
   ];
   if(R.shape && R.shape.closed.length){
-    facts.push(['Closed nights', 'We are shut on Sundays. ' + R.shape.closed.length
-      + ' of the nights read carried no bookings at all, so a "per night" average has to divide by '
-      + R.shape.trading + ', not ' + R.shape.read + '.']);
+    // Say what this window FOUND, never what we believe our policy to be.
+    // This line used to open "We are shut on Sundays." Sunday closure only
+    // started around mid-April 2026: run 1 Feb - 30 Apr and 11 of the 13
+    // Sundays traded, one of them 72 bookings. The person most likely to pull a
+    // historic window is the person asking whether Sunday is worth opening --
+    // and that sentence would have stopped her looking.
+    facts.push(['Nights with no bookings', R.shape.closed.length
+      + ' of the ' + R.shape.read + ' nights read carried no bookings at all, so a "per night" average has to divide by '
+      + R.shape.trading + ', not ' + R.shape.read + '.'
+      + (rrAllClosedAreSundays(R.shape) ? ' Every one of them was a Sunday.' : '')]);
   }
   if(R.shape && R.shape.unfinished.length){
     facts.push(['⚠ Unfinished nights', rrUnfinishedLine(R.shape)]);
@@ -1461,8 +1571,13 @@ async function rrExcel(){
     var wb = new ExcelJS.Workbook();
     wb.creator = "Roberto's DIFC"; wb.created = new Date();
     rrXlReadme(wb, C, R);
+    // rrShapeLine, not the raw count. The Read-me sheet already carried the
+    // split ("89 nights read (87 with trade, 2 closed)") but the sheet that
+    // holds the actual numbers -- the one people pull out and mail on -- still
+    // said the bare "89 nights read". 89 is precisely the number the split
+    // exists to stop somebody dividing by.
     var sub = resDateLabel(R.from) + '  to  ' + resDateLabel(R.to)
-      + '   |   ' + R.nights + ' night' + (R.nights===1?'':'s') + ' read'
+      + '   |   ' + (rrShapeLine(R.shape) || (R.nights + ' night' + (R.nights===1?'':'s') + ' read'))
       + '   |   built ' + R.built.toLocaleString('en-GB');
     R.out.tables.forEach(function(t){
       t.reportTitle = R.out.title;
@@ -1521,14 +1636,34 @@ function rrPopHtml(){
   var rep = rrReport(RR.pick);
   if(!rep) return '';
   var win = rrPullWindow(rep, RR.from, RR.to);
-  var nights = rrDates(win.from, win.to).length;
-  var mins = Math.max(1, Math.round(nights * 7 / RR_PARALLEL / 60 * 10) / 10);
-  // The guest-history leg, estimated up front instead of arriving as a surprise.
-  // Measured 31 Jul 2026 on a real quarter: 92 nights produced 3,562 guest
-  // records — about 39 a night — and reading them took roughly nine minutes,
-  // near enough 0.15s each. Quoting "2.1 min" and then running for eleven is how
-  // somebody closes the window and loses the whole pull.
-  var gMins = rep.profiles ? Math.max(1, Math.round(nights * 39 * 0.15 / 60)) : 0;
+  var allNights = rrDates(win.from, win.to);
+  var nights = allNights.length;
+  // THE ESTIMATE HAS TO KNOW WHAT IS ALREADY IN HAND. A re-run whose nights and
+  // guest records were all cached advertised "about 2.1 min, then about 9 min
+  // more" and finished in under eight seconds. The quiet line underneath did say
+  // nights get reused, but the big bold number said eleven minutes — and eleven
+  // minutes is a thing you put off until after your next meeting. The whole
+  // point of having eleven reports is running a second one.
+  var toRead = allNights.filter(function(d){ return !RRN.nights[d]; });
+  var reused = nights - toRead.length;
+  var secs = toRead.length * 7 / RR_PARALLEL;
+  // The guest-history leg. Measured 31 Jul 2026 on a real quarter: 92 nights
+  // produced 3,562 guest records — about 39 a night — at roughly 0.15s each.
+  // For nights already in hand we do not guess: we count the guests those
+  // nights actually hold and drop the ones already read.
+  var gTodo = 0;
+  if(rep.profiles){
+    if(reused){
+      var seen = {};
+      allNights.forEach(function(d){
+        (RRN.nights[d] || []).forEach(function(r){
+          if(r.client && !seen[r.client] && !rrProf(r.client)){ seen[r.client] = 1; gTodo++; }
+        });
+      });
+    }
+    gTodo += toRead.length * 39;          // nights not yet read can only be estimated
+  }
+  var gSecs = gTodo * 0.15;
   var bad = (RR.from && RR.to && RR.from > RR.to) ? 'The "from" date is after the "to" date.' : '';
 
   var h = ['<div class="rg-card rr-card" role="dialog" aria-modal="true" aria-label="Run a report">'];
@@ -1565,7 +1700,13 @@ function rrPopHtml(){
     [4,8,12,26,52].forEach(function(n){
       h.push('<option value="'+n+'"'+(Number(RR.weeks)===n?' selected':'')+'>'+n+' weeks</option>');
     });
-    h.push('</select></label><i>Pick dates when they WERE still coming — a lapsed guest is by definition not in the last few weeks.</i></div>');
+    h.push('</select></label><label>Show top<select class="rr-sel" '+(RR.busy?'disabled ':'')
+      + 'onchange="rrSet(\'lapsedTop\', this.value)">');
+    // All first and default: cutting the list is the new option, not the norm.
+    [[0,'All'],[25,'25'],[50,'50'],[100,'100'],[250,'250']].forEach(function(o){
+      h.push('<option value="'+o[0]+'"'+(Number(RR.lapsedTop)===o[0]?' selected':'')+'>'+o[1]+'</option>');
+    });
+    h.push('</select></label><i>Pick dates when they WERE still coming — a lapsed guest is by definition not in the last few weeks. “Show top” cuts the list to the biggest regulars; the report says how many it left out.</i></div>');
   }
   if(rep.sortable){
     h.push('<div class="rr-opt"><label>Rank by<select class="rr-sel" '+(RR.busy?'disabled ':'')
@@ -1584,8 +1725,13 @@ function rrPopHtml(){
   if(bad){
     h.push('<div class="resr-bad">'+resEsc(bad)+'</div>');
   } else if(nights){
-    h.push('<div class="resr-note">'+nights+' night'+(nights===1?'':'s')+' to read &middot; about '+mins+' min'
-      + (gMins ? ', <b>then about '+gMins+' min more</b> for the guest histories' : '')
+    h.push('<div class="resr-note">'
+      + (toRead.length
+          ? toRead.length + ' night' + (toRead.length===1?'':'s') + ' to read &middot; about ' + rrEta(secs)
+          : 'Every night is already in hand')
+      + (reused && toRead.length ? ' <i>(' + reused + ' of ' + nights + ' already read)</i>' : '')
+      + (gTodo ? ', <b>then about '+rrEta(gSecs)+'</b> for '+resNum(gTodo)+' guest histor'+(gTodo===1?'y':'ies') : '')
+      + (!toRead.length && !gTodo ? ' &mdash; this will be instant.' : '')
       + (win.from !== RR.from || win.to !== RR.to
           ? '<br><i>Reads '+resEsc(resDateLabel(win.from))+' to '+resEsc(resDateLabel(win.to))
             + (rep.lookback ? ' — the extra months are the look-back' : ' — the extra days are so “did they come back” has something to find') + '.</i>'
