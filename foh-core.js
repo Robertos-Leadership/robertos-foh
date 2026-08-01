@@ -612,7 +612,15 @@ async function loadFohAccess(){
 // ══════════════════════════════════════════════
 var SUPA_USERS_URL='https://supabase.com/dashboard/project/paoaivwtkzujmrgrfjuq/auth/users';
 var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{k:'operations',n:'Closing Report'},{k:'revenue',n:'Revenue'},{k:'stocktake',n:'Stock Take'},{k:'reviews',n:'Guest Reviews'},{k:'reservations',n:'Reservations'}];
-var ADMIN_NOTIFY=[{k:'closing_report',n:'Closing-report email'}];
+// Every automatic email the app sends, and the notify key that decides who gets it.
+// A person is on a list when that key is in their app_users.notify array — ticked
+// here or on the Emails tab, never in code. The edge functions read the same keys,
+// so adding someone takes effect on the next send with no deploy.
+var ADMIN_NOTIFY=[
+  {k:'closing_report',n:'Closing-report email'},
+  {k:'roster_foh',    n:'FOH roster to HR'},
+  {k:'roster_kitchen',n:'Kitchen roster to HR'}
+];
 function admEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function loadAdminUsers(){
   // The Admin "control centre" reads BOTH databases: app_users + foh_staff from this
@@ -740,6 +748,18 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   // monthly allowance - the number alone would not read as a problem.
   +'.adm-set-warn{color:#8A2A12;background:#FBEDE9;border-top-color:#EFCFC5;'
     +'margin-left:-18px;margin-right:-18px;padding:11px 18px 0;}'
+  // Admin > Emails: one row per recipient. Wraps to two lines on a phone rather
+  // than squeezing the address, and the Remove button keeps a finger-sized tap
+  // target on every screen - the 8px-arrow lesson from the schedule reorder.
+  +'.adm-mail-list{margin-top:12px;border-top:1px solid #F0E7DA;}'
+  +'.adm-mail-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;'
+    +'padding:10px 0;border-bottom:1px solid #F0E7DA;}'
+  +'.adm-mail-who{flex:1 1 240px;min-width:0;font-size:13.5px;color:#3A2A1E;line-height:1.45;}'
+  +'.adm-mail-em{display:block;font-size:12px;color:#8B7355;word-break:break-all;}'
+  +'.adm-mail-tag{display:inline-block;margin-top:3px;font-size:10.5px;letter-spacing:.4px;'
+    +'text-transform:uppercase;color:#6B5A46;background:#F3EBDF;border:1px solid #E3D5C2;'
+    +'border-radius:10px;padding:1px 8px;}'
+  +'.adm-mail-row .px-mini{flex:none;min-height:34px;}'
   // A real switch, not a checkbox: this is a house-wide on/off and it should
   // read as one across the room.
   +'.adm-switch{position:relative;display:inline-block;width:46px;height:26px;flex:none;cursor:pointer;}'
@@ -990,11 +1010,13 @@ function renderAdmin(){
     +'<button class="'+(v==='people'?'on':'')+'" onclick="admSetView(\'people\')">People</button>'
     +'<button class="'+(v==='usage'?'on':'')+'" onclick="admSetView(\'usage\')">Usage</button>'
     +'<button class="'+(v==='feedback'?'on':'')+'" onclick="admSetView(\'feedback\')">Feedback</button>'
+    +'<button class="'+(v==='emails'?'on':'')+'" onclick="admSetView(\'emails\')">Emails</button>'
     +'<button class="'+(v==='settings'?'on':'')+'" onclick="admSetView(\'settings\')">Settings</button>'
     +'</div></div>';
   var body = v==='usage' ? admUsageHTML()
     : (v==='feedback' ? admFbHTML()
-    : (v==='settings' ? admSettingsHTML() : admControlCentre()));
+    : (v==='emails' ? admEmailsHTML()
+    : (v==='settings' ? admSettingsHTML() : admControlCentre())));
   return '<style>'+ADM_CSS+'</style>'+tabs+body;
 }
 function admSetView(v){
@@ -1011,6 +1033,165 @@ function admSetView(v){
    Deliberately a short page. A switch belongs here only when it changes
    what the app DOES for everybody; anything per-person stays in People.
    =================================================================== */
+/* ===================================================================
+   ADMIN → EMAILS — who receives each automatic email.
+   ------------------------------------------------------------------
+   Every recipient of every automatic email lives in ONE place: the
+   app_users.notify array. This screen is just a readable view of it, so a
+   person can be added or dropped without a code change or a deploy. The
+   edge functions (send-closing-report, send-roster) read the same array at
+   send time, so a tick here applies to the very next send.
+
+   Two deliberate rules:
+   - The HR mailbox on the roster emails is NOT listed here. hr@robertos.ae
+     is the addressee ("Dear HR Team") and is fixed in the send function, so
+     the roster can never be removed from HR by accident. Everyone shown here
+     is a copy (Cc) on top of that.
+   - A list with nobody on it is shown in red, because the send function then
+     falls back to its original built-in list rather than emailing nobody —
+     an empty list here does NOT mean the email stopped.
+=================================================================== */
+// A recipient who never signs in (HR staff, a director) still needs a row in
+// app_users to hold their notify ticks. Such a row has no modules and is not an
+// admin, so it grants nothing — it only receives. This tells the two apart.
+function admIsMailOnly(u){
+  return !!u && !(u.modules||[]).length && !u.is_admin;
+}
+function admNotifyList(key){
+  return (state.adminUsers||[])
+    .filter(function(u){ return ((u.notify)||[]).indexOf(key)!==-1; })
+    .sort(function(a,b){ return String(a.name||a.email).localeCompare(String(b.name||b.email)); });
+}
+// What each list actually is, in his words — so the screen explains the
+// consequence of a tick rather than just naming a database key.
+var ADM_MAIL_ABOUT={
+  closing_report:{
+    when:'Every night after the closing report is completed.',
+    note:'Everyone here receives the full report.'
+  },
+  roster_foh:{
+    when:'When someone presses “Send to HR” on the FOH schedule.',
+    note:'HR (hr@robertos.ae) is always the addressee. Everyone here is copied in.'
+  },
+  roster_kitchen:{
+    when:'When someone presses “Send to HR” on the Kitchen schedule.',
+    note:'HR (hr@robertos.ae) is always the addressee. Everyone here is copied in.'
+  }
+};
+function admEmailsHTML(){
+  var h=['<div class="adm-wrap">'];
+  h.push('<div class="adm-card"><div class="adm-set-note">Add or remove anyone from any of these emails. '
+    +'A change saves straight away and applies to the <b>next</b> send — nothing to deploy. '
+    +'Someone who only needs to receive an email does <b>not</b> need a login: add them here and they '
+    +'get the email without being able to sign in.</div></div>');
+
+  ADMIN_NOTIFY.forEach(function(nt){
+    var about=ADM_MAIL_ABOUT[nt.k]||{when:'',note:''};
+    var people=admNotifyList(nt.k);
+    h.push('<div class="adm-card">');
+    h.push('<div class="adm-set-row"><div class="adm-set-txt">');
+    h.push('<div class="adm-set-t">'+admEsc(nt.n)+'</div>');
+    h.push('<div class="adm-set-d">'+admEsc(about.when)+' '+admEsc(about.note)+'</div>');
+    h.push('</div>');
+    h.push('<button class="px-mini" onclick="admMailAddOpen(\''+admEsc(nt.k)+'\')">+ Add someone</button>');
+    h.push('</div>');
+
+    if(!people.length){
+      h.push('<div class="adm-set-note adm-set-warn">Nobody is on this list. The email has <b>not</b> stopped — '
+        +'with an empty list the send falls back to its original built-in recipients. '
+        +'Add the people you want so this screen shows the truth.</div>');
+    } else {
+      h.push('<div class="adm-mail-list">');
+      people.forEach(function(u){
+        var em=String(u.email||'');
+        h.push('<div class="adm-mail-row">'
+          +'<div class="adm-mail-who"><b>'+admEsc(u.name||em)+'</b>'
+          +'<span class="adm-mail-em">'+admEsc(em)+'</span>'
+          +(admIsMailOnly(u)?'<span class="adm-mail-tag">receives only</span>':'')
+          +'</div>'
+          +'<button class="px-mini px-mini-red" onclick="admMailRemove(\''+admEsc(nt.k)+'\',\''+admEsc(em)+'\')">Remove</button>'
+          +'</div>');
+      });
+      h.push('</div>');
+      h.push('<div class="adm-set-note">'+people.length+' '+(people.length===1?'person':'people')+' on this list.</div>');
+    }
+    h.push('</div>');
+  });
+
+  h.push('</div>');
+  return h.join('');
+}
+// Adding someone is two different jobs behind one button: if the email is
+// already known to the app we only tick the box (never touch their access);
+// if it is new we create a receive-only row. Doing it in one place is what
+// stops a second, drifting copy of the recipient list from appearing.
+function admMailAddOpen(key){
+  var nt=ADMIN_NOTIFY.filter(function(x){return x.k===key;})[0];
+  var already=admNotifyList(key).map(function(u){return u.email;});
+  var known=(state.adminUsers||[]).filter(function(u){ return already.indexOf(u.email)===-1; })
+    .sort(function(a,b){ return String(a.name||a.email).localeCompare(String(b.name||b.email)); });
+  var pick=known.length
+    ? '<div class="pm-hint" style="margin-bottom:6px;">Someone already in the app:</div>'
+      +'<select id="pm-mail-pick" class="adm-set-sel" style="width:100%;margin-bottom:12px;">'
+      +'<option value="">— choose a person —</option>'
+      +known.map(function(u){ return '<option value="'+admEsc(u.email)+'">'+admEsc(u.name||u.email)+' — '+admEsc(u.email)+'</option>'; }).join('')
+      +'</select><div class="pm-hint" style="margin-bottom:6px;">…or somebody new, who only receives this email:</div>'
+    : '<div class="pm-hint" style="margin-bottom:6px;">Add somebody who only receives this email — no login is created:</div>';
+  admModalOpen('Add someone to “'+(nt?nt.n:key)+'”',
+    pick
+    +admFieldText('pm-mail-email','Email','','name@robertos.ae')
+    +admFieldText('pm-mail-name','Full name','')
+    +'<div class="pm-hint" style="margin-top:8px;">They start receiving it from the next send.</div>',
+    '<button class="btn btn-sm" onclick="admModalClose()">Cancel</button>'
+    +'<button id="pm-mail-save" class="btn btn-gold" onclick="admMailAddSave(\''+admEsc(key)+'\')">Add to list</button>');
+}
+async function admMailAddSave(key){
+  var picked=(admVal('pm-mail-pick')||'').trim().toLowerCase();
+  var typed=(admVal('pm-mail-email')||'').trim().toLowerCase();
+  var em=picked||typed;
+  var nm=(admVal('pm-mail-name')||'').trim();
+  if(!em){ alert('Choose a person, or type an email address.'); return; }
+  if(em.indexOf('@')===-1){ alert('“'+em+'” is not an email address.'); return; }
+  var u=adminFind(em);
+  if(u && ((u.notify)||[]).indexOf(key)!==-1){ alert((u.name||em)+' is already on this list.'); return; }
+  var btn=document.getElementById('pm-mail-save'); if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
+  var isNew=!u;
+  if(isNew){
+    // Receive-only: no modules, not an admin. This grants no access at all —
+    // without a Supabase Auth account they cannot sign in even if they try.
+    u={email:em,name:nm||em,modules:[],is_admin:false,notify:[key]};
+  } else {
+    u.notify=(u.notify||[]).concat([key]);
+    if(nm && !u.name) u.name=nm;
+  }
+  var ok=await adminSave(u);
+  if(!ok){ if(btn){ btn.disabled=false; btn.textContent='Add to list'; } return; }
+  if(isNew){ state.adminUsers=state.adminUsers||[]; state.adminUsers.push(u); }
+  admModalClose(); renderMain();
+  toast((u.name||em)+' added ✓ — they get the next “'+key.replace(/_/g,' ')+'” email');
+}
+// Removing takes them off THIS list only; their login and modules are untouched.
+// A receive-only row with nothing left to receive is deleted rather than left
+// behind, so the People screen doesn't fill up with empty rows over time.
+async function admMailRemove(key,email){
+  var u=adminFind(email); if(!u) return;
+  var nt=ADMIN_NOTIFY.filter(function(x){return x.k===key;})[0];
+  if(!confirm('Stop sending “'+(nt?nt.n:key)+'” to '+(u.name||email)+'?\n\nThis only changes this email. Their access to the app is not touched.')) return;
+  u.notify=(u.notify||[]).filter(function(k){ return k!==key; });
+  var drop = admIsMailOnly(u) && !u.notify.length;
+  var ok;
+  if(drop){
+    var res=await sb.from('app_users').delete().eq('email',u.email);
+    ok=!res.error;
+    if(!ok) alert('Could not remove: '+res.error.message);
+    else state.adminUsers=(state.adminUsers||[]).filter(function(x){ return x.email!==u.email; });
+  } else {
+    ok=await adminSave(u);
+  }
+  if(!ok){ u.notify=(u.notify||[]).concat([key]); renderMain(); return; }
+  renderMain();
+  toast((u.name||email)+' removed from “'+(nt?nt.n:key)+'” ✓');
+}
 function admSettingsHTML(){
   var cfg = state.admVipCfg;
   var missing = (cfg === null);           // the SQL has not been run
