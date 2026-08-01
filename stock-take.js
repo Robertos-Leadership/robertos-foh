@@ -139,6 +139,7 @@ var stUser    = null;        // { emp_id, name }  (null until signed in; persist
 var stSearch  = '';
 var stCatFilters = [];       // [] = all categories, else list of item_group names to show
 var stCountFilter = '';      // '' | 'counted' | 'uncounted' — which items to show
+var stKindFilter = '';       // '' = everything | 'ingredient' | 'batch' (see stMatchesKind)
 var stSortBy = '';           // '' | 'value' — highest value first, to spot mis-entries fast
 var stUnitSel = {};          // item_id -> chosen unit (for 2-unit items)
 var stChannel = null;
@@ -491,9 +492,41 @@ async function stAddQty(itemId, value){
 }
 
 // ── derived ──
+// ── ingredients vs batches ───────────────────────────────────────────────
+// The cost controller's list already separates them: an in-house preparation
+// sits in an item group starting "Batch Recipe" (the Alcoholic section carries
+// 27 "Batch Recipe (Bar)" — cordials, infusions, syrups). Everything else is a
+// bought ingredient. Splitting the two means someone counting bottles isn't
+// scrolling past the preps to find them.
+//
+// ADDED ITEMS APPEAR IN BOTH VIEWS. The "+ Add missing item" ones were typed in
+// by hand and nobody classified them, so guessing would drop items off whichever
+// list they were guessed out of. An item nobody sees is an item nobody counts:
+// showing one twice costs a glance, missing one costs the count.
+function stIsBatch(it){ return /^batch recipe/i.test(String(it.item_group||'')); }
+function stMatchesKind(it){
+  if(stKindFilter==='batch')      return stIsBatch(it) || !!it.is_added;
+  if(stKindFilter==='ingredient') return !stIsBatch(it);
+  return true;
+}
+// only offer the toggle where the list actually has both kinds
+function stSheetHasBatches(){ return stItems.some(stIsBatch); }
+// how much of the CURRENT view is done — "18 of 27 counted" beats a whole-list
+// number when someone is working through just the batches.
+function stKindProgress(){
+  var shown=0, done=0;
+  stItems.forEach(function(it){
+    if(!stMatchesKind(it)) return;
+    if(stCatFilters.length && stCatFilters.indexOf(it.item_group||'Other')===-1) return;
+    shown++;
+    var c=stCounts[it.id]; if(c && c.qty!=null) done++;
+  });
+  return { shown:shown, counted:done };
+}
 function stFilteredItems(){
   var q = stSearch.toLowerCase();
   var out = stItems.filter(function(it){
+    if(!stMatchesKind(it)) return false;
     if(stCatFilters.length && stCatFilters.indexOf(it.item_group||'Other')===-1) return false;
     var c=stCounts[it.id], counted = !!(c && c.qty!=null);
     if(stCountFilter==='counted' && !counted) return false;
@@ -514,8 +547,19 @@ function stCats(){ return Array.from(new Set(stItems.map(function(i){ return i.i
 function stLineValue(it){ var c = stCounts[it.id]; if(!c||c.qty==null) return 0; return Math.round(stItemPrice(it)*Number(c.qty)*100)/100; }
 function stGrandTotal(){ var t=0; stItems.forEach(function(it){ t+=stLineValue(it); }); return t; }
 function stCountedCount(){ var n=0; stItems.forEach(function(it){ var c=stCounts[it.id]; if(c&&c.qty!=null) n++; }); return n; }
-function stCategoryTotal(){ var t=0; stItems.forEach(function(it){ if(!stCatFilters.length||stCatFilters.indexOf(it.item_group||'Other')>-1) t+=stLineValue(it); }); return t; }
+// Total for what the category + ingredient/batch filters are showing, so the
+// number under the toolbar always describes the list underneath it.
+function stCategoryTotal(){ var t=0; stItems.forEach(function(it){ if(!stMatchesKind(it)) return; if(!stCatFilters.length||stCatFilters.indexOf(it.item_group||'Other')>-1) t+=stLineValue(it); }); return t; }
 // label for the category bar: "All categories" · a single name · "N categories"
+// The line under the toolbar: what you are looking at, and how much of THIS
+// list is done. The whole-list counter at the top can't answer that once
+// someone is working through only the batches.
+function stViewLabelText(){
+  var kind = stKindFilter==='batch' ? 'Batches' : stKindFilter==='ingredient' ? 'Ingredients' : '';
+  var base = [kind, stCatLabelText()].filter(Boolean).join(' · ');
+  var p = stKindProgress();
+  return base + ' · ' + p.counted + ' of ' + p.shown + ' counted';
+}
 function stCatLabelText(){
   if(!stCatFilters.length) return 'All categories';
   if(stCatFilters.length===1) return stCatFilters[0];
@@ -550,7 +594,10 @@ function stInjectCss(){
     '.st-label{font-size:11px;color:#8a7a55;text-transform:uppercase;letter-spacing:1px;margin-top:2px}'+
     '.st-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px 2px}'+
     '.st-input,.st-select{height:38px;border:1px solid #c9a84c;border-radius:8px;padding:0 10px;font-size:14px;background:#fff}'+
-    '.st-catbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 2px;font-size:13px}'+
+    '.st-kindbar{display:flex;gap:8px;padding:8px 14px 0}'+
+    '.st-kindbtn{flex:1;min-height:42px;border:1px solid #c9a84c;background:#fff;color:#7a1218;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;padding:4px 6px}'+
+    '.st-kindbtn.active{background:#410207;color:#f5ede0;border-color:#410207}'+
+    '.st-catbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 2px;font-size:13px;gap:10px;flex-wrap:wrap}'+
     '.st-catbar b{color:#410207}'+
     '.st-muted{font-size:12px;color:#8a7a55}'+
     '.st-cat{background:#410207;color:#f5ede0;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;padding:6px 14px;margin-top:6px}'+
@@ -669,7 +716,14 @@ function stRender(){
       '</select>'+
       (stIsSuper()?'<button class="st-btn" style="flex:none" onclick="stShowUpload()">Upload month</button>':'')+
     '</div>'+
-    '<div class="st-catbar"><span id="st-catlabel">'+stEsc(stCatLabelText())+'</span>'+
+    // Ingredients / Batches — only where the list actually holds both kinds, so
+    // a section without prep items never grows a control that does nothing.
+    (stSheetHasBatches() ? '<div class="st-kindbar">'+
+      [['','Everything'],['ingredient','Ingredients'],['batch','Batches']].map(function(k){
+        return '<button class="st-kindbtn'+(stKindFilter===k[0]?' active':'')+'" onclick="stOnKind(\''+k[0]+'\')">'+k[1]+'</button>';
+      }).join('')+
+    '</div>' : '')+
+    '<div class="st-catbar"><span id="st-catlabel">'+stEsc(stViewLabelText())+'</span>'+
       '<span class="st-muted">category total <b id="st-catsub">'+stMoney(stCategoryTotal())+'</b></span></div>'+
     (stUser? '<div class="st-actions">'+
         '<button class="st-btn" onclick="stReviewSend()">Email to Aung</button>'+
@@ -759,7 +813,9 @@ function stRenderTotals(){
   var g=document.getElementById('st-grand'); if(g) g.textContent = stMoney(stGrandTotal());
   var n=document.getElementById('st-counted'); if(n) n.textContent = stCountedCount();
   var s=document.getElementById('st-catsub'); if(s) s.textContent = stMoney(stCategoryTotal());
-  var l=document.getElementById('st-catlabel'); if(l) l.textContent = stCatLabelText();
+  // the view line carries the "x of y counted" progress, so it has to refresh
+  // on every saved count, not just on a re-render
+  var l=document.getElementById('st-catlabel'); if(l) l.textContent = stViewLabelText();
   var b=document.getElementById('st-cat-btn'); if(b) b.textContent = stCatLabelText()+' ▾';
 }
 
@@ -803,6 +859,7 @@ function stApplyCatFilter(btn){
   stRenderRows(); stRenderTotals();
 }
 function stOnCountFilter(v){ stCountFilter=v; stRenderRows(); }
+function stOnKind(v){ stKindFilter=v; stRender(); }
 function stOnSort(v){ stSortBy=v; stRenderRows(); }
 function stFocusRow(itemId, on){ var r=document.getElementById('st-row-'+itemId); if(r) r.classList.toggle('active', on); }
 function stPickUnit(itemId, unit){ stUnitSel[itemId]=unit; stUpdateRowUI(itemId); stRenderTotals(); if(stCounts[itemId]&&stCounts[itemId].qty!=null) stSetQty(itemId, stCounts[itemId].qty); }
