@@ -5802,6 +5802,44 @@ async function peSmDocxText(file){
   if(!entry) throw new Error('this is not a Word document');
   return peDocxToText(await entry.async('string'));
 }
+// A Word menu arrives as dish names and nothing else — no description, no
+// allergens. The guest page refuses to stay silent about that: a dish with
+// nothing recorded prints "Allergens not recorded — please ask us" rather than
+// looking like a dish with nothing in it. So before the chef ever sees the
+// menu, fill in every dish our own à la carte already knows — the same lookup
+// Valentina's customised menus use — and name the ones it doesn't, so the gap
+// is his to close rather than the guest's to discover.
+function peSmFillFromLibrary(){
+  var filled = 0, missing = [];
+  (peState.smDraft||[]).forEach(function(c){
+    var kind = peCmCourseKind({name:c.name});
+    (c.lines||[]).forEach(function(dish){
+      var n = String(dish||'').trim(); if(!n) return;
+      var has = function(map){ return map && Object.prototype.hasOwnProperty.call(map, n); };
+      if(has(c.allg) && c.desc && c.desc[n]) return;
+      var info = peCmDishInfo(n, kind);
+      if(info){
+        if(info.desc && !(c.desc && c.desc[n])){ c.desc = c.desc||{}; c.desc[n] = String(info.desc).trim(); }
+        // An à la carte dish always knows its allergens — including when the
+        // answer is "none". The empty array is a recorded fact, not a gap.
+        if(info.allergens && !has(c.allg)){ c.allg = c.allg||{}; c.allg[n] = info.allergens.slice(); filled++; }
+      }
+      if(!has(c.allg) && missing.indexOf(n)<0) missing.push(n);
+    });
+  });
+  return { filled:filled, missing:missing };
+}
+// Every dish still carrying no allergens — what the guest would be asked about.
+function peSmMissingAllergens(){
+  var out = [];
+  (peState.smDraft||[]).forEach(function(c){
+    (c.lines||[]).forEach(function(dish){
+      var n = String(dish||'').trim(); if(!n) return;
+      if(!(c.allg && Object.prototype.hasOwnProperty.call(c.allg, n)) && out.indexOf(n)<0) out.push(n);
+    });
+  });
+  return out;
+}
 async function peSmDocUpload(input){
   var f = input.files && input.files[0]; if(!f) return;
   input.value = '';
@@ -5828,7 +5866,15 @@ async function peSmDocUpload(input){
     peState.smName = nm.replace(/\.(docx|dotx)$/i,'').replace(/[_-]+/g,' ').trim();
     renderMain();
   }
-  peToast('Word menu read ✓ — check the courses below, then save and guests get it on the Roberto’s template');
+  var fill = peSmFillFromLibrary();
+  renderMain();
+  if(fill.missing.length){
+    peToast('Word menu read ✓ — but '+fill.missing.length+' dish'+(fill.missing.length>1?'es have':' has')+
+      ' no allergens, and guests are told so. Add them before sending: '+fill.missing.slice(0,4).join(', ')+
+      (fill.missing.length>4?'…':''), true);
+  } else {
+    peToast('Word menu read ✓ — descriptions and allergens filled from our à la carte. Check the courses, then save');
+  }
 }
 // Read the live form back into state before any structural re-render so typing
 // is never lost when a course is added/removed.
@@ -5954,12 +6000,24 @@ function peRenderSetMenuLib(){
       '<div class="pe-lbl" style="margin-top:12px">Courses</div>'+
       (peState.smDraft||[]).map(function(c,i){ return peSmCourseHTML(c,i); }).join('')+
       '<div style="margin-top:6px"><button class="pe-btn sec sm" onclick="peSmAddCourse()">+ Add course</button></div>'+
+      // Say it here, in the editor, rather than let the guest find it. This is
+      // the one thing a menu typed from Word cannot know about itself.
+      (function(){
+        var miss = peSmMissingAllergens();
+        if(!miss.length) return '';
+        return '<div style="margin-top:10px;background:#FAEEDA;border:1px solid #E4C98A;border-radius:9px;padding:10px 12px;font-size:12px;color:#854F0B">'+
+          '<b>'+miss.length+' dish'+(miss.length>1?'es have':' has')+' no allergens recorded.</b> '+
+          'Guests will see “Allergens not recorded — please ask us” next to '+(miss.length>1?'each of them':'it')+': '+
+          peEsc(miss.join(', '))+'.</div>';
+      })()+
       '<div style="margin-top:12px"><div class="pe-lbl">Kitchen cost / guest (AED) — chef’s number, never shown to guests</div>'+
       '<input class="pe-in" id="pe-sm-cost" type="number" min="0" style="max-width:190px" value="'+peEsc(costVal)+'" placeholder="what it costs to produce"></div>'+
       '<div style="margin-top:12px"><div class="pe-lbl">Price / guest (AED)</div>'+priceRow+'</div>'+
       '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="pe-btn" onclick="peSaveSetMenu(\''+(raw?raw.id:'')+'\')">Save menu</button>'+
         '<button class="pe-btn sec" onclick="peSmCancel()">Cancel</button>'+
+        // "Is this really what the guest gets?" should never need asking twice.
+        (raw&&raw.key?'<button class="pe-btn sec" onclick="peCmOpen(\''+peEsc(raw.key)+'\')">See it as the guest</button>':'')+
         (raw?'<button class="pe-btn sec" style="margin-left:auto;color:#B00020;border-color:#B00020" onclick="peToggleSetMenu(\''+raw.id+'\','+(raw.active===false?'true':'false')+')">'+(raw.active===false?'Reactivate':'Retire menu')+'</button>':'')+
       '</div></div>';
   } else {
