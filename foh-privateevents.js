@@ -5788,9 +5788,10 @@ function peSmDraftFrom(courses){
     return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice(), desc:(c.desc||null), allg:(c.allg||null) };
   });
 }
-function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
-function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peSmSplitCodesFromNames(); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
-function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
+// smKnown is per-menu — it must never carry one menu's dishes into the next.
+function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; peState.smKnown=null; renderMain(); }
+function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smKnown=null; peSmSplitCodesFromNames(); peSmRemember(); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; peState.smKnown=null; renderMain(); }
 // ── chef uploads the designed menu PDF ───────────────────────────────────────
 // One upload does two jobs: the text is read out and laid into courses by the
 // same "Structure it" flow the paste box uses, and the file itself is stored
@@ -6053,20 +6054,57 @@ async function peSmDocUpload(input){
 }
 // Read the live form back into state before any structural re-render so typing
 // is never lost when a course is added/removed.
+// What every dish in this menu knows about itself, kept for the whole edit and
+// never pruned. The chef fixes a menu by cutting a dish out of one course and
+// pasting it into another — and the description and allergens live on the
+// COURSE, keyed by dish name, so without this they would stay behind on the old
+// course and the dish would arrive stripped. It also survives him clearing a
+// box to retype it, which a snapshot taken per keystroke would not.
+function peSmRemember(){
+  var k = peState.smKnown = peState.smKnown || {};
+  (peState.smDraft||[]).forEach(function(c){
+    var d = c.desc||{}, a = c.allg||{};
+    Object.keys(d).forEach(function(n){ (k[n]=k[n]||{}).desc = d[n]; });
+    Object.keys(a).forEach(function(n){ (k[n]=k[n]||{}).allg = a[n]; });
+  });
+  return k;
+}
 function peSmSync(){
   var nEl=document.getElementById('pe-sm-name'); if(nEl) peState.smName=nEl.value;
   var pEl=document.getElementById('pe-sm-paste'); if(pEl) peState.smText=pEl.value;
   var cEl=document.getElementById('pe-sm-cost'); if(cEl) peState.smCost=cEl.value;
   var prEl=document.getElementById('pe-sm-price'); if(prEl) peState.smPrice=prEl.value;
+  var known = peSmRemember();
   (peState.smDraft||[]).forEach(function(c,i){
     var a=document.getElementById('pe-sm-cname-'+i), b=document.getElementById('pe-sm-citems-'+i), ch=document.getElementById('pe-sm-choose-'+i);
     if(a) c.name=a.value;
     if(b) c.lines=b.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     if(ch) c.choose=ch.checked;
   });
+  // Re-key every course to the dishes it now holds, so what a dish knows
+  // follows it across and does not linger on the course it left.
+  (peState.smDraft||[]).forEach(function(c){
+    var nd={}, na={};
+    (c.lines||[]).forEach(function(n){
+      var k = known[n]; if(!k) return;
+      if(k.desc!=null) nd[n]=k.desc;
+      if(k.allg!=null) na[n]=k.allg;
+    });
+    c.desc = Object.keys(nd).length?nd:null;
+    c.allg = Object.keys(na).length?na:null;
+  });
 }
 function peSmAddCourse(){ peSmSync(); (peState.smDraft=peState.smDraft||[]).push({name:'',choose:false,lines:[]}); renderMain(); }
 function peSmDelCourse(i){ peSmSync(); peState.smDraft.splice(i,1); renderMain(); }
+// A menu reads in the order it is eaten. A course added to fix a missing Pasta
+// lands at the bottom, so it has to be possible to walk it up to where it goes.
+function peSmMoveCourse(i, dir){
+  peSmSync();
+  var d = peState.smDraft||[], j = i + dir;
+  if(j < 0 || j >= d.length) return;
+  var t = d[i]; d[i] = d[j]; d[j] = t;
+  renderMain();
+}
 function peSmSlug(n){ return String(n||'menu').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32)+'-'+Date.now().toString(36).slice(-4); }
 // Offline fallback parser: turns "Course: a, b · Secondi (choice): x / y" into
 // the courses structure. The chef confirms/edits everything before saving.
@@ -6134,6 +6172,8 @@ function peSmCourseHTML(c,i){
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
       '<input class="pe-in" id="pe-sm-cname-'+i+'" style="flex:1;min-width:120px" value="'+peEsc(c.name||'')+'" placeholder="Course name (e.g. Secondi)">'+
       '<label style="font-size:12px;color:#6E5844;white-space:nowrap"><input type="checkbox" id="pe-sm-choose-'+i+'"'+(c.choose?' checked':'')+' style="accent-color:#400207;vertical-align:-2px;margin-right:4px">Guests choose one</label>'+
+      '<button class="pe-btn sec sm" onclick="peSmMoveCourse('+i+',-1)" title="Move this course up">&uarr;</button>'+
+      '<button class="pe-btn sec sm" onclick="peSmMoveCourse('+i+',1)" title="Move this course down">&darr;</button>'+
       '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peSmDelCourse('+i+')">Remove</button>'+
     '</div>'+
     '<textarea class="pe-in" id="pe-sm-citems-'+i+'" rows="2" style="margin-top:6px" placeholder="One dish per line">'+peEsc((c.lines||[]).join('\n'))+'</textarea>'+
