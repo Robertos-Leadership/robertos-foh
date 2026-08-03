@@ -828,6 +828,7 @@ function renderPrivateEvents(){
   if(v==='guidedevent') return peGuideEventView();
   if(v==='library')  return peRenderChefCorner();
   if(v==='report')   return peRenderReport();
+  if(v==='table')    return peRenderTableMenu();
   return peRenderList();
 }
 function peHeader(active){
@@ -852,6 +853,7 @@ function peHeader(active){
       // flow cost her more than the missing option did. Same name, same place;
       // it just asks WHICH link now. Two choices, nothing else.
       '<span class="pe-snav" onclick="peGuestLinkChoose()">Guest link</span>'+
+      '<span class="pe-snav'+(active==='table'?' on':'')+'" onclick="peGo(\'table\')" title="The menu the guest finds at their place">Print for the table</span>'+
       snav('packs','Menu packages')+
       // How fresh the screen is, and a way to force it. Signatures and guest menu
       // choices are written server-side, so nothing in her session can know they
@@ -3521,7 +3523,7 @@ function peLogoImg(w){
          '" alt="R O B E R T O ’ S" style="display:block;margin:0 auto;border:0;'+
          'font-family:Georgia,serif;font-size:22px;letter-spacing:7px;color:#410207;text-align:center">';
 }
-function peDocShell(title, inner){
+function peDocShell(title, inner, extraCss){
   // Without this the brief, the proposal and the signed copy all render at 720px
   // zoomed out on a phone. showBrief() rewrites the whole document, so the viewport
   // meta on print-brief.html is thrown away — it has to live here.
@@ -3554,7 +3556,7 @@ function peDocShell(title, inner){
   // phone it has to be allowed to scroll on its own rather than push the page.
   '@media screen and (max-width:600px){body{padding:14px}'+
   'table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}'+
-  '</style></head><body>'+inner+'</body></html>';
+  (extraCss||'')+'</style></head><body>'+inner+'</body></html>';
 }
 function pePrintHTML(html){
   var w = window.open('', '_blank');
@@ -5100,6 +5102,169 @@ function peCmCourseDesc(courseName, names, inherited, inheritedAlg){
 // menu means this page — there is no designed PDF for a menu invented today.
 function peCmOpen(key){
   window.open(peBaseUrl()+'client-setmenu.html?m='+encodeURIComponent(key), '_blank');
+}
+// ══ PRINT FOR THE TABLE ══════════════════════════════════════════════════════
+// The menu a guest finds at their place when they sit down. Katarina prints it.
+//
+// It is the SAME Austin document as everything else — one standard, never a
+// second design. What she chooses is what appears ON it: the guest's name, the
+// price, the descriptions, the size. She can also tap any dish or course on the
+// sheet and retype it, and that NEVER writes back to the saved menu: a one-off
+// "Happy Birthday" or a dish swapped for one table must not change the menu
+// every other booking is quoted from.
+//
+// Price is OFF by default — a menu handed to a guest at the table is not a quote.
+// Allergens are not optional. The table is exactly where a guest reads them.
+function peTmState(){
+  if(!peState.tm) peState.tm = { key:'', eventId:'', name:true, price:false, desc:true, msg:'', size:'a4', layout:'full' };
+  return peState.tm;
+}
+function peTmSet(k, v){ var t=peTmState(); t[k]=v; renderMain(); }
+function peTmToggle(k, el){ peTmState()[k] = !!el.checked; peTmDraw(); }
+function peTmMsg(el){ peTmState().msg = el.value; peTmDraw(); }
+// Bookings worth offering: from today, with a set menu on them.
+function peTmBookings(){
+  var today = new Date(Date.now()+4*3600*1000).toISOString().slice(0,10);
+  return (peState.events||[]).filter(function(e){
+    return e && e.set_menu && e.set_menu.key && String(e.event_date||'') >= today;
+  }).sort(function(a,b){ return String(a.event_date).localeCompare(String(b.event_date)); });
+}
+function peTmPickBooking(id){
+  var t = peTmState(); t.eventId = id;
+  var e = (peState.events||[]).filter(function(x){ return String(x.id)===String(id); })[0];
+  if(e && e.set_menu) t.key = e.set_menu.key;
+  renderMain();
+}
+function peTmMenu(){ var t=peTmState(); return t.key ? peSetMenuByKey(t.key) : null; }
+function peTmEvent(){ var t=peTmState(); return (peState.events||[]).filter(function(x){ return String(x.id)===String(t.eventId); })[0] || null; }
+// The sheet itself. Built once here and used for BOTH the on-screen preview and
+// the print, so what she checks is exactly what comes out of the printer.
+function peTmSheetHTML(editable){
+  var t = peTmState(), m = peTmMenu(), e = peTmEvent();
+  if(!m) return '<div style="text-align:center;color:#8B7355;padding:40px 10px">Choose a booking or a menu to see the sheet.</div>';
+  var ed = editable ? ' contenteditable="true"' : '';
+  var used = {};
+  var h = '<div class="tm-brand">'+peLogoImg(300)+'</div>';
+  if(t.name && e){
+    var who = [e.client_name || 'our guest', peDLabel(e.event_date)].filter(Boolean).join(' · ');
+    h += '<div class="tm-occ">Prepared for '+peEsc(who)+'</div>';
+  }
+  if(String(t.msg||'').trim()) h += '<div class="tm-msg">'+peEsc(t.msg.trim())+'</div>';
+  h += '<div class="tm-title"'+ed+'>'+peEsc(m.name)+'</div>';
+  if(t.price && m.price!=null) h += '<div class="tm-price">'+pePerPerson(m.price)+'</div>';
+  h += '<div class="tm-rule"></div>';
+  (m.courses||[]).forEach(function(c){
+    h += '<div class="tm-course"><div class="sec"'+ed+'>'+peEsc(c.name)+(c.choose?peChooseLabel():'')+'</div>';
+    ((c.choose ? c.options : c.items)||[]).forEach(function(o){
+      var stored = c.desc||{};
+      var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
+      var alg = peAlgOf(c, o);
+      if(!alg.known && info && info.allergens && info.allergens.length) alg = { known:true, list:info.allergens };
+      var line = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
+      var codes = (alg.known && alg.list.length) ? '('+alg.list.join(')(')+')' : '';
+      (alg.known ? alg.list : []).forEach(function(k){ used[String(k).toUpperCase()] = 1; });
+      h += '<div class="dish"><span'+ed+'>'+peEsc(o)+'</span>'+
+        (codes ? ' <span class="codes">'+peEsc(codes)+'</span>' : '')+
+        // "Dish names only" is a SIZE of the same document, not a second design.
+        (t.desc && t.layout==='full' && line ? '<br><span class="d">'+peEsc(line)+'</span>' : '')+'</div>';
+    });
+    h += '</div>';
+  });
+  var legend = ['A','D','E','H','N','R','S','V'].filter(function(k){ return used[k]; })
+                 .map(function(k){ return k+' - '+PE_ALG_NAMES[k]; }).join(' | ');
+  h += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.'+
+       // The VAT line is meaningless without a price, so it only appears with one.
+       (t.price && m.price!=null ? '<br>All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.' : '')+
+       (legend ? '<br>'+legend : '')+'</div>';
+  return h;
+}
+function peTmCss(size){
+  return '.tm-brand{text-align:center;margin:0 0 6px}'+
+    '.tm-occ{text-align:center;font-size:11.5px;color:#9A7D68;margin-top:10px}'+
+    '.tm-msg{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#450207;margin-top:14px}'+
+    '.tm-title{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#8A6A4F;letter-spacing:1px;margin-top:12px}'+
+    '.tm-price{text-align:center;font-size:12.5px;color:#8A6A4F;margin-top:5px}'+
+    '.tm-rule{width:64px;height:1px;background:#C9A84C;margin:16px auto 4px}'+
+    '.tm-course{margin-top:20px}'+
+    (size==='a5' ? '@page{size:A5;margin:12mm}body{max-width:none}.dish{font-size:12.5px}' : '@page{size:A4;margin:18mm}');
+}
+// Print what is ON SCREEN, not a fresh build — so her edits go to the printer.
+function peTmPrint(){
+  var m = peTmMenu();
+  if(!m){ peToast('Choose a booking or a menu first', true); return; }
+  if(!peMenuSendable(m, 'printed')) return;
+  var live = document.getElementById('pe-tm-sheet');
+  var body = live ? live.innerHTML.replace(/\scontenteditable="true"/g, '') : peTmSheetHTML(false);
+  pePrintHTML(peDocShell(m.name, body, peTmCss(peTmState().size)));
+}
+function peTmDraw(){
+  var el = document.getElementById('pe-tm-sheet');
+  if(el) el.innerHTML = peTmSheetHTML(true);
+}
+function peRenderTableMenu(){
+  var t = peTmState(), h = peHeader('table');
+  var bookings = peTmBookings();
+  var menus = peSetMenusRaw().filter(function(m){ return m.active!==false; }).map(peNormSM);
+  var chk = function(k, label, sub, locked){
+    return '<label style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;font-size:13px'+(locked?';opacity:.6':'')+'">'+
+      '<input type="checkbox"'+(locked?' checked disabled':(t[k]?' checked':''))+' style="accent-color:#400207;margin-top:2px"'+
+      (locked?'':' onchange="peTmToggle(\''+k+'\',this)"')+'>'+
+      '<span>'+label+(sub?'<span style="display:block;font-size:11px;color:#9A7D68">'+sub+'</span>':'')+'</span></label>';
+  };
+  var seg = function(k, val, label){
+    return '<button class="pe-btn '+(t[k]===val?'':'sec ')+'sm" style="flex:1" onclick="peTmSet(\''+k+'\',\''+val+'\')">'+label+'</button>';
+  };
+  h += '<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+
+    '<div class="pe-card" style="width:320px;flex:0 0 320px">'+
+      '<b style="color:#400207">Print for the table</b>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 12px">The menu the guest finds at their place. Always the house standard — you choose what appears on it.</div>'+
+      '<div class="pe-lbl">Booking</div>'+
+      '<select class="pe-in" onchange="peTmPickBooking(this.value)">'+
+        '<option value="">— just a menu, no booking —</option>'+
+        bookings.map(function(e){
+          return '<option value="'+peEsc(e.id)+'"'+(String(t.eventId)===String(e.id)?' selected':'')+'>'+
+            peEsc(e.client_name||'Event')+' · '+peEsc(peDLabel(e.event_date))+(e.guests?' · '+e.guests+' guests':'')+'</option>';
+        }).join('')+
+      '</select>'+
+      '<div class="pe-lbl" style="margin-top:10px">Menu</div>'+
+      '<select class="pe-in" onchange="peTmSet(\'key\',this.value)">'+
+        '<option value="">— choose —</option>'+
+        menus.map(function(m){ return '<option value="'+peEsc(m.key)+'"'+(t.key===m.key?' selected':'')+'>'+peEsc(m.name)+'</option>'; }).join('')+
+      '</select>'+
+      '<div class="pe-lbl" style="margin-top:12px">On the menu</div>'+
+      chk('name','Guest name &amp; date','from the booking')+
+      chk('price','Price per person','off by default — this is not a quote')+
+      chk('desc','Dish descriptions')+
+      chk('allg','Allergen codes','always printed — the table is where a guest reads them', true)+
+      '<div class="pe-lbl" style="margin-top:10px">A message (optional)</div>'+
+      '<input class="pe-in" value="'+peEsc(t.msg||'')+'" oninput="peTmMsg(this)" placeholder="e.g. Happy Birthday, Gianbartolo">'+
+      '<div class="pe-lbl" style="margin-top:12px">Size</div>'+
+      '<div style="display:flex;gap:6px">'+seg('size','a4','A4 sheet')+seg('size','a5','A5 card')+'</div>'+
+      '<div class="pe-lbl" style="margin-top:12px">Layout</div>'+
+      '<div style="display:flex;gap:6px">'+seg('layout','full','Full')+seg('layout','short','Dish names only')+'</div>'+
+      '<button class="pe-btn" style="width:100%;margin-top:14px" onclick="peTmPrint()">Print / Save as PDF</button>'+
+      '<div style="font-size:11px;color:#8B7355;margin-top:10px;border-top:1px solid #E3D8C4;padding-top:9px">'+
+        '<b>Editing:</b> tap any dish or course name on the sheet to change it for this print. It never changes the saved menu.</div>'+
+    '</div>'+
+    '<div style="flex:1;min-width:320px">'+
+      '<div style="font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#8B7355;margin-bottom:7px">'+
+        (t.size==='a4'?'A4 sheet':'A5 card')+' · '+(t.layout==='full'?'full':'dish names only')+' · '+(t.price?'with price':'no price')+'</div>'+
+      // The preview carries the document's own styles, scoped to itself, so what
+      // she sees on screen is the sheet — not an approximation of it.
+      '<style>#pe-tm-sheet .sec{font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;text-align:center;margin:0 0 10px}'+
+      '#pe-tm-sheet .dish{font-family:\'Forum\',Georgia,serif;text-align:center;font-size:13.5px;margin:7px 0;color:#3A332C}'+
+      '#pe-tm-sheet .dish .d{font-family:\'Outfit\',Arial,sans-serif;font-size:11.5px;color:#8A6A4F}'+
+      '#pe-tm-sheet .codes{font-family:\'Outfit\',Arial,sans-serif;font-size:11.5px;color:#8A6A4F}'+
+      '#pe-tm-sheet .ft{text-align:center;font-size:10.5px;color:#9A7D68;margin-top:30px;line-height:1.7}'+
+      '#pe-tm-sheet img{display:block;margin:0 auto;max-width:62%;height:auto}'+
+      '#pe-tm-sheet [contenteditable]:focus{outline:1px dashed #C9A84C;outline-offset:3px}'+
+      peTmCss(t.size).replace(/@page\{[^}]*\}/g,'').replace(/body\{[^}]*\}/g,'').replace(/\.(tm-|dish)/g,'#pe-tm-sheet .$1')+'</style>'+
+      '<div id="pe-tm-sheet" style="background:#fff;border:1px solid #E3D8C4;border-radius:4px;padding:'+(t.size==='a5'?'26px 24px':'34px 40px')+';'+
+        'max-width:'+(t.size==='a5'?'420':'640')+'px;font-family:\'Outfit\',Arial,sans-serif;color:#3A332C">'+
+        peTmSheetHTML(true)+'</div>'+
+    '</div>'+
+  '</div>';
+  return h+'</div></div>';
 }
 // ── Austin's menu is the standard ───────────────────────────────────────────
 // The designed house menu ("Austin menu.pdf") is what a Roberto's set menu is

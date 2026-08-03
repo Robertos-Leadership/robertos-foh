@@ -1,8 +1,10 @@
 // ════════════════════════════════════════════════════════════
 // kitchen-events — Supabase Edge Function (FOH project paoaivwtkzujmrgrfjuq)
-// Feeds the KITCHEN app's on-screen "events" strip. Returns EVERY confirmed
-// FOH event whose team brief has been sent, from today onward (the kitchen app
-// groups them this-week / next-2-weeks / later and caps the display). Kitchen-
+// Feeds the KITCHEN app's on-screen "events" strip. Returns EVERY FOH event
+// whose team brief has been sent, from today onward — confirmed, deposit AND
+// draft, each carrying its status so the kitchen can see which are not yet
+// confirmed rather than simply not being told (the kitchen app groups them
+// this-week / next-2-weeks / later and caps the display). Kitchen-
 // safe fields ONLY — event name, date, time, area, guests, dietary, and the menu
 // with quantities. NEVER prices, contact, or payment.
 //
@@ -50,9 +52,16 @@ Deno.serve(async (req) => {
       dateFilter += "&event_date=lte." + new Date(nowD.getTime() + days * 24 * 3600 * 1000).toISOString().slice(0, 10);
     }
 
+    // Drafts are included ON PURPOSE (3 Aug 2026). A brief can be sent for an
+    // event that is still a draft, and it was: the kitchen got an email telling
+    // them to cook for 12 on the Tuesday while this feed deliberately returned
+    // nothing, so the email and the app disagreed and the team had no way to
+    // know which to believe. The brief is the thing that says "cook this", so
+    // anything briefed now appears — and carries its status, so the kitchen can
+    // see at a glance which are firm and which are not yet confirmed.
     const evR = await sb(
-      "events_desk?status=in.(confirmed,deposit)" + dateFilter +
-      "&select=id,client_name,event_date,time_from,time_to,area,guests,dietary,set_menu,bev_package_id,bev_mode" +
+      "events_desk?status=in.(confirmed,deposit,draft)" + dateFilter +
+      "&select=id,client_name,event_date,time_from,time_to,area,guests,dietary,set_menu,bev_package_id,bev_mode,status" +
       "&order=event_date.asc&limit=200",
     );
     const evsAll = await evR.json();
@@ -166,6 +175,8 @@ Deno.serve(async (req) => {
         id: ev.id, name: ev.client_name || "Event", date: ev.event_date,
         time_from: ev.time_from, time_to: ev.time_to, area: ev.area,
         guests: ev.guests, dietary: ev.dietary || null,
+        // The kitchen labels an unconfirmed event rather than hiding it.
+        status: ev.status || null, confirmed: ev.status !== "draft",
         kind, menu, total_pcs, pcs_per_guest: Math.round(pcs_per_guest * 10) / 10,
         set_menu: kind === "set"
           ? { key: ev.set_menu.key, name: (smByKey[ev.set_menu.key] && smByKey[ev.set_menu.key].name) || null }
