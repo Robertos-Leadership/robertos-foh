@@ -5168,7 +5168,10 @@ function peTmSheetHTML(editable){
   if(!m) return '<div style="text-align:center;color:#8B7355;padding:40px 10px">Choose a booking or a menu to see the sheet.</div>';
   var ed = editable ? ' contenteditable="true"' : '';
   var used = {};
-  var h = '<div class="tm-brand">'+peLogoImg(300)+'</div>';
+  // Wrapped so the menu can be CENTRED on the page and the footer pinned to the
+  // foot of it. A short menu floating at the top of an A4 with a hand of empty
+  // paper under it is what made this look unfinished.
+  var h = '<div class="tm-body"><div class="tm-brand">'+peLogoImg(300)+'</div>';
   // No "Prepared for X · Tue 4 Aug" line (removed 3 Aug 2026). The guest knows
   // whose dinner it is and what day it is; that line reads like a work order on
   // something meant to sit on their table. The message field below is the only
@@ -5199,20 +5202,50 @@ function peTmSheetHTML(editable){
   });
   var legend = ['A','D','E','H','N','R','S','V'].filter(function(k){ return used[k]; })
                  .map(function(k){ return k+' - '+PE_ALG_NAMES[k]; }).join(' | ');
-  h += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.'+
+  h += '</div><div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.'+
        // The VAT line is meaningless without a price, so it only appears with one.
        (t.price && m.price!=null ? '<br>All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.' : '')+
        (legend ? '<br>'+legend : '')+'</div>';
   return h;
 }
+// Split in two on purpose. The PAGE half (@page, html, body) belongs only to the
+// printed document; the INK half is the typography, and the on-screen preview
+// reuses it verbatim under its own id. The preview used to build itself by
+// regex-stripping the print CSS, which broke the moment a rule like
+// "html,body{...}" appeared — leaving a dangling "html," behind.
+function peTmCssInk(size, sel){
+  var a5 = size==='a5', p = sel ? sel+' ' : '';
+  return p+'.tm-brand{text-align:center;margin:0 0 2mm}'+
+    p+'.tm-brand img{width:'+(a5?'46mm':'62mm')+';height:auto;display:block;margin:0 auto}'+
+    p+'.tm-msg{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:'+(a5?'13pt':'15pt')+';color:#450207;margin-top:6mm}'+
+    p+'.tm-title{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:'+(a5?'11pt':'12.5pt')+';color:#8A6A4F;letter-spacing:2px;text-transform:uppercase;margin-top:5mm}'+
+    p+'.tm-price{text-align:center;font-size:'+(a5?'9pt':'10pt')+';color:#8A6A4F;margin-top:2mm}'+
+    p+'.tm-rule{width:'+(a5?'16mm':'20mm')+';height:1px;background:#C9A84C;margin:5mm auto 0}'+
+    p+'.tm-course{margin-top:'+(a5?'6mm':'7.5mm')+';break-inside:avoid;page-break-inside:avoid}'+
+    p+'.sec{font-size:'+(a5?'8.5pt':'9.5pt')+';letter-spacing:3.4px;margin:0 0 3mm;color:#B99C03;text-transform:uppercase;text-align:center}'+
+    p+'.dish{margin:'+(a5?'2.6mm':'3.4mm')+' 0;font-size:'+(a5?'11pt':'12.5pt')+';font-family:\'Forum\',Georgia,serif;text-align:center;color:#3A332C}'+
+    p+'.dish .codes{font-size:'+(a5?'7.5pt':'8.5pt')+';font-family:\'Outfit\',Arial,sans-serif;color:#8A6A4F}'+
+    p+'.dish .d{font-size:'+(a5?'8pt':'9pt')+';font-family:\'Outfit\',Arial,sans-serif;color:#8A6A4F;line-height:1.55;display:inline-block;max-width:'+(a5?'100%':'86%')+';margin-top:1mm}'+
+    p+'.ft{font-size:'+(a5?'6.5pt':'7.5pt')+';line-height:1.9;text-align:center;color:#9A7D68}';
+}
 function peTmCss(size){
-  return '.tm-brand{text-align:center;margin:0 0 6px}'+
-    '.tm-msg{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#450207;margin-top:14px}'+
-    '.tm-title{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#8A6A4F;letter-spacing:1px;margin-top:12px}'+
-    '.tm-price{text-align:center;font-size:12.5px;color:#8A6A4F;margin-top:5px}'+
-    '.tm-rule{width:64px;height:1px;background:#C9A84C;margin:16px auto 4px}'+
-    '.tm-course{margin-top:20px}'+
-    (size==='a5' ? '@page{size:A5;margin:12mm}body{max-width:none}.dish{font-size:12.5px}' : '@page{size:A4;margin:18mm}');
+  var a5 = size==='a5';
+  return peTmCssInk(size, '') + (
+    // ── the browser's own stamps ──────────────────────────────────────────
+    // Printing into about:blank makes the browser stamp the date, the document
+    // title, "about:blank" and "1/1" into the page margins. No CSS switches
+    // those off — but with @page margin ZERO there is no margin for them to sit
+    // in, so they go. The real margin becomes padding on the page, which is
+    // ours and prints identically.
+    '@page{size:'+(a5?'A5':'A4')+';margin:0}'+
+    'html,body{height:100%}'+
+    'body{margin:0;padding:'+(a5?'14mm 14mm':'19mm 24mm')+';max-width:none;min-height:100%;box-sizing:border-box;'+
+      'display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    // The menu sits in the optical centre and the footer holds the foot of the
+    // page, instead of everything crowding the top edge over empty paper.
+    '.tm-body{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center;padding-bottom:'+(a5?'5mm':'7mm')+'}'+
+    '.ft{flex:0 0 auto;margin-top:auto;padding-top:'+(a5?'4mm':'6mm')+'}'
+  );
 }
 // Print what is ON SCREEN, not a fresh build — so her edits go to the printer.
 function peTmPrint(){
@@ -5221,7 +5254,11 @@ function peTmPrint(){
   if(!peMenuSendable(m, 'printed')) return;
   var live = document.getElementById('pe-tm-sheet');
   var body = live ? live.innerHTML.replace(/\scontenteditable="true"/g, '') : peTmSheetHTML(false);
-  pePrintHTML(peDocShell(m.name, body, peTmCss(peTmState().size)));
+  // The document title becomes the suggested filename in "Save as PDF", so it
+  // must be the guest-facing title — never "Giambartolo — customised".
+  var t = peTmState();
+  var docTitle = String(t.title||'').trim() || peTmDefaultTitle(m);
+  pePrintHTML(peDocShell(docTitle, body, peTmCss(t.size)));
 }
 function peTmDraw(){
   var el = document.getElementById('pe-tm-sheet');
@@ -5289,7 +5326,7 @@ function peRenderTableMenu(){
       '#pe-tm-sheet .ft{text-align:center;font-size:10.5px;color:#9A7D68;margin-top:30px;line-height:1.7}'+
       '#pe-tm-sheet img{display:block;margin:0 auto;max-width:62%;height:auto}'+
       '#pe-tm-sheet [contenteditable]:focus{outline:1px dashed #C9A84C;outline-offset:3px}'+
-      peTmCss(t.size).replace(/@page\{[^}]*\}/g,'').replace(/body\{[^}]*\}/g,'').replace(/\.(tm-|dish)/g,'#pe-tm-sheet .$1')+'</style>'+
+      peTmCssInk(t.size, '#pe-tm-sheet')+'</style>'+
       '<div id="pe-tm-sheet" style="background:#fff;border:1px solid #E3D8C4;border-radius:4px;padding:'+(t.size==='a5'?'26px 24px':'34px 40px')+';'+
         'max-width:'+(t.size==='a5'?'420':'640')+'px;font-family:\'Outfit\',Arial,sans-serif;color:#3A332C">'+
         peTmSheetHTML(true)+'</div>'+
