@@ -5962,7 +5962,41 @@ function peSmCourseHTML(c,i){
       '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peSmDelCourse('+i+')">Remove</button>'+
     '</div>'+
     '<textarea class="pe-in" id="pe-sm-citems-'+i+'" rows="2" style="margin-top:6px" placeholder="One dish per line">'+peEsc((c.lines||[]).join('\n'))+'</textarea>'+
+    // The box above holds dish NAMES. The description and the allergens live
+    // beside them and used to be invisible here — so a menu read out of a Word
+    // file looked as though nothing had been picked up, when in fact the
+    // descriptions were already there. Show exactly what the guest will read.
+    peSmCourseReadout(c)+
   '</div>';
+}
+function peSmCourseReadout(c){
+  var lines = (c.lines||[]).map(function(d){ return String(d||'').trim(); }).filter(Boolean);
+  if(!lines.length) return '';
+  var rows = lines.map(function(n){
+    var desc = (c.desc && c.desc[n]) || '';
+    var known = c.allg && Object.prototype.hasOwnProperty.call(c.allg, n);
+    var list = known ? (c.allg[n]||[]) : null;
+    var alg = !known ? '<span style="color:#B00020">no allergens — guests are told to ask</span>'
+            : (list.length ? '<span style="color:#2E6B34">('+peEsc(list.join(')('))+')</span>'
+                           : '<span style="color:#2E6B34">no declared allergens</span>');
+    return '<div style="padding:3px 0;border-top:1px solid #EFE7DA">'+
+      '<b style="color:#400207">'+peEsc(n)+'</b> — '+
+      (desc ? peEsc(desc) : '<span style="color:#B00020">no description</span>')+
+      ' '+alg+'</div>';
+  }).join('');
+  return '<div style="margin-top:7px;font-size:11px;color:#6E5844">'+
+    '<div style="font-size:10px;letter-spacing:1px;color:#8B7355;text-transform:uppercase">What the guest will read</div>'+
+    rows+'</div>';
+}
+// Top up a menu that is already saved — Giambartolo and anything else added
+// before the à la carte lookup existed — without re-uploading the Word file.
+function peSmFillNow(){
+  peSmSync();
+  var r = peSmFillFromLibrary();
+  renderMain();
+  if(!r.filled && r.missing.length) peToast('Our à la carte does not know '+(r.missing.length>1?'these dishes':'this dish')+', so the allergens have to come from you: '+r.missing.join(', '), true);
+  else if(r.missing.length) peToast('Filled '+r.filled+' dish'+(r.filled>1?'es':'')+' ✓ — still no allergens for: '+r.missing.join(', ')+'. Save to keep the rest.', true);
+  else peToast('Every dish now has its description and allergens ✓ — press Save menu to keep it');
 }
 function peRenderSetMenuLib(){
   var raw = (peState.editSetMenuId && peState.editSetMenuId!=='new') ? peSmRawById(peState.editSetMenuId) : null;
@@ -5999,7 +6033,8 @@ function peRenderSetMenuLib(){
       '</div>'+
       '<div class="pe-lbl" style="margin-top:12px">Courses</div>'+
       (peState.smDraft||[]).map(function(c,i){ return peSmCourseHTML(c,i); }).join('')+
-      '<div style="margin-top:6px"><button class="pe-btn sec sm" onclick="peSmAddCourse()">+ Add course</button></div>'+
+      '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap"><button class="pe-btn sec sm" onclick="peSmAddCourse()">+ Add course</button>'+
+        '<button class="pe-btn sec sm" onclick="peSmFillNow()">Fill descriptions &amp; allergens from our à la carte</button></div>'+
       // Say it here, in the editor, rather than let the guest find it. This is
       // the one thing a menu typed from Word cannot know about itself.
       (function(){
