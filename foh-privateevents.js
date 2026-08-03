@@ -5809,14 +5809,53 @@ async function peSmDocxText(file){
 // menu, fill in every dish our own à la carte already knows — the same lookup
 // Valentina's customised menus use — and name the ones it doesn't, so the gap
 // is his to close rather than the guest's to discover.
+// The chef writes the allergens INTO the menu — "Ricciola (R)(S)", "Branzino(D)(N)".
+// Those codes are the declaration for THIS menu and nothing may outrank them, so
+// they are read straight out of the uploaded text with no model in the way: the
+// dish name, then any (X) groups that follow it. This runs before the à la carte
+// fill, which then cannot touch a dish the document has already spoken for.
+function peSmHarvestAllergens(){
+  var txt = String(peState.smText||'');
+  if(!txt) return 0;
+  var found = 0;
+  (peState.smDraft||[]).forEach(function(c){
+    (c.lines||[]).forEach(function(dish){
+      var n = String(dish||'').trim(); if(!n) return;
+      if(c.allg && Object.prototype.hasOwnProperty.call(c.allg, n)) return;
+      // Word writes a curly apostrophe, the saved dish name often has a straight
+      // one, and spacing drifts — "Roberto's" must still find "Roberto’s (D)(R)"
+      // in the document. A near-miss here would silently hand the answer to the
+      // à la carte, which is exactly what must not decide this.
+      var lit = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                 .replace(/['’‘`´]/g, "['’‘`´]")
+                 .replace(/\s+/g, '\\s+');
+      var m = new RegExp(lit+'\\s*((?:\\([A-Za-z]{1,3}\\)\\s*)+)', 'i').exec(txt);
+      if(!m) return;
+      var codes = [];
+      String(m[1]).replace(/\(([A-Za-z]{1,3})\)/g, function(_, code){ codes.push(code.toUpperCase()); return ''; });
+      if(!codes.length) return;
+      c.allg = c.allg || {}; c.allg[n] = codes; found++;
+    });
+  });
+  return found;
+}
 function peSmFillFromLibrary(){
-  var filled = 0, missing = [];
+  var filled = 0, missing = [], clashes = [];
   (peState.smDraft||[]).forEach(function(c){
     var kind = peCmCourseKind({name:c.name});
     (c.lines||[]).forEach(function(dish){
       var n = String(dish||'').trim(); if(!n) return;
       var has = function(map){ return map && Object.prototype.hasOwnProperty.call(map, n); };
-      if(has(c.allg) && c.desc && c.desc[n]) return;
+      if(has(c.allg) && c.desc && c.desc[n]){
+        // Already declared for this menu. Still LOOK at the à la carte: if the
+        // two disagree the chef has to know, because one of them is wrong and
+        // silently preferring either one is how an allergen drifts.
+        var ref = peCmDishInfo(n, kind);
+        if(ref && ref.allergens && (ref.allergens.slice().sort().join(',') !== (c.allg[n]||[]).slice().sort().join(','))){
+          clashes.push(n+': this menu says '+((c.allg[n]||[]).join('')||'none')+', the à la carte says '+(ref.allergens.join('')||'none'));
+        }
+        return;
+      }
       var info = peCmDishInfo(n, kind);
       if(info){
         if(info.desc && !(c.desc && c.desc[n])){ c.desc = c.desc||{}; c.desc[n] = String(info.desc).trim(); }
@@ -5827,7 +5866,7 @@ function peSmFillFromLibrary(){
       if(!has(c.allg) && missing.indexOf(n)<0) missing.push(n);
     });
   });
-  return { filled:filled, missing:missing };
+  return { filled:filled, missing:missing, clashes:clashes };
 }
 // Every dish still carrying no allergens — what the guest would be asked about.
 function peSmMissingAllergens(){
@@ -5866,14 +5905,18 @@ async function peSmDocUpload(input){
     peState.smName = nm.replace(/\.(docx|dotx)$/i,'').replace(/[_-]+/g,' ').trim();
     renderMain();
   }
+  // ORDER MATTERS: what the document declares first, our à la carte only after.
+  var own = peSmHarvestAllergens();
   var fill = peSmFillFromLibrary();
   renderMain();
-  if(fill.missing.length){
+  if(fill.clashes.length){
+    peToast('Word menu read ✓ — but the allergens disagree with our à la carte. Check before sending: '+fill.clashes.join(' · '), true);
+  } else if(fill.missing.length){
     peToast('Word menu read ✓ — but '+fill.missing.length+' dish'+(fill.missing.length>1?'es have':' has')+
       ' no allergens, and guests are told so. Add them before sending: '+fill.missing.slice(0,4).join(', ')+
       (fill.missing.length>4?'…':''), true);
   } else {
-    peToast('Word menu read ✓ — descriptions and allergens filled from our à la carte. Check the courses, then save');
+    peToast('Word menu read ✓ — '+(own?own+' dish'+(own>1?'es carried':' carried')+' its own allergens; the rest came from':'allergens and descriptions came from')+' our à la carte. Check, then save');
   }
 }
 // Read the live form back into state before any structural re-render so typing
@@ -5941,7 +5984,7 @@ async function peStructureMenu(){
   try{
     var r=await sb.functions.invoke('revenue-assistant',{ body:{
       max_tokens:900,
-      system:'You convert a pasted restaurant set menu into strict JSON and nothing else. Output ONLY a JSON object of the form {"name": string, "courses": [ {"name": string, "items": [string], "desc": {string: string}} OR {"name": string, "choose": 1, "options": [string], "desc": {string: string}} ]}. A course where the guest picks one dish (words like choice, choose, or, either) becomes a choose course with options; every other course lists its dishes as items. Keep dish names short. When the text describes a dish (its ingredients or preparation), put that one-line English description in the course\'s desc object keyed by the exact dish name; omit desc when there are none. No commentary, no markdown code fences.',
+      system:'You convert a pasted restaurant set menu into strict JSON and nothing else. Output ONLY a JSON object of the form {"name": string, "courses": [ {"name": string, "items": [string], "desc": {string: string}} OR {"name": string, "choose": 1, "options": [string], "desc": {string: string}} ]}. A course where the guest picks one dish (words like choice, choose, or, either) becomes a choose course with options; every other course lists its dishes as items. Keep dish names short. When the text describes a dish (its ingredients or preparation), put that one-line English description in the course\'s desc object keyed by the exact dish name; omit desc when there are none. ALLERGENS: the menu may carry codes in brackets after a dish, like "Ricciola (R)(S)" or "Branzino(D)(N)". Never delete them and never invent them — copy them verbatim into the desc text for that dish. They are a safety declaration, not decoration. No commentary, no markdown code fences.',
       messages:[{role:'user',content:txt}]
     }});
     if(!r.error && r.data && r.data.text) parsed=peParseMenuJson(r.data.text);
@@ -5992,9 +6035,11 @@ function peSmCourseReadout(c){
 // before the à la carte lookup existed — without re-uploading the Word file.
 function peSmFillNow(){
   peSmSync();
+  peSmHarvestAllergens();               // anything the pasted/uploaded menu declares wins
   var r = peSmFillFromLibrary();
   renderMain();
-  if(!r.filled && r.missing.length) peToast('Our à la carte does not know '+(r.missing.length>1?'these dishes':'this dish')+', so the allergens have to come from you: '+r.missing.join(', '), true);
+  if(r.clashes.length) peToast('Careful — the allergens disagree with our à la carte. This menu is kept as written: '+r.clashes.join(' · '), true);
+  else if(!r.filled && r.missing.length) peToast('Our à la carte does not know '+(r.missing.length>1?'these dishes':'this dish')+', so the allergens have to come from you: '+r.missing.join(', '), true);
   else if(r.missing.length) peToast('Filled '+r.filled+' dish'+(r.filled>1?'es':'')+' ✓ — still no allergens for: '+r.missing.join(', ')+'. Save to keep the rest.', true);
   else peToast('Every dish now has its description and allergens ✓ — press Save menu to keep it');
 }
