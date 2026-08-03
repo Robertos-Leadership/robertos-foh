@@ -5116,10 +5116,29 @@ function peCmOpen(key){
 // Price is OFF by default — a menu handed to a guest at the table is not a quote.
 // Allergens are not optional. The table is exactly where a guest reads them.
 function peTmState(){
-  if(!peState.tm) peState.tm = { key:'', eventId:'', name:true, price:false, desc:true, msg:'', size:'a4', layout:'full' };
+  if(!peState.tm) peState.tm = { key:'', eventId:'', name:true, price:false, desc:true, msg:'', size:'a4', layout:'full', title:'', edits:{} };
+  if(!peState.tm.edits) peState.tm.edits = {};
   return peState.tm;
 }
-function peTmSet(k, v){ var t=peTmState(); t[k]=v; renderMain(); }
+// Everything she retypes is HELD IN STATE, not just left in the DOM. The sheet
+// is rebuilt from scratch on every toggle, so an edit that lived only in the
+// page vanished the moment she ticked a box — she would have typed the title,
+// turned the price off, and watched her wording disappear.
+function peTmEditCapture(el){
+  var k = el && el.getAttribute('data-k'); if(!k) return;
+  peTmState().edits[k] = el.textContent;
+}
+function peTmEd(k, fallback){
+  var e = peTmState().edits;
+  return Object.prototype.hasOwnProperty.call(e, k) ? e[k] : fallback;
+}
+function peTmTitle(el){ peTmState().title = el.value; peTmDraw(); }
+// A different menu makes the old edits meaningless — they are keyed by position.
+function peTmSet(k, v){
+  var t = peTmState();
+  if(k==='key' && v!==t.key){ t.edits = {}; t.title = ''; }
+  t[k]=v; renderMain();
+}
 function peTmToggle(k, el){ peTmState()[k] = !!el.checked; peTmDraw(); }
 function peTmMsg(el){ peTmState().msg = el.value; peTmDraw(); }
 // Bookings worth offering: from today, with a set menu on them.
@@ -5132,8 +5151,13 @@ function peTmBookings(){
 function peTmPickBooking(id){
   var t = peTmState(); t.eventId = id;
   var e = (peState.events||[]).filter(function(x){ return String(x.id)===String(id); })[0];
-  if(e && e.set_menu) t.key = e.set_menu.key;
+  if(e && e.set_menu && e.set_menu.key !== t.key){ t.key = e.set_menu.key; t.edits = {}; t.title = ''; }
   renderMain();
+}
+// The library name carries our bookkeeping — "Giambartolo - customised" tells
+// Valentina which record it is and tells a guest nothing. Off it comes.
+function peTmDefaultTitle(m){
+  return String((m&&m.name)||'').replace(/\s*[-—–]\s*customi[sz]ed\s*$/i,'').trim() || (m&&m.name) || '';
 }
 function peTmMenu(){ var t=peTmState(); return t.key ? peSetMenuByKey(t.key) : null; }
 function peTmEvent(){ var t=peTmState(); return (peState.events||[]).filter(function(x){ return String(x.id)===String(t.eventId); })[0] || null; }
@@ -5150,12 +5174,15 @@ function peTmSheetHTML(editable){
     h += '<div class="tm-occ">Prepared for '+peEsc(who)+'</div>';
   }
   if(String(t.msg||'').trim()) h += '<div class="tm-msg">'+peEsc(t.msg.trim())+'</div>';
-  h += '<div class="tm-title"'+ed+'>'+peEsc(m.name)+'</div>';
+  // "Giambartolo — customised" is our internal name for the record. It must
+  // never be what a guest reads, so the title is hers to write.
+  h += '<div class="tm-title"'+ed+' data-k="title" oninput="peTmEditCapture(this)">'+
+       peEsc(String(t.title||'').trim() || peTmDefaultTitle(m))+'</div>';
   if(t.price && m.price!=null) h += '<div class="tm-price">'+pePerPerson(m.price)+'</div>';
   h += '<div class="tm-rule"></div>';
-  (m.courses||[]).forEach(function(c){
-    h += '<div class="tm-course"><div class="sec"'+ed+'>'+peEsc(c.name)+(c.choose?peChooseLabel():'')+'</div>';
-    ((c.choose ? c.options : c.items)||[]).forEach(function(o){
+  (m.courses||[]).forEach(function(c, ci){
+    h += '<div class="tm-course"><div class="sec"'+ed+' data-k="c'+ci+'" oninput="peTmEditCapture(this)">'+peEsc(peTmEd('c'+ci, c.name+(c.choose?peChooseLabel():'')))+'</div>';
+    ((c.choose ? c.options : c.items)||[]).forEach(function(o, di){
       var stored = c.desc||{};
       var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
       var alg = peAlgOf(c, o);
@@ -5163,7 +5190,7 @@ function peTmSheetHTML(editable){
       var line = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
       var codes = (alg.known && alg.list.length) ? '('+alg.list.join(')(')+')' : '';
       (alg.known ? alg.list : []).forEach(function(k){ used[String(k).toUpperCase()] = 1; });
-      h += '<div class="dish"><span'+ed+'>'+peEsc(o)+'</span>'+
+      h += '<div class="dish"><span'+ed+' data-k="d'+ci+'-'+di+'" oninput="peTmEditCapture(this)">'+peEsc(peTmEd('d'+ci+'-'+di, o))+'</span>'+
         (codes ? ' <span class="codes">'+peEsc(codes)+'</span>' : '')+
         // "Dish names only" is a SIZE of the same document, not a second design.
         (t.desc && t.layout==='full' && line ? '<br><span class="d">'+peEsc(line)+'</span>' : '')+'</div>';
@@ -5231,6 +5258,12 @@ function peRenderTableMenu(){
         '<option value="">— choose —</option>'+
         menus.map(function(m){ return '<option value="'+peEsc(m.key)+'"'+(t.key===m.key?' selected':'')+'>'+peEsc(m.name)+'</option>'; }).join('')+
       '</select>'+
+      // She should not have to discover that the title is tappable — the one
+      // thing on the sheet that is always wrong for a guest gets its own field.
+      '<div class="pe-lbl" style="margin-top:10px">Title on the menu</div>'+
+      '<input class="pe-in" id="pe-tm-title" value="'+peEsc(t.title||'')+'" oninput="peTmTitle(this)" placeholder="'+
+        peEsc(peTmMenu() ? peTmDefaultTitle(peTmMenu()) : 'e.g. Dinner Menu')+'">'+
+      '<div style="font-size:11px;color:#8B7355;margin-top:4px">Leave it empty and we drop our own “— customised” from the name.</div>'+
       '<div class="pe-lbl" style="margin-top:12px">On the menu</div>'+
       chk('name','Guest name &amp; date','from the booking')+
       chk('price','Price per person','off by default — this is not a quote')+
