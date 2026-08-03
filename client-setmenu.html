@@ -94,10 +94,14 @@ function descOf(c, dish){
 // nothing in it — silence on a guest-facing menu is the dangerous case.
 function dishLine(c, dish){
   var d = descOf(c, dish), a = algOf(c, dish), tail;
-  if(!a.known) tail = '<b>Allergens not recorded — please ask us</b>';
+  // A guest never reads our gap — that is an internal problem and it is now
+  // caught before the menu can be printed or sent at all. What every guest
+  // reads instead is the footer line, which is true for every dish on every
+  // menu: tell us and our chefs will accommodate you.
+  if(!a.known) tail = '';
   else if(!a.list.length) tail = 'No declared allergens';
   else tail = '('+a.list.join(')(')+')';
-  return d ? esc(d)+' '+tail : tail;
+  return d ? (tail ? esc(d)+' '+tail : esc(d)) : tail;
 }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function el(id){ return document.getElementById(id); }

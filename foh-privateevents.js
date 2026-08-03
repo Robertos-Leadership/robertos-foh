@@ -3528,19 +3528,28 @@ function peDocShell(title, inner){
   return '<!DOCTYPE html><html><head><meta charset="utf-8">'+
   '<meta name="viewport" content="width=device-width, initial-scale=1">'+
   '<title>'+peEsc(title)+'</title>'+
-  '<style>@page{margin:18mm}body{font-family:Georgia,\'Times New Roman\',serif;color:#2C1810;margin:0;padding:24px;max-width:720px;margin:0 auto}'+
+  // ONE STANDARD. Every value below is copied from client-brand.css — the SOP
+  // standard chosen 30 Jul 2026 — so a guest who opens the emailed proposal and
+  // then the menu link sees one restaurant, not two. It has to be literals and
+  // inline: email clients strip external stylesheets and CSS variables, which is
+  // how this document drifted onto Georgia and sage-green headings in the first
+  // place. If client-brand.css changes, change these with it.
+  '<style>@import url(\'https://fonts.googleapis.com/css2?family=Forum&family=Outfit:wght@300;400;500;600&display=swap\');'+
+  '@page{margin:18mm}body{font-family:\'Outfit\',Arial,sans-serif;color:#3A332C;margin:0;padding:24px;max-width:720px;margin:0 auto}'+
   /* bottom margin keeps the designer's clear space (~0.9x the logo height) */
   '.brand{text-align:center;margin:10px 0 24px}'+
   '.rule{width:70px;height:1px;background:#C9A84C;margin:10px auto}'+
-  'h2{font-size:16px;letter-spacing:2px;color:#7A8B4A;text-align:center;font-weight:normal;text-transform:uppercase}'+
-  '.sub{text-align:center;font-size:12px;color:#8B7355}'+
-  '.sec{font-size:13px;letter-spacing:2px;color:#7A8B4A;text-transform:uppercase;text-align:center;margin:22px 0 8px}'+
-  '.dish{text-align:center;font-size:13.5px;margin:7px 0}.dish .d{font-size:11.5px;color:#8B7355}'+
-  '.codes{font-size:9.5px;color:#A5876B}'+
-  '.ft{text-align:center;font-size:9.5px;color:#A5876B;margin-top:34px;line-height:1.7}'+
+  'h2{font-family:\'Forum\',Georgia,serif;font-size:17px;letter-spacing:2px;color:#450207;text-align:center;font-weight:normal;text-transform:uppercase}'+
+  '.sub{text-align:center;font-size:12px;color:#9A7D68}'+
+  // Identical to .sect-t on the guest pages: 11px, 3px tracking, gold.
+  '.sec{font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase;text-align:center;margin:22px 0 10px}'+
+  '.dish{font-family:\'Forum\',Georgia,serif;text-align:center;font-size:13.5px;margin:7px 0;color:#3A332C}'+
+  '.dish .d{font-family:\'Outfit\',Arial,sans-serif;font-size:11.5px;color:#8A6A4F}'+
+  '.codes{font-family:\'Outfit\',Arial,sans-serif;font-size:11.5px;color:#8A6A4F}'+
+  '.ft{text-align:center;font-size:10.5px;color:#9A7D68;margin-top:34px;line-height:1.7}'+
   'table{width:100%;border-collapse:collapse;font-size:12px}td{padding:6px 8px;border:1px solid #E3D5C2;vertical-align:top}'+
-  'td.l{width:32%;color:#8B7355;font-size:10.5px;text-transform:uppercase;letter-spacing:1px}'+
-  '.fs-h{background:#400207;color:#E8D9C7;text-align:center;padding:8px;font-size:13px;letter-spacing:2px}'+
+  'td.l{width:32%;color:#8A6A4F;font-size:10.5px;text-transform:uppercase;letter-spacing:1px}'+
+  '.fs-h{background:#450207;color:#E8D9C7;text-align:center;padding:8px;font-size:13px;letter-spacing:2px}'+
   // Phone only — never print. The kitchen table is three columns wide, so on a
   // phone it has to be allowed to scroll on its own rather than push the page.
   '@media screen and (max-width:600px){body{padding:14px}'+
@@ -3767,9 +3776,13 @@ function peProposalSetMenuHTML(e){
       }
       var txt = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
       // On a document a guest reads, a dish nobody has recorded must say so.
+      // A GUEST NEVER READS OUR GAP. A dish we have not recorded simply shows
+      // no codes; the footer already carries the line that is true for every
+      // dish — ask your waiter. The alarm belongs inside: peMenuAllergenGaps
+      // stops an incomplete menu being printed or sent at all.
       var codes = alg.known
         ? (alg.list.length ? '('+alg.list.join(')(')+')' : '')
-        : 'allergens not recorded — please ask us';
+        : '';
       return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes)+'</span>':'')+
         (txt?'<br><span class="d">'+peEsc(txt)+'</span>':'')+'</div>';
     };
@@ -5088,10 +5101,40 @@ function peCmCourseDesc(courseName, names, inherited, inheritedAlg){
 function peCmOpen(key){
   window.open(peBaseUrl()+'client-setmenu.html?m='+encodeURIComponent(key), '_blank');
 }
+// ── the one gate ────────────────────────────────────────────────────────────
+// A guest never reads "allergens not recorded" — that is our problem, not
+// theirs. The consequence is that an incomplete menu must not be able to LEAVE
+// the building, or we would simply be hiding the gap instead of closing it.
+// Every route to a guest asks this first.
+function peMenuAllergenGaps(m){
+  var out = [];
+  ((m&&m.courses)||[]).forEach(function(c){
+    ((c.choose ? c.options : c.items)||[]).forEach(function(o){
+      var n = String(o||'').trim(); if(!n) return;
+      var alg = peAlgOf(c, n);
+      if(!alg.known){
+        // The à la carte answers for dishes the menu itself never spelled out.
+        var info = peCmDishInfo(n, peCmCourseKind(c));
+        if(info && info.allergens && info.allergens.length) return;
+      } else return;
+      if(out.indexOf(n) < 0) out.push(n);
+    });
+  });
+  return out;
+}
+// Returns true when it is safe to continue. Names the dishes — never "invalid".
+function peMenuSendable(m, what){
+  var gaps = peMenuAllergenGaps(m);
+  if(!gaps.length) return true;
+  peToast('Not '+what+': '+gaps.length+' dish'+(gaps.length>1?'es have':' has')+' no allergens — '+gaps.join(', ')+
+    '. Open the menu, add them, and it will go straight out.', true);
+  return false;
+}
 // A printable/PDF copy on the house documents' shell, so it matches the
 // proposal and the canapé menu rather than being a screenshot of a web page.
 function peCmPrintMenu(key){
   var m = peSetMenuByKey(key); if(!m) return;
+  if(!peMenuSendable(m, 'printed')) return;
   var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
     '<h2>'+peEsc(m.name)+'</h2>'+
     (m.price!=null ? '<div class="sub">AED '+peMoney(m.price)+' / person</div>' : '');
@@ -5108,9 +5151,13 @@ function peCmPrintMenu(key){
         alg = { known:true, list:info.allergens };
       }
       var line = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
+      // A GUEST NEVER READS OUR GAP. A dish we have not recorded simply shows
+      // no codes; the footer already carries the line that is true for every
+      // dish — ask your waiter. The alarm belongs inside: peMenuAllergenGaps
+      // stops an incomplete menu being printed or sent at all.
       var codes = alg.known
         ? (alg.list.length ? '('+alg.list.join(')(')+')' : '')
-        : 'allergens not recorded — please ask us';
+        : '';
       body += '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes)+'</span>':'')+
         (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
     });
@@ -5414,9 +5461,21 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
       // print their courses inline so the guest still sees the full menu.
       var extra = m.pdf
         ? '<div style="text-align:center;margin:10px 0 20px"><a href="'+(/^https?:/i.test(m.pdf)?m.pdf:peBaseUrl()+m.pdf)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the full menu</a></div>'
+        // This path used to print course names and a run-on list of dishes with
+        // NO allergens at all — the only guest document that showed none. Same
+        // shape as the printed menu now: dish, codes, description.
         : (m.courses||[]).map(function(c){
-            var b = c.choose ? ('choice of '+((c.options||[]).join(' / '))) : ((c.items||[]).join(', '));
-            return '<div class="dish"><span class="d"><b>'+peEsc(c.name)+'</b> — '+peEsc(b)+'</span></div>';
+            var stored = c.desc||{};
+            return '<div class="sec">'+peEsc(c.name)+(c.choose?' — each guest chooses one':'')+'</div>'+
+              (((c.choose ? c.options : c.items)||[]).map(function(o){
+                var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
+                var alg  = peAlgOf(c, o);
+                if(!alg.known && info && info.allergens && info.allergens.length) alg = { known:true, list:info.allergens };
+                var line = stored[o] ? peDescOf(c, o) : ((info && info.desc) ? info.desc : '');
+                var codes = (alg.known && alg.list.length) ? '('+alg.list.join(')(')+')' : '';
+                return '<div class="dish">'+peEsc(o)+(codes?' <span class="codes">'+peEsc(codes)+'</span>':'')+
+                  (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
+              }).join(''));
           }).join('');
       var priceTag = (noPrice || m.price==null) ? '' : ' — AED '+m.price+' / person';
       return '<div class="sec">'+peEsc(m.name)+priceTag+'</div>'+
@@ -5469,6 +5528,16 @@ async function peSendMenuPack(){
   var noPrice = !!(noPriceEl && noPriceEl.checked);
   var t = peMpTicked(), food = t.food, bev = t.bev, alc = t.alc||[];
   if(!food.length && !bev.length && !alc.length){ peToast('Tick at least one menu, dish or package to send', true); return; }
+  // The gate, on the way OUT. A menu whose allergens we have not finished can
+  // no longer reach a guest quietly just because the guest-facing text stopped
+  // announcing the gap.
+  var blocked = food.map(peSetMenuByKey).filter(Boolean).filter(function(m){ return peMenuAllergenGaps(m).length; });
+  if(blocked.length){
+    var m0 = blocked[0];
+    peToast('Not sent — “'+m0.name+'” is missing allergens for: '+peMenuAllergenGaps(m0).join(', ')+
+      '. Open it in Set menus, fill them in, and send again.', true);
+    return;
+  }
   if(!(await peConfirm({title:'Send to the guest?', html:'Send <b>'+peEsc(peMpSummary(t))+'</b> to <b>'+peEsc(email)+'</b> in one email now?'+(noPrice?'<br><span style="color:#854F0B">Without prices — the guest sees the dishes and packages only.</span>':''), ok:'Send email', cancel:'Not yet'}))) return;
   // The sender is copied and set as reply-to, same as client proposals.
   var sender = state.userEmail || 'vdetoni@robertos.ae';
@@ -5804,8 +5873,7 @@ async function peSmDocxText(file){
 }
 // A Word menu arrives as dish names and nothing else — no description, no
 // allergens. The guest page refuses to stay silent about that: a dish with
-// nothing recorded prints "Allergens not recorded — please ask us" rather than
-// looking like a dish with nothing in it. So before the chef ever sees the
+// nothing recorded cannot be printed or sent at all. So before the chef ever sees the
 // menu, fill in every dish our own à la carte already knows — the same lookup
 // Valentina's customised menus use — and name the ones it doesn't, so the gap
 // is his to close rather than the guest's to discover.
@@ -6087,7 +6155,7 @@ function peRenderSetMenuLib(){
         if(!miss.length) return '';
         return '<div style="margin-top:10px;background:#FAEEDA;border:1px solid #E4C98A;border-radius:9px;padding:10px 12px;font-size:12px;color:#854F0B">'+
           '<b>'+miss.length+' dish'+(miss.length>1?'es have':' has')+' no allergens recorded.</b> '+
-          'Guests will see “Allergens not recorded — please ask us” next to '+(miss.length>1?'each of them':'it')+': '+
+          'This menu cannot be printed or sent to a guest until '+(miss.length>1?'they are':'it is')+' filled in: '+
           peEsc(miss.join(', '))+'.</div>';
       })()+
       '<div style="margin-top:12px"><div class="pe-lbl">Kitchen cost / guest (AED) — chef’s number, never shown to guests</div>'+
@@ -6117,7 +6185,15 @@ function peRenderSetMenuLib(){
         : ' <span style="font-size:11px;color:#B00020">· no cost yet — chef to add</span>')+
       (mm.active===false?' <span style="font-size:11px;color:#8B7355">· retired</span>':'')+
       '<br><span style="font-size:11px;color:#8B7355">'+peEsc(mm.line||peSmSummary(mm.courses))+'</span></span>'+
-      (m.id?'<button class="pe-btn sec sm" onclick="peSmEdit(\''+m.id+'\')">Edit</button>':'<span style="font-size:11px;color:#A5876B">built-in</span>')+
+      // Seeing it is now one tap from the list, not something you have to open
+      // the editor and save first to find out.
+      '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+
+        (mm.key?'<button class="pe-btn sec sm" onclick="peCmPrintMenu(\''+peEsc(mm.key)+'\')">PDF</button>'+
+                '<button class="pe-btn sec sm" onclick="peCmOpen(\''+peEsc(mm.key)+'\')">View</button>':'')+
+        (m.id?'<button class="pe-btn sec sm" onclick="peSmEdit(\''+m.id+'\')">Edit</button>'+
+              '<button class="pe-btn sec sm" style="color:#B00020;border-color:#B00020" onclick="peSmDelete(\''+m.id+'\')">Delete</button>'
+             :'<span style="font-size:11px;color:#A5876B;align-self:center">built-in</span>')+
+      '</span>'+
     '</div>';
   }).join(''):'<div style="font-size:12px;color:#8B7355">No set menus yet — tap “+ Add set menu”.</div>')+'</div>';
   return h;
@@ -6166,6 +6242,46 @@ async function peSaveSetMenu(id){
   else { if(!Array.isArray(peState.setMenus)) peState.setMenus=[]; peState.setMenus.push(r.data); }
   peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false;
   peToast(priceVal!=null ? 'Set menu saved ✓ — ready for the events desk' : 'Set menu saved ✓ — Valentina sets the price before it can be quoted');
+  renderMain();
+}
+// Retire is for a menu that is off for a while — the Netflix menu between two
+// Netflix nights. Delete is for a menu we are never running again, so the list
+// stays a list of menus we actually sell rather than everything ever typed.
+//
+// A menu an event has already used can never be deleted: that event's own
+// record points at it by key, and a guest's choices hang off it, so deleting
+// would quietly rewrite a booking that has already been sent out. Those get
+// told to retire instead, and told WHICH events are holding it.
+async function peSmDelete(id){
+  if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
+  var raw = peSmRawById(id); if(!raw || !raw.key) return;
+  // TWO nets, because a query returning nothing does not mean nothing is there:
+  // row-level security can hide a booking from the reader, and an empty answer
+  // would then read as "safe to delete". The bookings this screen has already
+  // loaded are checked too, and either one is enough to stop the delete.
+  var ev = await sb.from('events_desk').select('event_date,client_name').eq('set_menu->>key', raw.key).limit(4);
+  var ch = await sb.from('event_menu_choices').select('id').eq('menu_key', raw.key).limit(1);
+  // Never delete on a failed check — not knowing is a reason to stop, not to guess.
+  if(ev.error || ch.error){ peToast('Could not check whether this menu is in use, so nothing was deleted. Try again.', true); return; }
+  var local = (peState.events||[]).filter(function(x){ return x && x.set_menu && x.set_menu.key===raw.key; });
+  var rows = (ev.data||[]).concat(local.map(function(x){ return {event_date:x.event_date, client_name:x.client_name}; }));
+  var seen = {};
+  rows = rows.filter(function(x){ var k=(x.client_name||'')+'|'+(x.event_date||''); if(seen[k]) return false; seen[k]=1; return true; });
+  var used = rows.length, chosen = (ch.data||[]).length;
+  if(used || chosen){
+    var who = rows.slice(0,4).map(function(x){ return (x.client_name||'an event')+(x.event_date?' — '+peDLabel(x.event_date):''); }).join(', ');
+    peToast('“'+raw.name+'” is on '+(used?used+' booking'+(used>1?'s':''):'a booking')+(who?': '+who:'')+
+      (chosen?', and a guest has already chosen from it':'')+'. Retire it instead — it leaves the dropdown but those bookings keep their menu.', true);
+    return;
+  }
+  if(!(await peConfirm({ title:'Delete “'+raw.name+'”?',
+    body:'This removes the menu for good. No booking is using it, so nothing else changes. If you might run it again one day, retire it instead.',
+    ok:'Delete for good', cancel:'Keep it', danger:true }))) return;
+  var r = await sb.from('event_set_menus').delete().eq('id', id);
+  if(r.error){ peToast('Not deleted — '+String(r.error&&r.error.message||'').slice(0,90), true); return; }
+  peState.setMenus = (peState.setMenus||[]).filter(function(m){ return m.id!==id; });
+  if(peState.editSetMenuId===id){ peSmCancel(); return; }
+  peToast('“'+raw.name+'” deleted');
   renderMain();
 }
 async function peToggleSetMenu(id, active){
