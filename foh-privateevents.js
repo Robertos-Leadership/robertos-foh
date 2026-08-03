@@ -3653,8 +3653,8 @@ function peProposalHTML(e){
       '<div class="dish" style="font-size:15px">Minimum spend AED '+peMoney(e.min_spend)+'</div>';
   }
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
-    'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
-    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.'+
+    peAlgLegend(body)+'</div>';
   return peDocShell('Roberto\'s proposal', body);
 }
 function pePrintProposal(id){ var e = peEvById(id); if(e) pePrintHTML(peProposalHTML(e)); }
@@ -5101,6 +5101,37 @@ function peCmCourseDesc(courseName, names, inherited, inheritedAlg){
 function peCmOpen(key){
   window.open(peBaseUrl()+'client-setmenu.html?m='+encodeURIComponent(key), '_blank');
 }
+// ── Austin's menu is the standard ───────────────────────────────────────────
+// The designed house menu ("Austin menu.pdf") is what a Roberto's set menu is
+// supposed to look like, so the app's documents follow it rather than a layout
+// we invented: dish and codes on one line, description under it, "(Choose 1)"
+// on a choice course, "AED 380/person", and the legend below.
+//
+// Austin's legend lists only D E H N R S V — no Gluten, and no Alcohol. Our
+// data agrees: across every menu and the whole à la carte, G is used ZERO
+// times. So G is dropped. A is used exactly once, so it is printed only on a
+// menu that actually carries it — an unexplained (A) on a guest's menu is
+// worse than a slightly longer line. Austin's own line has a missing pipe
+// ("H- Homemade N - Nuts"); that is a typo, not a standard, so it is not copied.
+var PE_ALG_NAMES = { A:'Alcohol', D:'Dairy', E:'Egg', H:'Homemade', N:'Nuts', R:'Raw', S:'Shellfish', V:'Vegetarian' };
+// Read from the finished page, not from the data behind it. Three different
+// documents build their dishes three different ways (a set menu's courses, a
+// canapé list, à la carte lines), and a legend derived from any one shape would
+// be wrong on the others. Reading what was actually printed cannot list a code
+// that is not on the page, or omit one that is.
+// Returns the line already prefixed with its break, or nothing at all when the
+// document carries no codes — so a menu without allergens gets no empty legend.
+function peAlgLegend(html){
+  var used = {};
+  (String(html||'').match(/class="codes">[^<]*<\/span>/g) || []).forEach(function(s){
+    s.replace(/\(([A-Za-z]{1,3})\)/g, function(_, c){ used[c.toUpperCase()] = 1; return ''; });
+  });
+  var order = ['A','D','E','H','N','R','S','V'].filter(function(k){ return used[k]; });
+  if(!order.length) return '';
+  return '<br>'+order.map(function(k){ return k+' - '+PE_ALG_NAMES[k]; }).join(' | ');
+}
+function peChooseLabel(){ return ' (Choose 1)'; }
+function pePerPerson(p){ return 'AED '+peMoney(p)+'/person'; }
 // ── the one gate ────────────────────────────────────────────────────────────
 // A guest never reads "allergens not recorded" — that is our problem, not
 // theirs. The consequence is that an incomplete menu must not be able to LEAVE
@@ -5137,9 +5168,9 @@ function peCmPrintMenu(key){
   if(!peMenuSendable(m, 'printed')) return;
   var body = '<div class="brand">'+peLogoImg()+'</div><div class="rule"></div>'+
     '<h2>'+peEsc(m.name)+'</h2>'+
-    (m.price!=null ? '<div class="sub">AED '+peMoney(m.price)+' / person</div>' : '');
+    (m.price!=null ? '<div class="sub">'+pePerPerson(m.price)+'</div>' : '');
   (m.courses||[]).forEach(function(c){
-    body += '<div class="sec">'+peEsc(c.name)+(c.choose?' — each guest chooses one':'')+'</div>';
+    body += '<div class="sec">'+peEsc(c.name)+(c.choose?peChooseLabel():'')+'</div>';
     var stored = c.desc||{};
     ((c.choose ? c.options : c.items)||[]).forEach(function(o){
       // Codes after the name, description underneath — the house layout, and
@@ -5163,8 +5194,8 @@ function peCmPrintMenu(key){
     });
   });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
-    (m.price!=null?'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>':'')+
-    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    (m.price!=null?'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.':'')+
+    peAlgLegend(body)+'</div>';
   pePrintHTML(peDocShell(m.name, body));
 }
 // Email goes through the one guest-send card that already exists — this ticks
@@ -5466,7 +5497,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
         // shape as the printed menu now: dish, codes, description.
         : (m.courses||[]).map(function(c){
             var stored = c.desc||{};
-            return '<div class="sec">'+peEsc(c.name)+(c.choose?' — each guest chooses one':'')+'</div>'+
+            return '<div class="sec">'+peEsc(c.name)+(c.choose?peChooseLabel():'')+'</div>'+
               (((c.choose ? c.options : c.items)||[]).map(function(o){
                 var info = stored[o] ? null : peCmDishInfo(o, peCmCourseKind(c));
                 var alg  = peAlgOf(c, o);
@@ -5477,7 +5508,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
                   (line?'<br><span class="d">'+peEsc(line)+'</span>':'')+'</div>';
               }).join(''));
           }).join('');
-      var priceTag = (noPrice || m.price==null) ? '' : ' — AED '+m.price+' / person';
+      var priceTag = (noPrice || m.price==null) ? '' : ' — '+pePerPerson(m.price);
       return '<div class="sec">'+peEsc(m.name)+priceTag+'</div>'+
         '<div class="dish"><span class="d">'+peEsc(m.line||peSmSummary(m.courses))+'</span></div>'+extra;
     }).join('');
@@ -5507,7 +5538,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
   if(bevs.length){
     if(both) inner += peMailSection('The beverages — packages');
     inner += bevs.map(function(b){
-      var priceTag = (noPrice || b.price_pp==null) ? '' : ' · AED '+peMoney(b.price_pp)+' / person';
+      var priceTag = (noPrice || b.price_pp==null) ? '' : ' · '+pePerPerson(b.price_pp);
       var extra = b.pdf
         ? '<div style="text-align:center;margin:10px 0 20px"><a href="'+(/^https?:/i.test(b.pdf)?b.pdf:peBaseUrl()+b.pdf)+'" style="display:inline-block;background:#400207;color:#E8D9C7;padding:9px 24px;border-radius:20px;text-decoration:none;font-size:12.5px;letter-spacing:1px">View the beverage package</a></div>'
         : '';
@@ -7636,8 +7667,8 @@ function peQuickPrint(){
     });
   });
   body += '<div class="ft">Our Chefs will do their best to accommodate your dietary requirements, please inform your waiter.<br>'+
-    'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>'+
-    'A - Alcohol | D - Dairy | E - Egg | G - Gluten | H - Homemade | N - Nuts | R - Raw | S - Shellfish | V - Vegetarian</div>';
+    'All prices are in AED inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.'+
+    peAlgLegend(body)+'</div>';
   pePrintHTML(peDocShell(peQuick.title, body));
 }
 async function peQuickSave(){
