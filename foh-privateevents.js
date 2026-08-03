@@ -5789,7 +5789,7 @@ function peSmDraftFrom(courses){
   });
 }
 function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
-function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peSmSplitCodesFromNames(); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
 function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
 // ── chef uploads the designed menu PDF ───────────────────────────────────────
 // One upload does two jobs: the text is read out and laid into courses by the
@@ -5913,6 +5913,38 @@ async function peSmDocxText(file){
 // they are read straight out of the uploaded text with no model in the way: the
 // dish name, then any (X) groups that follow it. This runs before the à la carte
 // fill, which then cannot touch a dish the document has already spoken for.
+// Codes belong in the allergen field, NEVER in a dish's name. A Word menu
+// writes "Spaghetto alle vongole(S)" and the layout step can keep the codes
+// glued to the name — and then the whole chain fails quietly: the harvest looks
+// for codes AFTER the name and finds none, so the à la carte is allowed to
+// answer instead, and it answered "no allergens" for a Costata di Angus whose
+// own name said (D)(N). The guest also reads the codes twice, once as part of
+// the dish's name.
+//
+// So split them off before anything else looks at the menu. Codes written on
+// the name are the chef's own declaration for THIS menu and outrank the à la
+// carte, exactly like codes written after it.
+function peSmSplitCodesFromNames(){
+  var moved = 0;
+  (peState.smDraft||[]).forEach(function(c){
+    var desc = c.desc||{}, allg = c.allg||{}, nd = {}, na = {};
+    c.lines = (c.lines||[]).map(function(raw){
+      var n = String(raw||'').trim(); if(!n) return n;
+      var codes = [];
+      // Only letter codes — "Costata di Angus (300g)" keeps its weight.
+      var clean = n.replace(/\s*\(([A-Za-z]{1,3})\)/g, function(_, code){ codes.push(code.toUpperCase()); return ''; }).trim();
+      if(!clean) return n;
+      if(desc[n]!=null) nd[clean] = desc[n]; else if(desc[clean]!=null) nd[clean] = desc[clean];
+      if(codes.length){ na[clean] = codes; moved++; }
+      else if(Object.prototype.hasOwnProperty.call(allg, n)) na[clean] = allg[n];
+      else if(Object.prototype.hasOwnProperty.call(allg, clean)) na[clean] = allg[clean];
+      return clean;
+    });
+    c.desc = Object.keys(nd).length ? nd : null;
+    c.allg = Object.keys(na).length ? na : null;
+  });
+  return moved;
+}
 function peSmHarvestAllergens(){
   var txt = String(peState.smText||'');
   if(!txt) return 0;
@@ -6005,6 +6037,7 @@ async function peSmDocUpload(input){
     renderMain();
   }
   // ORDER MATTERS: what the document declares first, our à la carte only after.
+  peSmSplitCodesFromNames();
   var own = peSmHarvestAllergens();
   var fill = peSmFillFromLibrary();
   renderMain();
@@ -6134,6 +6167,7 @@ function peSmCourseReadout(c){
 // before the à la carte lookup existed — without re-uploading the Word file.
 function peSmFillNow(){
   peSmSync();
+  peSmSplitCodesFromNames();            // codes glued to a dish name are still the chef's
   peSmHarvestAllergens();               // anything the pasted/uploaded menu declares wins
   var r = peSmFillFromLibrary();
   renderMain();
