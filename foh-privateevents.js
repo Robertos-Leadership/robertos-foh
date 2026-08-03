@@ -1549,13 +1549,12 @@ function peOptionValues(e){
 }
 
 // ── calendar view ────────────────────────────────────────────────────────────
-function peRenderCalendar(){
-  if(!peState.month) peState.month = peMonthKey(peToday());
-  var mk = peState.month;
+// The month, built once. The screen and the printed calendar both read this —
+// two copies of this arithmetic would drift, and the thing that would drift is
+// the money.
+function peCalMonthMap(mk){
   var y = +mk.slice(0,4), mo = +mk.slice(5,7);
   var first = new Date(y, mo-1, 1);
-  var startDow = (first.getDay()+6)%7;      // Monday-first
-  var days = new Date(y, mo, 0).getDate();
   // #13 — a booking that is holding two possible dates appears on BOTH, so
   // neither is forgotten and nobody sells the second one out from under it. The
   // alternative is marked `held`, and every COUNT and every TOTAL below ignores
@@ -1563,13 +1562,12 @@ function peRenderCalendar(){
   // on. Getting this wrong would have shown the same money twice.
   var byDate = {};
   var put = function(ds, e, held){ (byDate[ds] = byDate[ds] || []).push({e:e, held:held}); };
-  peState.events.forEach(function(e){
+  (peState.events||[]).forEach(function(e){
     if(e.event_date && peMonthKey(e.event_date)===mk) put(String(e.event_date).slice(0,10), e, false);
     peAltDates(e).forEach(function(d){
       if(peMonthKey(d.date)===mk) put(String(d.date).slice(0,10), e, true);
     });
   });
-  var mLbl = first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   var monthCount = Object.keys(byDate).reduce(function(a,k){
     return a + byDate[k].filter(function(r){ return !r.held; }).length; }, 0);
   var heldCount = Object.keys(byDate).reduce(function(a,k){
@@ -1583,6 +1581,96 @@ function peRenderCalendar(){
     var v = peEventValue(r.e)||0;
     if(peStage(r.e)==='converted') mConv += v; else if(peInPipeline(r.e)) mPipe += v;
   }); });
+  return { y:y, mo:mo, first:first, startDow:(first.getDay()+6)%7, days:new Date(y, mo, 0).getDate(),
+           byDate:byDate, mLbl:first.toLocaleDateString('en-GB',{month:'long',year:'numeric'}),
+           monthCount:monthCount, heldCount:heldCount, mConv:mConv, mPipe:mPipe };
+}
+// ── the printable month ─────────────────────────────────────────────────────
+// Katarina asked for a calendar she can print. It is the same month the screen
+// is showing, on the house shell, landscape because seven columns will not read
+// on a portrait A4.
+//
+// MONEY IS OFF unless she ticks it. A calendar is the one document that ends up
+// pinned to a wall or left on a desk, and per-event value is the last thing that
+// should be sitting there — so it is a deliberate tick, not a default.
+function peCalPrint(withMoney){
+  var mk = peState.month || peMonthKey(peToday());
+  var M = peCalMonthMap(mk);
+  var today = peToday();
+  var cell = function(inner, cls){ return '<td class="'+(cls||'')+'">'+inner+'</td>'; };
+  var h = '<div class="brand">'+peLogoImg(210)+'</div>'+
+    '<div class="cal-h">'+peEsc(M.mLbl)+'</div>'+
+    '<div class="cal-sub">'+(M.monthCount ? M.monthCount+' event'+(M.monthCount>1?'s':'') : 'no events')+
+      (M.heldCount ? ' &middot; '+M.heldCount+' date'+(M.heldCount>1?'s':'')+' held' : '')+
+      (withMoney && M.mConv ? ' &middot; AED '+peMoney(M.mConv)+' converted' : '')+
+      (withMoney && M.mPipe ? ' &middot; '+peMoney(M.mPipe)+' in play' : '')+'</div>';
+  h += '<div class="calwrap"><table class="cal"><thead><tr>'+
+       ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){ return '<th>'+d+'</th>'; }).join('')+
+       '</tr></thead><tbody><tr>';
+  var col = 0;
+  for(var i=0;i<M.startDow;i++){ h += cell('', 'off'); col++; }
+  for(var d=1; d<=M.days; d++){
+    if(col===7){ h += '</tr><tr>'; col = 0; }
+    var ds = M.y+'-'+String(M.mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var evs = M.byDate[ds]||[];
+    var inner = '<div class="dnum'+(ds===today?' now':'')+'">'+d+'</div>';
+    inner += evs.map(function(r){
+      var e = r.e, c = PE_STATUS_COL[e.status]||PE_STATUS_COL.draft;
+      var name = peEsc(e.client_name || e.company || '?');
+      if(r.held) return '<div class="ev held" style="border-color:'+c.b+'">or: '+name+'</div>';
+      var v = peEventValue(e);
+      var bits = [];
+      if(e.guests) bits.push(e.guests+' guests');
+      var tm = [e.time_from, e.time_to].filter(Boolean).join('–');
+      if(tm) bits.push(peEsc(tm));
+      if(e.area) bits.push(peEsc(e.area));
+      return '<div class="ev" style="background:'+c.bg+';border-color:'+c.b+';color:'+c.t+'">'+
+        (peIsBuyout(e)?'&#9679; ':'')+'<b>'+name+'</b>'+
+        (bits.length?'<div class="meta">'+bits.join(' &middot; ')+'</div>':'')+
+        (withMoney && v ? '<div class="meta">AED '+peMoney(v)+'</div>' : '')+'</div>';
+    }).join('');
+    h += cell(inner, ((M.startDow+d-1)%7)>=5 ? 'we' : '');
+    col++;
+  }
+  while(col<7){ h += cell('', 'off'); col++; }
+  h += '</tr></tbody></table></div>';
+  h += '<div class="cal-key">'+[['sent','Proposal sent'],['confirmed','Confirmed'],['deposit','Deposit paid'],
+        ['draft','Draft'],['done','Done'],['lost','Lost']].map(function(l){
+    var c = PE_STATUS_COL[l[0]];
+    return '<span><i style="background:'+c.bg+';border-color:'+c.b+'"></i>'+l[1]+'</span>';
+  }).join('')+'<span class="pr">Printed '+peEsc(peDLabel(today))+'</span></div>';
+
+  var css =
+    '@page{size:A4 landscape;margin:0}'+
+    'html,body{height:100%}'+
+    'body{margin:0;padding:9mm 11mm;max-width:none;height:100%;box-sizing:border-box;display:flex;flex-direction:column;'+
+      '-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.brand{text-align:center;margin:0 0 2mm}.brand img{width:38mm;height:auto}'+
+    '.cal-h{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15pt;color:#450207;letter-spacing:1px}'+
+    '.cal-sub{text-align:center;font-size:8pt;color:#8A6A4F;margin-top:1mm}'+
+    '.calwrap{flex:1 1 auto;min-height:0;display:flex}'+
+    'table.cal{width:100%;height:100%;border-collapse:collapse;table-layout:fixed;margin-top:3mm}'+
+    'table.cal th{font-size:7.5pt;letter-spacing:2px;text-transform:uppercase;color:#B99C03;padding:0 0 2mm;font-weight:normal;border:0}'+
+    'table.cal td{border:1px solid #E3D5C2;vertical-align:top;padding:1.3mm;overflow:hidden}'+
+    'table.cal td.we{background:#FBF7F1}table.cal td.off{background:#F7F2E9;border-color:#EFE7DA}'+
+    '.dnum{font-size:8pt;color:#9A7D68;text-align:right;line-height:1}'+
+    '.dnum.now{color:#450207;font-weight:700}'+
+    '.ev{border:1px solid;border-radius:3px;padding:1mm 1.4mm;margin-top:1.2mm;font-size:7.5pt;line-height:1.3;'+
+      'font-family:\'Outfit\',Arial,sans-serif;break-inside:avoid}'+
+    '.ev.held{background:transparent;border-style:dashed;color:#8A6A4F}'+
+    '.ev .meta{font-size:6.5pt;opacity:.8;margin-top:.4mm}'+
+    '.cal-key{flex:0 0 auto;margin-top:3mm;display:flex;flex-wrap:wrap;gap:2mm 6mm;align-items:center;font-size:7pt;color:#8A6A4F;'+
+      'font-family:\'Outfit\',Arial,sans-serif}'+
+    '.cal-key i{display:inline-block;width:3mm;height:3mm;border-radius:1mm;border:1px solid;margin-right:1.5mm;vertical-align:-.4mm}'+
+    '.cal-key .pr{margin-left:auto;color:#9A7D68}';
+  pePrintHTML(peDocShell(M.mLbl+' — Roberto\'s events', h, css));
+}
+function peRenderCalendar(){
+  if(!peState.month) peState.month = peMonthKey(peToday());
+  var mk = peState.month;
+  var M = peCalMonthMap(mk);
+  var y=M.y, mo=M.mo, first=M.first, startDow=M.startDow, days=M.days, byDate=M.byDate;
+  var mLbl=M.mLbl, monthCount=M.monthCount, heldCount=M.heldCount, mConv=M.mConv, mPipe=M.mPipe;
   var h = peHeader('calendar');
   h += '<div style="margin-bottom:12px"><div class="pe-title">Calendar</div>'+
     '<div style="font-size:12px;color:#8B7355">Every booking on the day it lands. Tap one to open it.</div></div>';
@@ -1595,6 +1683,14 @@ function peRenderCalendar(){
          (mConv?' &middot; AED '+peMoney(mConv)+' converted':'')+(mPipe?' &middot; '+peMoney(mPipe)+' in play':'')+'</div></div>'+
        '<span style="display:flex;gap:6px"><button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalToday()">Today</button>'+
        '<button class="pe-btn sec sm" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.5);color:var(--cream)" onclick="peCalShift(1)">Next ›</button></span></div>';
+  // Print the month. The money is a deliberate tick — a printed calendar is the
+  // one thing that gets pinned to a wall, and per-event value should not be
+  // sitting on it unless she has decided it should.
+  h += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">'+
+    '<button class="pe-btn sec sm" onclick="peCalPrint(document.getElementById(\'pe-cal-money\').checked)">Print this month</button>'+
+    '<label style="font-size:12px;color:#6E5844;display:flex;align-items:center;gap:6px">'+
+      '<input type="checkbox" id="pe-cal-money" style="accent-color:#400207">Include the money</label>'+
+    '<span style="font-size:11px;color:#9A7D68">Landscape A4 · names, guests, time and area</span></div>';
   // colour legend — a tidy card so the meaning of each colour is always in view
   var legend = [['sent','Proposal sent'],['confirmed','Confirmed'],['deposit','Deposit paid'],['draft','Draft'],['done','Done'],['lost','Lost']];
   h += '<div style="display:flex;flex-wrap:wrap;gap:7px 14px;background:#FBF7F1;border:1px solid rgba(107,31,42,0.14);border-radius:10px;padding:9px 13px;margin-bottom:12px;font-size:11.5px;color:#5A3A1E">'+legend.map(function(l){
