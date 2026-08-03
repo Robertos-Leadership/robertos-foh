@@ -5116,7 +5116,7 @@ function peCmOpen(key){
 // Price is OFF by default — a menu handed to a guest at the table is not a quote.
 // Allergens are not optional. The table is exactly where a guest reads them.
 function peTmState(){
-  if(!peState.tm) peState.tm = { key:'', eventId:'', name:true, price:false, desc:true, msg:'', size:'a4', layout:'full', title:'', edits:{} };
+  if(!peState.tm) peState.tm = { key:'', eventId:'', price:false, desc:true, msg:'', size:'a4', layout:'full', title:'', edits:{} };
   if(!peState.tm.edits) peState.tm.edits = {};
   return peState.tm;
 }
@@ -5169,10 +5169,10 @@ function peTmSheetHTML(editable){
   var ed = editable ? ' contenteditable="true"' : '';
   var used = {};
   var h = '<div class="tm-brand">'+peLogoImg(300)+'</div>';
-  if(t.name && e){
-    var who = [e.client_name || 'our guest', peDLabel(e.event_date)].filter(Boolean).join(' · ');
-    h += '<div class="tm-occ">Prepared for '+peEsc(who)+'</div>';
-  }
+  // No "Prepared for X · Tue 4 Aug" line (removed 3 Aug 2026). The guest knows
+  // whose dinner it is and what day it is; that line reads like a work order on
+  // something meant to sit on their table. The message field below is the only
+  // personal line, and it is hers to write.
   if(String(t.msg||'').trim()) h += '<div class="tm-msg">'+peEsc(t.msg.trim())+'</div>';
   // "Giambartolo — customised" is our internal name for the record. It must
   // never be what a guest reads, so the title is hers to write.
@@ -5207,7 +5207,6 @@ function peTmSheetHTML(editable){
 }
 function peTmCss(size){
   return '.tm-brand{text-align:center;margin:0 0 6px}'+
-    '.tm-occ{text-align:center;font-size:11.5px;color:#9A7D68;margin-top:10px}'+
     '.tm-msg{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#450207;margin-top:14px}'+
     '.tm-title{text-align:center;font-family:\'Forum\',Georgia,serif;font-size:15px;color:#8A6A4F;letter-spacing:1px;margin-top:12px}'+
     '.tm-price{text-align:center;font-size:12.5px;color:#8A6A4F;margin-top:5px}'+
@@ -5265,7 +5264,6 @@ function peRenderTableMenu(){
         peEsc(peTmMenu() ? peTmDefaultTitle(peTmMenu()) : 'e.g. Dinner Menu')+'">'+
       '<div style="font-size:11px;color:#8B7355;margin-top:4px">Leave it empty and we drop our own “— customised” from the name.</div>'+
       '<div class="pe-lbl" style="margin-top:12px">On the menu</div>'+
-      chk('name','Guest name &amp; date','from the booking')+
       chk('price','Price per person','off by default — this is not a quote')+
       chk('desc','Dish descriptions')+
       chk('allg','Allergen codes','always printed — the table is where a guest reads them', true)+
