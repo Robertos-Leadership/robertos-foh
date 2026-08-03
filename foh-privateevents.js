@@ -5688,9 +5688,9 @@ function peSmDraftFrom(courses){
     return { name:(c.name||''), choose:!!c.choose, lines:((c.choose?(c.options||[]):(c.items||[]))||[]).slice(), desc:(c.desc||null), allg:(c.allg||null) };
   });
 }
-function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
-function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
-function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmNew(){ peState.editSetMenuId='new'; peState.smDraft=[{name:'',choose:false,lines:[]}]; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmEdit(id){ var m=peNormSM(peSmRawById(id)); peState.editSetMenuId=id; peState.smDraft=peSmDraftFrom(m&&m.courses); peState.smName=(m&&m.name)||''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
+function peSmCancel(){ peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false; peState.smCost=null; peState.smPrice=null; renderMain(); }
 // ── chef uploads the designed menu PDF ───────────────────────────────────────
 // One upload does two jobs: the text is read out and laid into courses by the
 // same "Structure it" flow the paste box uses, and the file itself is stored
@@ -5745,6 +5745,7 @@ async function peSmPdfUpload(input){
     peToast('Menu text read ✓ — but the PDF could not be attached (needs event-menus-bucket.sql). '+String(err2&&err2.message||'').slice(0,60), true);
   }
   peState.smText = text;
+  peState.smBrandDoc = false;   // a designed PDF wins over the house template
   peState.smBusy = false;
   renderMain();
   await peStructureMenu();
@@ -5753,6 +5754,81 @@ async function peSmPdfUpload(input){
     renderMain();
   }
   if(peState.smPdf) peToast('PDF attached ✓ — check the courses below, then save');
+}
+// ── chef uploads a Word menu ─────────────────────────────────────────────────
+// Most menus are written in Word long before anyone designs a PDF. A .docx has
+// no designed artwork to attach, so the app does that half itself: it reads the
+// courses out of the document and then publishes the menu on the house guest
+// template (client-setmenu.html — the same wordmark, gold course headings and
+// footer as every other document we send). The guest still gets a "View the
+// full menu" button; it just opens a Roberto's-branded page instead of a file,
+// and it stays correct when the chef edits a dish later.
+function peLoadJsZip(){
+  return new Promise(function(res, rej){
+    if(window.JSZip) return res(window.JSZip);
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = function(){ window.JSZip ? res(window.JSZip) : rej(new Error('the Word reader did not start')); };
+    s.onerror = function(){ rej(new Error('the Word reader could not load — check the connection')); };
+    document.head.appendChild(s);
+  });
+}
+function peXmlDecode(s){
+  return String(s==null?'':s)
+    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+    .replace(/&#x([0-9a-f]+);/gi, function(_,h){ return String.fromCharCode(parseInt(h,16)); })
+    .replace(/&#(\d+);/g, function(_,d){ return String.fromCharCode(parseInt(d,10)); })
+    .replace(/&amp;/g,'&');
+}
+// A .docx is a zip; word/document.xml holds the text. One <w:p> is one line —
+// which is also one table cell, so a menu laid out in a Word table still reads
+// out course by course. Tracked deletions are <w:delText> and never <w:t>, so
+// text the chef struck through is correctly left out.
+function peDocxToText(xml){
+  var out = [];
+  String(xml||'').split(/<\/w:p>/).forEach(function(p){
+    p = p.replace(/<w:(?:tab|br)\s*\/>/g, '<w:t> </w:t>');
+    var line = '', re = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g, m;
+    while((m = re.exec(p))) line += peXmlDecode(m[1]);
+    line = line.replace(/\s+/g,' ').trim();
+    if(line) out.push(line);
+  });
+  return out.join('\n').trim();
+}
+async function peSmDocxText(file){
+  var JSZipLib = await peLoadJsZip();
+  var zip = await JSZipLib.loadAsync(await file.arrayBuffer());
+  var entry = zip.file('word/document.xml');
+  if(!entry) throw new Error('this is not a Word document');
+  return peDocxToText(await entry.async('string'));
+}
+async function peSmDocUpload(input){
+  var f = input.files && input.files[0]; if(!f) return;
+  input.value = '';
+  var nm = f.name || '';
+  if(/\.doc$/i.test(nm)){ peToast('That is the older .doc format — open it in Word, “Save as” .docx, then upload again', true); return; }
+  if(!/\.(docx|dotx)$/i.test(nm)){ peToast('That file is not a Word document — upload a .docx', true); return; }
+  if(f.size > 8*1024*1024){ peToast('The Word file is over 8 MB — remove the images and try again', true); return; }
+  peSmSync(); peState.smBusy = true; renderMain();
+  var text = '';
+  try{ text = await peSmDocxText(f); }
+  catch(err){
+    peState.smBusy = false; renderMain();
+    peToast('Could not read the Word file — paste the menu text instead. '+String(err&&err.message||'').slice(0,60), true);
+    return;
+  }
+  if(!text){ peState.smBusy = false; renderMain(); peToast('That Word file has no readable text (the menu may be a picture) — paste the menu text instead', true); return; }
+  peState.smText = text;
+  peState.smPdf = null;        // no designed artwork came with a Word file…
+  peState.smBrandDoc = true;   // …so on save we publish it on the house template
+  peState.smBusy = false;
+  renderMain();
+  await peStructureMenu();
+  if(!(peState.smName||'').trim()){
+    peState.smName = nm.replace(/\.(docx|dotx)$/i,'').replace(/[_-]+/g,' ').trim();
+    renderMain();
+  }
+  peToast('Word menu read ✓ — check the courses below, then save and guests get it on the Roberto’s template');
 }
 // Read the live form back into state before any structural re-render so typing
 // is never lost when a course is added/removed.
@@ -5866,9 +5942,14 @@ function peRenderSetMenuLib(){
         '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
           '<label class="pe-btn sec sm" style="cursor:pointer">'+(peState.smBusy?'Reading…':'…or upload the menu PDF')+
             '<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="peSmPdfUpload(this)"'+(peState.smBusy?' disabled':'')+'></label>'+
-          '<span style="font-size:11px;color:#8B7355">'+(peState.smPdf
+          '<label class="pe-btn sec sm" style="cursor:pointer">'+(peState.smBusy?'Reading…':'…or a Word file')+
+            '<input type="file" accept=".docx,.dotx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="peSmDocUpload(this)"'+(peState.smBusy?' disabled':'')+'></label>'+
+          '<span style="font-size:11px;color:#8B7355;flex-basis:100%">'+(peState.smPdf
             ? 'PDF attached ✓ — guests get a “View the full menu” button'
-            : (raw&&raw.pdf ? 'this menu already has a PDF — uploading replaces it' : 'reads the courses AND attaches the designed PDF for guests'))+'</span></div>'+
+            : peState.smBrandDoc
+              ? 'Word read ✓ — guests get this menu laid out on the Roberto’s template'
+              : (raw&&raw.pdf ? 'this menu already has a guest menu — uploading either file replaces it'
+                              : 'PDF: reads the courses and attaches your designed menu. Word: reads the courses and lays the menu out on the Roberto’s template for guests.'))+'</span></div>'+
       '</div>'+
       '<div class="pe-lbl" style="margin-top:12px">Courses</div>'+
       (peState.smDraft||[]).map(function(c,i){ return peSmCourseHTML(c,i); }).join('')+
@@ -5926,6 +6007,11 @@ async function peSaveSetMenu(id){
   var ce2 = document.getElementById('pe-sm-cost');
   if(ce2){ var cv = ce2.value.trim(); row.cost_pp = cv===''?null:Number(cv); }
   if(peState.smPdf) row.pdf = peState.smPdf;  // a fresh upload replaces the PDF; otherwise the existing one stays
+  // A Word menu has no designed file to attach, so the guest's "View the full
+  // menu" button points at the house template instead — same wordmark, course
+  // headings, allergens and footer as every other document we send, and it
+  // re-reads the courses so an edit here reaches the guest.
+  else if(peState.smBrandDoc) row.pdf = 'client-setmenu.html?m='+encodeURIComponent(row.key);
   if(!id) row.created_by=peActor();
   var r = id ? await sb.from('event_set_menus').update(row).eq('id', id).select().single()
              : await sb.from('event_set_menus').insert(row).select().single();
@@ -5940,7 +6026,7 @@ async function peSaveSetMenu(id){
   if(r.error || !r.data){ peToast('Set menu NOT saved — '+String(r.error&&r.error.message||'').slice(0,110), true); return; }
   if(id){ peState.setMenus = peState.setMenus.map(function(m){ return m.id===id ? r.data : m; }); }
   else { if(!Array.isArray(peState.setMenus)) peState.setMenus=[]; peState.setMenus.push(r.data); }
-  peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null;
+  peState.editSetMenuId=null; peState.smDraft=null; peState.smName=''; peState.smText=''; peState.smPdf=null; peState.smBrandDoc=false;
   peToast(priceVal!=null ? 'Set menu saved ✓ — ready for the events desk' : 'Set menu saved ✓ — Valentina sets the price before it can be quoted');
   renderMain();
 }

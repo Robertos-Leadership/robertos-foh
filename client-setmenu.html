@@ -43,6 +43,17 @@
   .msg{text-align:center;padding:60px 24px;font-size:14px;color:var(--ink-mid)}
   .flash{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:50;max-width:460px;width:calc(100% - 28px);background:var(--vino);color:var(--page);border-radius:10px;padding:11px 14px;font-family:var(--font-body);font-size:13px;box-shadow:0 6px 22px rgba(44,24,16,.3);text-align:center}
   .nm,.dish,.sect-h,.cath,.h2,.total,.sub{font-family:var(--font-display)}
+  .save{display:block;margin:0 auto;background:none;border:1px solid var(--line);color:var(--vino);border-radius:20px;padding:9px 22px;font-family:var(--font-display);font-size:12.5px;letter-spacing:1px;cursor:pointer}
+  /* A menu the app laid out from a Word file has no designed PDF behind it, so
+     this page IS the document — it has to print like one. */
+  @page{size:A4;margin:16mm}
+  @media print{
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    .card{border:none;border-radius:0}
+    .noprint{display:none!important}
+    .sect{break-inside:avoid;page-break-inside:avoid}
+  }
 </style>
 </head>
 <body>
@@ -138,7 +149,8 @@ function render(){
           return '<div class="shared" style="text-align:center">'+esc(o)+'<span class="ds">'+dishLine(c,o)+'</span></div>';
         }).join('')+'</div>';
     });
-    h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
+    h += '<div class="btnrow"><button class="save noprint" onclick="window.print()">Save or print this menu</button>'+
+      '<div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
       '<a href="mailto:reservations@robertos.ae" style="color:var(--vino)">reservations@robertos.ae</a>.<br><br>'+
       (priceLine ? 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>' : '')+
       'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
