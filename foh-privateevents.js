@@ -33,6 +33,9 @@ var peState = {
   editSetMenuId:null, smDraft:null, smName:'', smText:'', smBusy:false
 };
 
+// Who the event brief goes to. The live list lives in app_users.notify ('event_brief')
+// and is managed on Admin → Emails, so it changes without a deploy. This array is the
+// FALLBACK only — used if that read returns nobody, so the brief can never go to no one.
 var PE_TEAM_CC = ['fguarracino@robertos.ae','vdetoni@robertos.ae','dvalla@robertos.ae','jthomas@robertos.ae','mpetrosino@robertos.ae','astellacci@robertos.ae','afalcone@robertos.ae','rmazouz@robertos.ae','reservations@robertos.ae','aviscardi@robertos.ae','kvukotic@robertos.ae','ahtwe@robertos.ae','asacchi@skelmore.com','amahmoud@skelmore.com'];
 var PE_TARGETS = {
   cells: {'Vegetarian|Cold':7,'Fish|Cold':7,'Beef|Cold':6,'Vegetarian|Hot':7,'Fish|Hot':6,'Beef|Hot':7,'Dessert|Dessert':5},
@@ -4049,6 +4052,26 @@ function peRcpAdd(){
   var b = bg.querySelector('#pe-rcp-send'); var n = bg.querySelectorAll('.pe-rcp:checked').length;
   b.textContent = 'Send to '+n+' '+(n===1?'person':'people'); b.disabled = !n;
 }
+// The brief's recipient list, read live from Admin -> Emails (app_users.notify).
+// It goes through the fn_notify_list RPC because RLS only lets a person read their
+// OWN app_users row unless they're an admin — a plain select here would show Valentina
+// one name and quietly send to the wrong team. Anything unexpected (RPC not there yet,
+// network, empty list) falls back to PE_TEAM_CC: a brief that reaches the old standard
+// team is recoverable, one that reaches nobody is not.
+async function peBriefTeam(){
+  try{
+    var r = await sb.rpc('fn_notify_list', {p_key:'event_brief'});
+    if(r.error) throw r.error;
+    var rows = r.data || [];
+    var emails = rows.map(function(x){ return String(x.email||'').trim(); })
+                     .filter(function(x){ return x.indexOf('@')>0; });
+    if(!emails.length) return PE_TEAM_CC.slice();
+    // Names come from the same rows, so the picker reads like people even for someone
+    // added on the Emails screen today and never listed in PE_PEOPLE.
+    rows.forEach(function(x){ if(x.email && x.name) PE_PEOPLE[x.email]=x.name; });
+    return emails;
+  }catch(err){ return PE_TEAM_CC.slice(); }
+}
 async function peSendCoordEmail(id){
   if(!peCanEdit()){ peToast('View only — ask Valentina, Andrea or Francesco to make changes', true); return; }
   var e = peEvById(id); if(!e) return;
@@ -4058,7 +4081,7 @@ async function peSendCoordEmail(id){
   if(!e.event_date) missing.push('the date');
   if(!e.guests) missing.push('the guest count');
   if(missing.length && !(await peConfirm({title:'Some basics are missing', html:'This event is still missing <b>'+peEsc(missing.join(', '))+'</b>.<br><br>Send the brief to the team anyway?', ok:'Send anyway', cancel:'Go back', danger:true}))) return;
-  var standard = (state.userEmail?[state.userEmail]:[]).concat(PE_TEAM_CC);
+  var standard = (state.userEmail?[state.userEmail]:[]).concat(await peBriefTeam());
   standard = standard.filter(function(x,i){ return standard.indexOf(x)===i; });
   pePickRecipients({
     title:'Send the event brief', subtitle:(e.client_name||'Event')+' · '+peDLabel(e.event_date),

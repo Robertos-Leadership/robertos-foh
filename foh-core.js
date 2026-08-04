@@ -618,6 +618,7 @@ var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{
 // so adding someone takes effect on the next send with no deploy.
 var ADMIN_NOTIFY=[
   {k:'closing_report',n:'Closing-report email'},
+  {k:'event_brief',   n:'Event brief to the team'},
   {k:'roster_foh',    n:'FOH roster to HR'},
   {k:'roster_kitchen',n:'Kitchen roster to HR'}
 ];
@@ -1068,6 +1069,11 @@ var ADM_MAIL_ABOUT={
   closing_report:{
     when:'Every night after the closing report is completed.',
     note:'Everyone here receives the full report.'
+  },
+  event_brief:{
+    when:'When someone presses “Send the team brief” on a private event.',
+    note:'The FOH and kitchen team who run the event. The sender is always included and can '
+        +'still leave anyone out for one particular event before pressing send.'
   },
   roster_foh:{
     when:'When someone presses “Send to HR” on the FOH schedule.',
