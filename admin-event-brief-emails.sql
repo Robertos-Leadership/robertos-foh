@@ -25,8 +25,13 @@ as $$
   order by u.name nulls last, u.email
 $$;
 
-revoke all on function public.fn_notify_list(text) from public;
-grant execute on function public.fn_notify_list(text) to authenticated;
+-- ⚠ `revoke from public` is NOT enough. This project grants EXECUTE on new public
+--   functions to anon/authenticated/service_role by default, and those are named
+--   grants that `from public` does not touch — leaving the list readable by anyone
+--   with the anon key, signed in or not. anon must be revoked BY NAME.
+revoke all     on function public.fn_notify_list(text) from public;
+revoke execute on function public.fn_notify_list(text) from anon;
+grant  execute on function public.fn_notify_list(text) to authenticated;
 
 -- 2. The one recipient who has no row yet.
 --    Receive-only: no modules, not an admin — it grants no access at all,
