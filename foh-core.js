@@ -1601,6 +1601,23 @@ async function admFbFetchAll(){
   }
   return { data:all, error:null };
 }
+// The INBOX — what the team sent unprompted, through the "Tell us" button in
+// EITHER app. Paged the same way and for the same reason: a flat cap is how
+// this platform has lost rows three times, and this is the one table that only
+// ever grows. See foh-app-feedback-inbox.sql and feedback-button.js.
+async function admFbInboxFetchAll(){
+  var all=[], from=0, PAGE=1000;
+  for(;;){
+    var r=await sb.from('app_feedback_inbox').select('id,app,screen,kind,body,who,build,device,created_at')
+      .order('created_at',{ascending:false}).range(from, from+PAGE-1);
+    if(r.error) return { data:null, error:r.error };
+    var rows=r.data||[];
+    all=all.concat(rows);
+    if(rows.length<PAGE) break;
+    from+=PAGE;
+  }
+  return { data:all, error:null };
+}
 async function admFbLoad(){
   state.fbRows=null; state.fbErr=null;
   if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
@@ -1609,6 +1626,15 @@ async function admFbLoad(){
     if(r.error) throw r.error;
     state.fbRows=r.data||[];
   }catch(err){ state.fbErr=(err&&err.message)||'Could not load the feedback.'; }
+  // The inbox is its own lane and its own failure. A missing table here (the
+  // SQL not run yet) must never take the rounds down with it — the same rule
+  // the work state and the send log already follow below.
+  state.fbInbox=null; state.fbInboxErr=null;
+  try{
+    var ib=await admFbInboxFetchAll();
+    if(ib.error) throw ib.error;
+    state.fbInbox=ib.data||[];
+  }catch(err){ state.fbInboxErr=(err&&err.message)||'Could not load the inbox.'; }
   // The work state and the send log are EXTRAS: if foh-app-feedback-status.sql
   // has not been run, the replies above still render exactly as they always did.
   // A missing table must never take the answers down with it.
@@ -1717,6 +1743,32 @@ async function admFbSaveWork(row){
 // One item's part of a brief. Shared by the single-item and the many-item
 // versions so they can never drift into describing the same work differently.
 function admFbBriefBlock(topic, qkey, n){
+  // An inbox item briefs from what they actually wrote plus the context the app
+  // captured. Same shape as a round item's brief so a mixed batch reads as one
+  // document — and the verbatim rule matters more here, not less: this is the
+  // only description of the problem that exists.
+  if(topic==='inbox'){
+    var ib=admInboxRow(qkey);
+    if(!ib) return null;
+    var cur2=admFbWorkOf('inbox', qkey);
+    var head2 = n ? ('--- ' + n + '. ' + String(ib.body||'').replace(/\s+/g,' ').slice(0,80) + ' ---')
+                  : 'ITEM:  sent through the "Tell us" button';
+    var o=[ head2,
+      'SOURCE: the ' + (FB_APP_NAME[ib.app]||ib.app) + ' app, ' + (ib.kind==='problem'?'reported as a problem':'sent as an idea')
+        + '   (record the fix against inbox / ' + ib.id + ')',
+      '',
+      'WHAT THEY WROTE (verbatim — their words, their spelling):',
+      '  ' + String(ib.body||''),
+      '',
+      'WHO AND WHERE:',
+      '  ' + (ib.who || 'anonymous') + ' — on ' + (ib.screen || 'an unnamed screen')
+        + (ib.device?', '+ib.device:'') + (ib.build?', build '+ib.build:'') ];
+    if(cur2 && cur2.status){
+      o.push('', 'ALREADY RECORDED: ' + cur2.status + (cur2.build?' in build '+cur2.build:'')
+        + (cur2.what_changed?' — "'+cur2.what_changed+'"':''));
+    }
+    return o.join('\n');
+  }
   var round=FB_ROUNDS[topic];
   if(!round) return null;
   var it=round.items[fbKeyPos(round,qkey)];
@@ -2139,7 +2191,9 @@ function admFbBar(items){
 }
 function admFbPanelHTML(){
   var s=admFbSel(); if(!s) return '';
-  var round=FB_ROUNDS[s.topic], f=state.fbForm||{};
+  var isInbox = s.topic==='inbox';
+  var ib = isInbox ? admInboxRow(s.qkey) : null;
+  var round=isInbox?null:FB_ROUNDS[s.topic], f=state.fbForm||{};
   var it=round ? round.items[fbKeyPos(round,s.qkey)] : null;
   var strip=function(x){ return String(x||''); };
   var lbl='font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;margin:15px 0 4px;';
@@ -2149,7 +2203,7 @@ function admFbPanelHTML(){
   // Everyone who flagged it, and what they wrote.
   var says=[];
   (state.fbRows||[]).forEach(function(r){
-    if(r.topic!==s.topic) return;
+    if(isInbox || r.topic!==s.topic) return;
     var a=(r.answers||{})[s.qkey];
     if(!a||!a.a||!FB_WORK_ANSWERS[a.a]) return;
     says.push({who:r.who||'someone', a:a.a, note:a.note});
@@ -2159,6 +2213,32 @@ function admFbPanelHTML(){
   // top:12px the panel slid UNDER it and the item's title and close button were
   // hidden behind the nav. max-height + overflow keep a long panel on screen
   // and scrolling inside itself instead of running off the bottom.
+  // ── An inbox item ──
+  // The panel's whole top half is "what we asked and what they answered". An
+  // inbox item has no question: their sentence IS the item, so it becomes the
+  // title, and the context the app captured (which screen, which app, which
+  // build, which device) takes the place of the round's framing. Everything
+  // below — the state, the evidence, Save — is the same code, on purpose.
+  if(isInbox){
+    if(!ib) return '<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;">'
+      +'<div style="font-size:13px;color:#9c8a72;">That message is not in the list any more. <button class="btn btn-sm" style="'+FB_NOSHOUT+'" onclick="admFbClose()">Close</button></div></div>';
+    var meta=[ (FB_APP_NAME[ib.app]||ib.app||'—')+' app', ib.screen||null, ib.device||null,
+               ib.build?('build '+ib.build):null, admUsageAgo(ib.created_at) ].filter(Boolean);
+    var hi='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
+      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+        +'<div><div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;">'
+        + (ib.kind==='problem'?'Something&rsquo;s wrong':'An idea') +' &middot; '+admEsc(ib.who||'Anonymous')+'</div>'
+        +'<h3 style="font-size:15.5px;color:#400207;margin:5px 0 0;font-weight:600;line-height:1.45;white-space:pre-wrap;">'+admEsc(ib.body)+'</h3></div>'
+        +'<button class="btn btn-sm" style="background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbClose()" aria-label="Close">&#10005;</button>'
+      +'</div>'
+      +'<div style="'+lbl+'">Where they were</div>'
+      +'<div style="font-size:12.5px;color:#4a3b2a;line-height:1.6;">'+admEsc(meta.join(' · '))+'</div>';
+    if(!ib.who){
+      hi+='<div style="'+hint+'">Sent without a name, so there is nobody to tell when it&rsquo;s fixed &mdash; and no status link. That was their choice to make.</div>';
+    }
+    return hi + admFbStateFormHTML(s, f, lbl, inp, hint);
+  }
+
   var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
     +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
       +'<div><div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;">'+admEsc(admFbTopicName(s.topic))+' &middot; item '+admEsc(admFbItemNo(s.topic,s.qkey))+'</div>'
@@ -2231,7 +2311,16 @@ function admFbPanelHTML(){
       +'</div>';
   }
 
-  // ── Where it has got to ──
+  return h + admFbStateFormHTML(s, f, lbl, inp, hint);
+}
+// ── Where it has got to, and the evidence ───────────────────────────────────
+// ONE copy, used by a round item and an inbox item alike. Two copies would mean
+// two definitions of what counts as proof, and the one that drifted would be
+// the one quietly accepting a tick again.
+// Returns the state block AND the panel's closing </div> — its callers open the
+// panel, this closes it.
+function admFbStateFormHTML(s, f, lbl, inp, hint){
+  var h='';
   var seg='display:flex;border:1.5px solid #e3d5c2;border-radius:8px;overflow:hidden;';
   var noshout='text-transform:none;letter-spacing:0;';
   var on='background:#400207;color:#E8D9C7;', off='background:#fbf7f1;color:#9c8a72;';
@@ -2281,9 +2370,167 @@ function admFbPanelHTML(){
   h+='</div></div>';
   return h;
 }
+/* ── THE INBOX ───────────────────────────────────────────────────────────────
+   Two lanes, one screen. ROUNDS is the push loop: he writes a round and asks.
+   INBOX is the pull lane: the team press "Tell us" in either app, whenever they
+   like, and it lands here.
+
+   They are deliberately NOT two screens. The whole reason this sits inside
+   Admin → Feedback is that a second screen is a second habit, and the one he
+   opened less often would be the one going unread — which is precisely how a
+   feedback button dies.
+
+   An inbox item's work state is an ordinary app_feedback_work row with
+   topic='inbox' and qkey=<the row's id>. So "fixed, with what changed, which
+   build and how to check it" — and the database constraint that refuses a bare
+   tick — apply here exactly as they do to a round item, with no second state
+   machine to keep in step. admFbStateOf / admFbWorkOf / admFbSaveForm all work
+   on an inbox item untouched.
+   ────────────────────────────────────────────────────────────────────────── */
+function admFbLane(){ return state.fbLane==='inbox' ? 'inbox' : 'rounds'; }
+function admFbSetLane(l){ state.fbLane=l; state.fbSel=null; state.fbForm=null; renderMain(); }
+// How many inbox items still need him. Read by the lane toggle so a new message
+// is visible from the Rounds lane — otherwise the only way to find out that
+// somebody wrote to you is to go and look, which is how you stop looking.
+function admFbInboxOpenCount(){
+  var n=0;
+  (state.fbInbox||[]).forEach(function(r){ var st=admFbStateOf('inbox', r.id); if(st==='open'||st==='prog') n++; });
+  return n;
+}
+function admFbLaneHTML(){
+  var lane=admFbLane(), waiting=admFbInboxOpenCount();
+  var seg='display:inline-flex;border:1px solid #e3d5c2;border-radius:9px;overflow:hidden;margin-bottom:2px;';
+  var mk=function(k,label,badge){
+    var on=lane===k;
+    return '<button class="btn btn-sm" style="border:0;border-radius:0;'+FB_NOSHOUT
+      + (on?'background:#400207;color:#E8D9C7;':'background:#fff;color:#6b5a45;')
+      + '" onclick="admFbSetLane(\''+k+'\')">'+label
+      + (badge?'<span style="margin-left:6px;font-size:10.5px;padding:1px 7px;border-radius:10px;background:'+(on?'rgba(232,217,199,.22)':'#F7DED9')+';color:'+(on?'#E8D9C7':'#8A2A1A')+';">'+badge+'</span>':'')
+      +'</button>';
+  };
+  return '<div style="'+seg+'">'
+    + mk('rounds','Rounds &mdash; what you asked','')
+    + mk('inbox','Inbox &mdash; what they sent', waiting||'')
+    +'</div>';
+}
+var FB_APP_NAME={ kitchen:'Kitchen', foh:'FOH' };
+function admInboxRowHTML(r){
+  var sel=admFbSel(), isSel = sel && sel.topic==='inbox' && String(sel.qkey)===String(r.id);
+  var st=admFbStateOf('inbox', r.id);
+  var app=FB_APP_NAME[r.app]||r.app||'—';
+  var line=String(r.body||'').replace(/\s+/g,' ');
+  return '<div style="display:flex;align-items:center;border-bottom:1px solid #f6efe4;background:'+(isSel?'#fbf7f1':'transparent')+';">'
+    +'<button style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 14px;cursor:pointer;font-family:inherit;" onclick="admFbOpen(\'inbox\',\''+admEsc(r.id)+'\')">'
+    +'<span style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[st]+';"></span>'
+    // The kind is a single character's worth of meaning; a coloured word for it
+    // would compete with the state colour already down the left.
+    +'<span style="font-size:11px;color:'+(r.kind==='problem'?'#8A2A1A':'#12456E')+';white-space:nowrap;flex:none;">'+(r.kind==='problem'?'wrong':'idea')+'</span>'
+    +'<span style="flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+admEsc(line)+'</span>'
+    +'<span style="font-size:11.5px;color:#9c8a72;white-space:nowrap;flex:none;">'+admEsc((r.who||'Anonymous').split(' ')[0])+' &middot; '+admEsc(app)+'</span>'
+    +'<span style="font-size:11.5px;white-space:nowrap;flex:none;color:'+(st==='ok'?'#2E6B34':(st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel('inbox',r.id,true)+'</span>'
+    +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
+    +'</button></div>';
+}
+function admInboxHTML(){
+  var h='<div class="adm-wrap">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
+      +'<div><h2 style="font-size:19px;color:#400207;margin:0;font-weight:600;">Feedback</h2></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
+      +'</div>'
+    +'</div>'
+    +'<div style="margin-top:10px;">'+admFbLaneHTML()+'</div>';
+
+  if(state.fbInboxErr){
+    return h+'<div class="ppl-empty" style="margin-top:14px;">Couldn&rsquo;t load the inbox &mdash; '+admEsc(state.fbInboxErr)
+      +'<br><br>If this is the first time, run <b>foh-app-feedback-inbox.sql</b> once in Supabase, then tap Refresh. '
+      +'Until it has run, the button in both apps says it could not send &mdash; it never pretends it worked.</div></div>';
+  }
+  if(!state.fbInbox) return h+'<div class="loading">Loading&hellip;</div></div>';
+
+  var rows=state.fbInbox.slice();
+  var counts={ok:0,ship:0,prog:0,open:0};
+  rows.forEach(function(r){ counts[admFbStateOf('inbox',r.id)]++; });
+  var total=rows.length, waiting=counts.open+counts.prog;
+
+  var truth = !total
+    ? 'Nothing sent yet. The button is bottom-right on every screen of both apps &mdash; theirs to press, no login.'
+    : (waiting
+        ? '<b>'+waiting+'</b> waiting on you &mdash; out of '+total+' the team have sent.'
+        : 'Nothing waiting on you. All '+total+' sorted.');
+  h+='<div style="font-size:12.5px;color:#9c8a72;margin-top:9px;">'+truth+'</div>';
+
+  if(!total){
+    return h+'<div class="ppl-empty" style="margin-top:14px;">Nothing in the inbox yet.</div></div>';
+  }
+
+  h+=admFbBar(rows.map(function(r){ return {st:admFbStateOf('inbox',r.id)}; })).html;
+
+  // Same filter vocabulary as the Rounds lane, so there is one set of words for
+  // one set of states across the whole screen.
+  var filter=state.fbInboxFilter || (counts.open ? 'open' : (counts.prog ? 'prog' : 'all'));
+  var appF=state.fbInboxApp || 'all';
+  var F=[['open','Needs you',counts.open],['prog','In progress',counts.prog],['all','Everything',total],['done','Done',counts.ok+counts.ship]];
+  h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">'
+    + F.map(function(f){
+        var on=filter===f[0];
+        return '<button class="btn btn-sm" style="border-radius:20px;'+FB_NOSHOUT+(on?'background:#400207;color:#E8D9C7;border-color:#400207;':'background:#fff;border:1px solid #e3d5c2;color:#6b5a45;')+'" onclick="admInboxSetFilter(\''+f[0]+'\')">'
+          + f[1]+' <b style="font-weight:400;opacity:.7;">'+f[2]+'</b></button>';
+      }).join('')
+    +'</div>';
+
+  // Which app it came from. Only on screen once both apps have actually sent
+  // something — a filter with one option is a control that teaches nothing.
+  var apps={}; rows.forEach(function(r){ apps[r.app||'?']=(apps[r.app||'?']||0)+1; });
+  var appKeys=Object.keys(apps);
+  if(appKeys.length>1){
+    h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;">'
+      + [['all','Both apps',total]].concat(appKeys.map(function(k){ return [k,(FB_APP_NAME[k]||k),apps[k]]; })).map(function(f){
+          var on=appF===f[0];
+          return '<button class="btn btn-sm" style="border-radius:20px;'+FB_NOSHOUT+'font-size:11.5px;'+(on?'background:#6b5a45;color:#fff;border-color:#6b5a45;':'background:#fff;border:1px solid #ede2d2;color:#8b7355;')+'" onclick="admInboxSetApp(\''+admEsc(f[0])+'\')">'
+            + admEsc(f[1])+' <b style="font-weight:400;opacity:.7;">'+f[2]+'</b></button>';
+        }).join('')
+      +'</div>';
+  }
+
+  var shown=rows.filter(function(r){
+    if(appF!=='all' && r.app!==appF) return false;
+    var st=admFbStateOf('inbox',r.id);
+    if(filter==='all') return true;
+    if(filter==='done') return st==='ok'||st==='ship';
+    return st===filter;
+  });
+
+  var list = shown.length
+    ? '<div style="border:1px solid #e8ddcd;border-radius:11px;background:#fff;overflow:hidden;margin-top:14px;">'+shown.map(admInboxRowHTML).join('')+'</div>'
+    : (filter==='open'||filter==='prog')
+      ? '<div style="background:#fff;border:1px solid #e8ddcd;border-radius:11px;padding:26px 20px;text-align:center;margin-top:16px;">'
+        +'<div style="font-size:15.5px;color:#400207;font-weight:600;">Nothing is waiting on you.</div>'
+        +'<div style="font-size:12.5px;color:#9c8a72;margin-top:6px;">All '+total+' sorted.</div></div>'
+      : '<div class="ppl-empty" style="padding:24px 8px;">Nothing here &mdash; try another filter.</div>';
+
+  var sel=admFbSel();
+  h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;margin-top:6px;" class="'+(sel?'fb-split':'')+'">'
+    +'<div id="fb-list">'+list+'</div>'
+    + (sel?admFbPanelHTML():'')
+    +'</div>';
+  return h+'</div>';
+}
+function admInboxSetFilter(f){ state.fbInboxFilter=f; state.fbSel=null; renderMain(); }
+function admInboxSetApp(a){ state.fbInboxApp=a; state.fbSel=null; renderMain(); }
+function admInboxRow(id){
+  var out=null;
+  (state.fbInbox||[]).forEach(function(r){ if(String(r.id)===String(id)) out=r; });
+  return out;
+}
+
 function admFbHTML(){
+  if(admFbLane()==='inbox') return admInboxHTML();
   var head='<div class="ppl-sum" style="margin:0;"></div>';
+  // The lane toggle comes BEFORE the failure, not after it: rounds being broken
+  // is no reason to lock him out of the inbox, which is a different table.
   if(state.fbErr) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2><button class="btn btn-sm" onclick="admFbLoad()">Refresh</button></div>'
+    +'<div style="margin-bottom:12px;">'+admFbLaneHTML()+'</div>'
     +'<div class="ppl-empty">Couldn&rsquo;t load the replies &mdash; '+admEsc(state.fbErr)+'<br><br>If this is the first time, run <b>foh-app-feedback.sql</b> once in Supabase, then tap Refresh.</div></div>';
   if(!state.fbRows) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2></div><div class="loading">Loading&hellip;</div></div>';
 
@@ -2364,6 +2611,7 @@ function admFbHTML(){
         +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
       +'</div>'
     +'</div>'
+    +'<div style="margin-top:10px;">'+admFbLaneHTML()+'</div>'
     + bar.html;
 
   if(!total && !state.fbRows.length){

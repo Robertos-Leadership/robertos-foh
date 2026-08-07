@@ -408,7 +408,7 @@ if ('serviceWorker' in navigator) {
      Loaded here, not with the foh-*.js at the foot of the body, because the
      inline Admin code below READS it rather than just calling into it. -->
 <script src="foh-rounds.js?v=20260731a"></script>
-<script src="foh-core.js?v=20260804a"></script>
+<script src="foh-core.js?v=20260807a"></script>
 <script src="foh-events.js?v=20260731a"></script>
 <script src="foh-privateevents.js?v=20260804a"></script>
 <script src="foh-revenue.js?v=20260727a"></script>
@@ -418,6 +418,68 @@ if ('serviceWorker' in navigator) {
 <script src="foh-reviews.js?v=20260801a"></script>
 <script src="foh-reservations.js?v=20260807a"></script>
 <script src="foh-resreports.js?v=20260801a"></script>
+
+<!-- "Tell us" — the button the team press when THEY have something to say.
+     The same file runs in the Kitchen app and both write to ONE inbox, read in
+     Admin → Feedback → Inbox. See the header of feedback-button.js.
+     Loaded last, and configured BEFORE it: it reads window.FB_INBOX on mount. -->
+<script>
+window.FB_INBOX = {
+  app: 'foh',
+  // #foh-nav is the fixed bottom bar on the public surface — the button sits
+  // above it there and drops back down everywhere else.
+  above: '#foh-nav',
+  build: function(){
+    var e = document.getElementById('foh-build');
+    var m = e && /build\s+([0-9A-Za-z.\-]+)/.exec(e.textContent || '');
+    return m ? m[1] : '';
+  },
+  // A name is optional in the sheet, but if they are signed in we already know
+  // it — asking a manager to type their own name into their own app is the kind
+  // of small insult that stops people using a button twice.
+  //
+  // A NAME, never the email. This used to fall back to state.userEmail, and on
+  // the public surface (where adminUsers is not loaded) that is exactly what it
+  // returned: "fguarracino@robertos.ae" sitting in a box labelled Your name.
+  // Not just ugly — `who` is what the status page matches on, so the item would
+  // be filed under an address and never line up with the same person's round
+  // answers, which are filed under their name. Blank is better than wrong: the
+  // field is optional and they can type it.
+  who: function(){
+    try {
+      var u = (typeof adminFind === 'function' && state.userEmail) ? adminFind(state.userEmail) : null;
+      return (u && u.name) || '';
+    } catch(e){ return ''; }
+  },
+  // Which screen they were standing on. Three surfaces share this page, so ask
+  // the DOM which one is actually showing rather than trusting one variable.
+  screen: function(){
+    try {
+      var vis = function(id){ var e=document.getElementById(id); return e && e.offsetParent !== null; };
+      if (vis('app')) {
+        var t = (typeof state === 'object' && state.currentTab) || '';
+        var NAME = { dashboard:'Leaders', revenue:'Revenue', operations:'Operations',
+                     stocktake:'Stock take', privateevents:'Private events', reviews:'Guest reviews',
+                     reservations:'Reservations', resreports:'Reservation reports', admin:'Admin' };
+        if (t === 'admin') return 'Admin → ' + ((state.adminView||'people').charAt(0).toUpperCase() + (state.adminView||'people').slice(1));
+        if (String(t).indexOf('event_') === 0) {
+          var ev = (state.events||[]).filter(function(x){ return 'event_'+x.id === t; })[0];
+          return 'Events — ' + ((ev && ev.name) || 'an event');
+        }
+        return NAME[t] || (document.getElementById('topbar-section')||{}).textContent || 'the app';
+      }
+      if (vis('landing')) return 'Manager landing';
+      if (vis('foh-public')) {
+        var on = document.querySelector('.foh-nav-btn.active');
+        var lab = on && on.querySelector('.foh-nav-label');
+        return 'Team — ' + ((lab && lab.textContent.trim()) || 'Home');
+      }
+    } catch(e){}
+    return '';
+  }
+};
+</script>
+<script src="feedback-button.js?v=20260807a"></script>
 
 <!-- FOH Schedule: PIN modal -->
 <div id="foh-sch-pin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center" onclick="fohSchedClosePin(event)">

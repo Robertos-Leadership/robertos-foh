@@ -185,10 +185,22 @@ function render(d){
     rows.push({ round:round, when:s.created_at, items:items });
   });
 
-  if(!rows.length){
+  // ── What they sent through the "Tell us" button ──
+  // Not part of a round, so there is no question and no answer to show: what
+  // they typed IS the item. Its state comes from the same app_feedback_work row
+  // a round item uses (topic 'inbox', qkey the row id), so "fixed" here has to
+  // carry the same evidence — there is no softer bar for these.
+  var inbox = [];
+  (d.inbox||[]).forEach(function(i){
+    var st = statusState('inbox', i.id, null, i.work, answerIn);
+    n[st.k]++;
+    inbox.push({ i:i, st:st });
+  });
+
+  if(!rows.length && !inbox.length){
     el('card').innerHTML = '<div class="brand">R O B E R T O ’ S</div>'
       + '<div class="sub">Where your feedback got to</div>'
-      + '<div class="msg">Nothing to show yet — once you send a round back, everything you flag appears here with where it has got to.</div>';
+      + '<div class="msg">Nothing to show yet — anything you send back, or send us with the “Tell us” button in the apps, appears here with where it has got to.</div>';
     return;
   }
 
@@ -230,6 +242,25 @@ function render(d){
     });
     h += '</div>';
   });
+
+  // Theirs, unprompted — kept as its own group and placed after the rounds, so
+  // it reads as "and these are the ones you brought us" rather than being mixed
+  // into a round they were asked to answer.
+  if(inbox.length){
+    h += '<div class="grp"><h3>What you told us</h3>'
+       + '<div class="when">sent with the “Tell us” button</div>';
+    inbox.forEach(function(x){
+      h += '<div class="it">'
+         + '<p class="lab">'+esc(x.i.body)+'</p>'
+         + '<div class="yousaid">'+esc(x.i.app === 'kitchen' ? 'Kitchen app' : 'FOH app')
+         + (x.i.screen ? ' · '+esc(x.i.screen) : '')+' · '+esc(ago(x.i.created_at))+'</div>'
+         + '<span class="st s-'+x.st.k+'">'+esc(x.st.t)+'</span>';
+      if(x.st.what) h += '<p class="what">'+esc(x.st.what)+'</p>';
+      if(x.st.check && x.st.k === 'live') h += '<div class="check"><b>Check it yourself:</b> '+esc(x.st.check)+'</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
 
   h += '<div class="ft">Roberto’s DIFC · this page updates itself — keep the link<br>Something wrong here? Message Francesco.</div>';
   el('card').innerHTML = h;
