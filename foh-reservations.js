@@ -284,11 +284,22 @@ function resPaintGuest(){
 }
 
 function resOpenGuest(id, time){
-  if(!id) return;
+  if(!id && !time) return;
   var list = (RES.data && RES.data.reservations) || [];
   // Match on time as well as id: a guest with two bookings tonight must open
   // the one whose row was actually tapped.
   RESG.row = null;
+  if(!id){
+    // No client record, but the table has a check on it — the panel opens on
+    // the booking alone so the order is still readable. Matched on time, which
+    // is all the row has to identify itself by. No history is fetched, and the
+    // panel simply shows tonight rather than an empty history frame.
+    for(var k=0;k<list.length;k++){ if(list[k].time === time && !list[k].client){ RESG.row = list[k]; break; } }
+    if(!RESG.row) return;
+    RESG.open = true; RESG.id = null; RESG.err = null; RESG.data = null; RESG.loading = false;
+    resPaintGuest();
+    return;
+  }
   for(var i=0;i<list.length;i++){
     if(list[i].client === id && (!time || list[i].time === time)){ RESG.row = list[i]; break; }
   }
@@ -399,6 +410,88 @@ function resVisitsHtml(g, money){
   return h.join('');
 }
 
+// ── WHAT THEY ORDERED ─────────────────────────────────────────────────────
+// The table's own Simphony check, line by line, on the booking a manager just
+// tapped. It rides on the day-sheet payload the book already holds, so opening
+// this costs no extra call and works the same on a phone on the floor.
+//
+// THE ONE THING THIS MUST NEVER DO IS SAY "NOTHING". SevenRooms links the
+// Simphony check on a delay — measured 7 Aug 2026: 6 Aug's 39 tickets were all
+// there by 05:49 the next morning, 2 Aug never posted one at all. So a booking
+// with no list has an unlinked check, not an empty one, and a manager reading
+// "no items" beside a table that has just eaten four courses would rightly stop
+// trusting the screen. The edge function sends null for that case and this says
+// the check hasn't come through — different words, different meaning.
+//
+// Prices follow the same rule as the spend column: hidden without Revenue
+// access. The dishes themselves are not money and stay, because knowing what
+// the table ate is the job of anyone standing in front of it.
+function resOrderHtml(row, money){
+  var items = (row && row.items) || null;
+  if(!Array.isArray(items) || !items.length){
+    // Only worth saying for a table that is actually here — a booking that
+    // hasn't arrived yet has no check to link, and printing a caveat on every
+    // upcoming row would be noise.
+    if(row && (row.state === 'seated' || row.state === 'completed')){
+      return '<div class="rg-ord"><div class="rg-ord-h">What they ordered</div>'
+        + '<div class="rg-ord-none">The check hasn’t come through from Simphony yet.</div></div>';
+    }
+    return '';
+  }
+  var h = ['<div class="rg-ord"><div class="rg-ord-h">What they ordered'
+    + (row.check_open ? '<span class="rg-ord-live">check still open</span>' : '')
+    + '</div>'];
+  var total = 0;
+  items.forEach(function(it){
+    // Simphony's price IS the line total — reconciled 7 Aug 2026 against checks
+    // 18979 / 18968 / 18974, which tie to the sum of their prices exactly.
+    // Multiplying it by the quantity put 983 on a 713 check. Do not multiply.
+    var line = Number(it.price)||0;
+    total += line;
+    h.push('<div class="rg-ord-i">');
+    h.push('<b>' + ((Number(it.qty)||1) > 1 ? resNum(it.qty) + '&times; ' : '') + resEsc(it.name) + '</b>');
+    // Three cases, and collapsing them cost a real number on the first pass.
+    // A zero-priced line is a real thing on the check — the bread basket, the
+    // Arabic coffee, a comp — so it reads "incl." rather than "AED 0", which a
+    // manager would take as a pricing error. But a DISCOUNT is also a check
+    // line and it is NEGATIVE ("20% DIFC Disc", -102.80 on the 6 Aug bar
+    // check): printing that as "incl." hides money coming off the bill, on the
+    // one screen a manager would use to check a bill. It shows as a minus.
+    h.push('<span>' + (money
+      ? (line > 0 ? resMoney(line)
+        : line < 0 ? '&minus;' + resMoney(-line)
+        : '<i>incl.</i>')
+      : '') + '</span>');
+    var sub = [];
+    if(it.mods && it.mods.length) sub.push(it.mods.join(', '));
+    if(it.note) sub.push(it.note);
+    if(sub.length) h.push('<em>' + resEsc(sub.join(' · ')) + '</em>');
+    h.push('</div>');
+  });
+  if(money && total > 0){
+    // The figure shown is the booking's own gross — the same number the spend
+    // column and every export in this module already print — so one booking can
+    // never carry two different check totals in one app. The item sum is the
+    // fallback only when the booking has no gross of its own.
+    var shown = resGrossOf(row) || total;
+    h.push('<div class="rg-ord-t"><b>Check</b><span>' + resMoney(shown) + '</span></div>');
+    // THE LINES DO NOT ALWAYS ADD UP TO THE CHECK, and pretending otherwise is
+    // how a manager ends up arguing with a guest. Measured 7 Aug 2026 over two
+    // real nights: 6 Aug, 30 of 37 tie exactly and the rest are off by -55, -25,
+    // -15, -10, -5, +60, +525; 5 Aug, 20 of 27 tie and the rest by -40, -15,
+    // -10, -5, +50, +60, +60. The big one is lines of 1,879 against a 1,354
+    // check — what a voided or transferred item looks like from here.
+    // The check figure above is the booking's own gross, the same number the
+    // rest of the module prints, so the total is never in doubt. This line only
+    // warns that the itemisation beneath it is not the whole story.
+    if(Math.abs(total - shown) > 0.5){
+      h.push('<div class="rg-ord-warn">These lines don’t add up to the check — items may have been moved or voided. Simphony has the final word.</div>');
+    }
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
 function resGuestHtml(){
   var row = RESG.row || {};
   var g = RESG.data;
@@ -406,7 +499,7 @@ function resGuestHtml(){
   var h = ['<div class="rg-card" role="dialog" aria-modal="true" aria-label="Guest history">'];
 
   h.push('<div class="rg-head">');
-  h.push('<div><div class="rg-kicker">Guest history &middot; SevenRooms</div>');
+  h.push('<div><div class="rg-kicker">'+(RESG.id?'Guest history':'This booking')+' &middot; SevenRooms</div>');
   h.push('<div class="rg-name">'+(row.vip?'<span class="res-vip">VIP</span> ':'')+resEsc(row.name||'Guest')+'</div></div>');
   h.push('<button class="rg-x" onclick="resCloseGuest()" aria-label="Close">&times;</button>');
   h.push('</div>');
@@ -418,6 +511,11 @@ function resGuestHtml(){
     + ((row.tables&&row.tables.length)?' &middot; table '+resEsc(row.tables.join(', ')):''));
   if(row.notes) h.push('<div class="rg-tonight-n">'+resEsc(row.notes)+'</div>');
   h.push('</div>');
+
+  // Their check sits directly under tonight's booking and above the lifetime
+  // history: a manager walking to a seated table wants what is on THAT table
+  // first. It needs no fetch — the day sheet already carries it.
+  h.push(resOrderHtml(row, money));
 
   if(RESG.loading){
     h.push('<div class="rg-load">Reading their history…</div>');
@@ -2146,7 +2244,12 @@ function renderReservations(){
           + '<div class="res-name">'+(r.vip?'<span class="res-vip" title="VIP">VIP</span> ':'')
               + (r.client
                   ? '<button class="res-guest-btn" onclick="resOpenGuest(\''+String(r.client).replace(/[^A-Za-z0-9_-]/g,'')+'\',\''+resEsc(r.time||'')+'\')" title="See this guest’s history">'+resEsc(r.name)+'</button>'
-                  : resEsc(r.name))
+                  // No client record, but a linked check — the tap is still
+                  // worth offering, because what the table ordered is on the
+                  // booking itself and needs no guest profile to read.
+                  : (r.items && r.items.length
+                      ? '<button class="res-guest-btn" onclick="resOpenGuest(\'\',\''+resEsc(r.time||'')+'\')" title="See what they ordered">'+resEsc(r.name)+'</button>'
+                      : resEsc(r.name)))
               + (r.phone_last4?'<i class="res-phone">••• '+resEsc(r.phone_last4)+'</i>':'')
               // The history line that used to sit here is now five real columns
               // (resHistCells) -- see the banded header above.
