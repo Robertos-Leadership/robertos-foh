@@ -1625,7 +1625,7 @@ async function admFbFetchAll(){
 async function admFbInboxFetchAll(){
   var all=[], from=0, PAGE=1000;
   for(;;){
-    var r=await sb.from('app_feedback_inbox').select('id,app,screen,kind,body,who,build,device,created_at')
+    var r=await sb.from('app_feedback_inbox').select('id,app,screen,kind,body,who,build,device,shot,created_at')
       .order('created_at',{ascending:false}).range(from, from+PAGE-1);
     if(r.error) return { data:null, error:r.error };
     var rows=r.data||[];
@@ -2250,6 +2250,16 @@ function admFbPanelHTML(){
       +'</div>'
       +'<div style="'+lbl+'">Where they were</div>'
       +'<div style="font-size:12.5px;color:#4a3b2a;line-height:1.6;">'+admEsc(meta.join(' · '))+'</div>';
+    // ── Their photo ──
+    // The bucket is private, so there is no URL to print: the image arrives only
+    // through a short-lived signed link this signed-in session mints. Fetched
+    // after the panel paints (admFbShotPaint) rather than blocking the render on
+    // a network call — the words are the point and must never wait on a picture.
+    if(ib.shot){
+      hi+='<div style="'+lbl+'">What they were looking at</div>'
+        +'<div id="fb-shot-box" style="font-size:12px;color:#9c8a72;">Loading the photo&hellip;</div>';
+      admFbShotPaint(ib.shot);
+    }
     if(!ib.who){
       hi+='<div style="'+hint+'">Sent without a name, so there is nobody to tell when it&rsquo;s fixed &mdash; and no status link. That was their choice to make.</div>';
     }
@@ -2460,6 +2470,10 @@ function admInboxRowHTML(r){
     // would compete with the state colour already down the left.
     +'<span style="font-size:11px;color:'+(r.kind==='problem'?'#8A2A1A':'#12456E')+';white-space:nowrap;flex:none;">'+(r.kind==='problem'?'wrong':'idea')+'</span>'
     +'<span style="flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+admEsc(line)+'</span>'
+    // A camera on the row, so a message that brought evidence is worth opening
+    // first. Not the photo itself — forty thumbnails would turn a work list into
+    // a gallery, and this screen is read at a glance.
+    + (r.shot?'<span title="Has a photo" style="font-size:12px;color:#9c8a72;flex:none;">&#128247;</span>':'')
     +'<span style="font-size:11.5px;color:#9c8a72;white-space:nowrap;flex:none;">'+admEsc((r.who||'Anonymous').split(' ')[0])+' &middot; '+admEsc(app)+'</span>'
     +'<span style="font-size:11.5px;white-space:nowrap;flex:none;color:'+(st==='ok'?'#2E6B34':(st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel('inbox',r.id,true)+'</span>'
     +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
@@ -2557,6 +2571,31 @@ function admInboxSetApp(a){ state.fbInboxApp=a; state.fbSel=null; renderMain(); 
 // sit in app_feedback_work forever, invisible and uncountable.
 // The message goes first — if the second call fails, what is left behind is a
 // stray work row, not a message we told him was gone and is not.
+// Mint a signed link for one message's photo and drop it into the panel. The
+// bucket is private on purpose (a photo can hold a roster, a guest name, a
+// payslip), so this is the ONLY way the image is reachable — and only for
+// someone already signed in to the app.
+async function admFbShotPaint(path){
+  setTimeout(async function(){
+    var box=document.getElementById('fb-shot-box'); if(!box) return;
+    try{
+      var r=await sb.storage.from('feedback-shots').createSignedUrl(path, 3600);
+      if(r.error) throw r.error;
+      var u=r.data && r.data.signedUrl;
+      if(!u) throw new Error('no link came back');
+      box=document.getElementById('fb-shot-box'); if(!box) return;   // panel may have closed while we waited
+      // Opens full size in a new tab: a screenshot of a spreadsheet is unreadable
+      // at panel width, and that is exactly the kind of thing they photograph.
+      box.innerHTML='<a href="'+admEsc(u)+'" target="_blank" rel="noopener" title="Open it full size">'
+        +'<img src="'+admEsc(u)+'" alt="What they were looking at" style="max-width:100%;border-radius:9px;border:1px solid #e3d5c2;display:block;">'
+        +'</a><div style="font-size:11px;color:#9c8a72;margin-top:5px;">Tap to open it full size. The link is temporary &mdash; the picture is not public.</div>';
+    }catch(err){
+      box=document.getElementById('fb-shot-box'); if(!box) return;
+      box.innerHTML='<span style="color:#8A2A1A;">Couldn&rsquo;t load the photo &mdash; '
+        +admEsc(String(err&&err.message||err).slice(0,80))+'</span>';
+    }
+  },0);
+}
 async function admInboxDelete(id){
   var r=admInboxRow(id);
   if(!r){ toast('That message is not in the list any more.', true); return; }
@@ -2570,6 +2609,10 @@ async function admInboxDelete(id){
     // trap this whole module was bitten by. Checked, not assumed.
     var w=await sb.from('app_feedback_work').delete().eq('topic','inbox').eq('qkey',String(id));
     if(w.error) throw w.error;
+    // And the photo, or the image outlives the words it belonged to in a bucket
+    // nobody ever looks in. Best-effort and last: the message is already gone, so
+    // a storage hiccup must not report the delete as failed when it succeeded.
+    if(r.shot){ try{ await sb.storage.from('feedback-shots').remove([r.shot]); }catch(e){} }
     toast('Deleted');
   }catch(err){
     var m=String(err&&err.message||err);
