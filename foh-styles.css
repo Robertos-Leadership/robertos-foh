@@ -522,6 +522,27 @@
     color: var(--gold-dim);
     margin-left: auto;
   }
+  /* -- PAUSED MODULE — shaded back, still openable. The card stays in place so
+     nobody wonders where it went; it just stops competing for attention. -- */
+  .module-card.module-paused {
+    opacity: 0.6;
+    filter: saturate(0.5);
+    box-shadow: 0 4px 12px rgba(74,21,32,0.08);
+  }
+  .module-card.module-paused:hover {
+    opacity: 0.82;
+    transform: none;
+    box-shadow: 0 6px 16px rgba(74,21,32,0.12);
+  }
+  .module-badge.module-badge-paused {
+    letter-spacing: 0.16em;
+    color: #F0E4D4;
+    background: rgba(0,0,0,0.26);
+    border: 1px solid rgba(240,228,212,0.4);
+    border-radius: 999px;
+    padding: 3px 9px;
+    flex-shrink: 0;
+  }
   @media (max-width: 640px) {
     .module-duo { gap: 10px; }
     .module-band { padding: 9px 12px; gap: 8px; }

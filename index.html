@@ -122,7 +122,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="foh-styles.css?v=20260807a">
+<link rel="stylesheet" href="foh-styles.css?v=20260807c">
 </head>
 <body>
 
@@ -277,6 +277,7 @@ if ('serviceWorker' in navigator) {
           <div class="module-band">
             <span class="module-ico"><span class="module-mono">A</span></span>
             <div class="module-name">Activations</div>
+            <span class="module-badge module-badge-paused" id="mod-paused-events" style="display:none">Paused</span>
           </div>
           <div class="module-accent"></div>
           <div class="module-body">
@@ -408,7 +409,7 @@ if ('serviceWorker' in navigator) {
      Loaded here, not with the foh-*.js at the foot of the body, because the
      inline Admin code below READS it rather than just calling into it. -->
 <script src="foh-rounds.js?v=20260731a"></script>
-<script src="foh-core.js?v=20260807b"></script>
+<script src="foh-core.js?v=20260807c"></script>
 <script src="foh-events.js?v=20260731a"></script>
 <script src="foh-privateevents.js?v=20260804a"></script>
 <script src="foh-revenue.js?v=20260727a"></script>

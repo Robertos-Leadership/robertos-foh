@@ -346,7 +346,19 @@ function fohBlocked(module){
   var mods=(state.access && state.access.modules) ? state.access.modules : FOH_DEFAULT_MODULES;
   return mods.indexOf(m)===-1;
 }
+// ── Activations is paused (7 Aug 2026). The card stays visible and still opens —
+// nothing is taken away — it is just shaded back with a "Paused" badge so the
+// team can see at a glance that no activations are running. One switch: flip
+// this to [] and the card, its badge and its status line all come back.
+var FOH_PAUSED_MODULES = ['events'];
+function fohModulePaused(m){ return FOH_PAUSED_MODULES.indexOf(m) !== -1; }
 function applyFohAccess(){
+  ['events'].forEach(function(m){
+    var c=document.getElementById('mod-card-'+m);
+    if(c) c.classList.toggle('module-paused', fohModulePaused(m));
+    var b=document.getElementById('mod-paused-'+m);
+    if(b) b.style.display = fohModulePaused(m) ? '' : 'none';
+  });
   ['events','operations','revenue','stocktake','privateevents','reviews'].forEach(function(m){
     var c=document.getElementById('mod-card-'+m);
     if(c) c.style.display = fohBlocked(m) ? 'none' : '';
@@ -420,7 +432,12 @@ async function fohLoadHubStats(){
       setStat('operations', fresh?'#2E6B34':'#B00020', (fresh?'Last night':'Last report '+dLbl)+' \u00b7 AED '+Math.round(net).toLocaleString('en-US'));
     }
   }catch(e){}
-  try{
+  // While the module is paused the card states that instead of querying for
+  // tonight — "Nothing scheduled tonight" under a Paused badge would read as a
+  // quiet night rather than a stopped module.
+  if(fohModulePaused('events')){
+    setStat('events', '#8B7355', 'Paused · no activations running');
+  } else try{
     var wd = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long'});
     var r2 = await sb.from('events').select('name,day_of_week,status').limit(50);
     if(!r2.error && r2.data){
