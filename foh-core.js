@@ -743,7 +743,29 @@ async function adminDeleteUser(email){
 }
 function adminRefresh(){ state.adminLoaded=false; loadAdminUsers(); }
 function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
+// flex-wrap on .adm-toggle: five chips need ~450px and a phone gives ~390, and
+// without wrapping they did not shrink — they made the whole Admin PAGE wider
+// than the screen. Every tab was affected (the topbar's own buttons ran off the
+// right edge too), which is why it read as "the app is broken on my phone".
 var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
+  // ── Inbox rows on a phone ──
+  // On a laptop a message is one line: kind, what they wrote, who, which app,
+  // where it has got to. On a phone those fixed columns cannot all fit, and as
+  // fixed columns they did not give way — they pushed the row off the screen and
+  // took the sender, the state and the photo marker with them.
+  // Below 640px the same row becomes two lines: their words, then everything
+  // about them underneath. Nothing is dropped; it is folded.
+  +'.fbi-row{display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 14px;cursor:pointer;font-family:inherit;}'
+  +'.fbi-row .fbi-body{flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+  +'.fbi-row .fbi-meta{display:flex;align-items:center;gap:10px;flex:none;}'
+  +'@media(max-width:640px){'
+  +  '.fbi-row{flex-wrap:wrap;align-items:flex-start;gap:8px 10px;}'
+  +  '.fbi-row .fbi-bar{align-self:stretch;}'
+  +  '.fbi-row .fbi-body{flex:1 1 100%;white-space:normal;overflow:visible;'
+  +    'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}'
+  +  '.fbi-row .fbi-meta{flex:1 1 100%;flex-wrap:wrap;justify-content:flex-start;font-size:11.5px;}'
+  +  '.fbi-row .fbi-chev{display:none;}'   /* the whole row is the tap target */
+  +'}'
   // ── Settings tab ────────────────────────────────────────────────────────
   // One card per switch, the explanation carrying more weight than the
   // control: an admin turning something on for the whole house should be able
@@ -816,7 +838,7 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.adm-tick.adm-notif{color:#2d6a4f;}'
   +'.adm-del{margin-left:10px;font-size:11px;color:#b3402f;background:none;border:1px solid #e3c9c4;border-radius:6px;padding:2px 8px;cursor:pointer;}'
   +'.adm-del:hover{background:#f7ecea;}'
-  +'.adm-toggle{display:flex;gap:6px;margin:2px 0 16px;}'
+  +'.adm-toggle{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 16px;}'
   +'.adm-toggle button{font-size:13px;padding:7px 15px;border:1px solid #d8cbb6;background:#fff;border-radius:20px;cursor:pointer;color:#6b5a44;}'
   +'.adm-toggle button.on{background:#400207;color:#fff;border-color:#400207;}'
   +'.ppl-sum{font-size:13px;color:#6b5a44;line-height:1.5;margin:2px 0 6px;}'
@@ -2463,20 +2485,24 @@ function admInboxRowHTML(r){
   var st=admFbStateOf('inbox', r.id);
   var app=FB_APP_NAME[r.app]||r.app||'—';
   var line=String(r.body||'').replace(/\s+/g,' ');
+  // The meta (who, which app, where it has got to) is ONE group, so on a phone it
+  // folds to a second line together instead of three items scattering.
   return '<div style="display:flex;align-items:center;border-bottom:1px solid #f6efe4;background:'+(isSel?'#fbf7f1':'transparent')+';">'
-    +'<button style="display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 14px;cursor:pointer;font-family:inherit;" onclick="admFbOpen(\'inbox\',\''+admEsc(r.id)+'\')">'
-    +'<span style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[st]+';"></span>'
+    +'<button class="fbi-row" onclick="admFbOpen(\'inbox\',\''+admEsc(r.id)+'\')">'
+    +'<span class="fbi-bar" style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[st]+';"></span>'
     // The kind is a single character's worth of meaning; a coloured word for it
     // would compete with the state colour already down the left.
     +'<span style="font-size:11px;color:'+(r.kind==='problem'?'#8A2A1A':'#12456E')+';white-space:nowrap;flex:none;">'+(r.kind==='problem'?'wrong':'idea')+'</span>'
-    +'<span style="flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+admEsc(line)+'</span>'
-    // A camera on the row, so a message that brought evidence is worth opening
-    // first. Not the photo itself — forty thumbnails would turn a work list into
-    // a gallery, and this screen is read at a glance.
-    + (r.shot?'<span title="Has a photo" style="font-size:12px;color:#9c8a72;flex:none;">&#128247;</span>':'')
-    +'<span style="font-size:11.5px;color:#9c8a72;white-space:nowrap;flex:none;">'+admEsc((r.who||'Anonymous').split(' ')[0])+' &middot; '+admEsc(app)+'</span>'
-    +'<span style="font-size:11.5px;white-space:nowrap;flex:none;color:'+(st==='ok'?'#2E6B34':(st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel('inbox',r.id,true)+'</span>'
-    +'<span style="color:#e3d5c2;font-size:15px;flex:none;">&rsaquo;</span>'
+    +'<span class="fbi-body">'+admEsc(line)+'</span>'
+    +'<span class="fbi-meta">'
+      // A camera on the row, so a message that brought evidence is worth opening
+      // first. Not the photo itself — forty thumbnails would turn a work list
+      // into a gallery, and this screen is read at a glance.
+      + (r.shot?'<span title="Has a photo" style="font-size:12px;color:#9c8a72;">&#128247;</span>':'')
+      +'<span style="color:#9c8a72;white-space:nowrap;">'+admEsc((r.who||'Anonymous').split(' ')[0])+' &middot; '+admEsc(app)+'</span>'
+      +'<span style="white-space:nowrap;color:'+(st==='ok'?'#2E6B34':(st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel('inbox',r.id,true)+'</span>'
+      +'<span class="fbi-chev" style="color:#e3d5c2;font-size:15px;">&rsaquo;</span>'
+    +'</span>'
     +'</button></div>';
 }
 function admInboxHTML(){
