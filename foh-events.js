@@ -1393,7 +1393,7 @@ function openLeaderAddTask(){
         <label class="form-label">Assigned To</label>
         <select class="form-select" id="leader-task-assignee">
           <option value="">-</option>
-          ${TEAM.map(m=>`<option value="${m}" ${activeLeader===m?'selected':''}>${m}</option>`).join('')}
+          ${teamOpts(TEAM, activeLeader)}
         </select>
       </div>
       <div class="form-group">
@@ -1559,14 +1559,14 @@ function openEditTask(taskId){
         <label class="form-label">Assigned To</label>
         <select class="form-select" id="edit-assign">
           <option value="">-</option>
-          ${TEAM.map(m=>`<option value="${m}" ${task.assigned_to===m?'selected':''}>${m}</option>`).join('')}
+          ${teamOpts(TEAM, task.assigned_to)}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Champion</label>
         <select class="form-select" id="edit-champion">
           <option value="">-</option>
-          ${CHAMPIONS.map(m=>`<option value="${m}" ${task.champion===m?'selected':''}>${m}</option>`).join('')}
+          ${teamOpts(CHAMPIONS, task.champion)}
         </select>
       </div>
     </div>
@@ -1780,7 +1780,7 @@ function openEditFinance(finId){
         <label class="form-label">Approved By</label>
         <select class="form-select" id="fin-approved">
           <option value="">-</option>
-          ${CHAMPIONS.map(m=>`<option value="${m}" ${fin.approved_by===m?'selected':''}>${m}</option>`).join('')}
+          ${teamOpts(CHAMPIONS, fin.approved_by)}
         </select>
       </div>
       <div class="form-group">

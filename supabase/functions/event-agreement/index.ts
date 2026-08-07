@@ -17,7 +17,25 @@
 // Secrets used: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (auto), RESEND_API_KEY.
 // ════════════════════════════════════════════════════════════
 const FROM = "Roberto's DIFC Events <reports@kitchenteam.robertos.ae>";
-const NOTIFY = "vdetoni@robertos.ae";
+// Who hears that a guest signed, and who the guest's reply reaches. This used to be
+// one person's address in code; when she left the organisation every signed agreement
+// alert and every guest reply went to a dead mailbox with nobody the wiser. The live
+// list is now app_users.notify ('events_desk'), managed on Admin → Emails, so the desk
+// can change hands without a deploy. FALLBACK is used only if nobody is ticked, so a
+// signature can never be announced to no one.
+const NOTIFY_FALLBACK = ["kvukotic@robertos.ae"];
+// deno-lint-ignore no-explicit-any
+async function deskList(sb: any): Promise<string[]> {
+  try {
+    const r = await sb("app_users?select=email,notify");
+    const rows = await r.json();
+    const to = (Array.isArray(rows) ? rows : [])
+      .filter((u: { notify?: string[] }) => Array.isArray(u.notify) && u.notify.indexOf("events_desk") !== -1)
+      .map((u: { email: string }) => u.email)
+      .filter((e: string) => typeof e === "string" && e.includes("@"));
+    return to.length ? to : NOTIFY_FALLBACK;
+  } catch { return NOTIFY_FALLBACK; }
+}
 const BANK = { name: "Roberto's Club LTD", bank: "Commercial Bank of Dubai", iban: "AE830230000001002196200", swift: "CBDUAEADXXX" };
 
 const cors = {
@@ -314,14 +332,15 @@ Deno.serve(async (req) => {
     // hiccup can never break the guest's signing.
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (resendKey) {
+      const desk = await deskList(sb);
       const send = (to: string[], subject: string) =>
         fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: "Bearer " + resendKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ from: FROM, to, reply_to: NOTIFY, subject, html: doc }),
+          body: JSON.stringify({ from: FROM, to, reply_to: desk.join(", "), subject, html: doc }),
         }).catch(() => {});
       if (ev.contact_email) send([ev.contact_email], "Your signed agreement — Roberto's · " + (ev.event_date ? String(ev.event_date).slice(0, 10) : ""));
-      send([NOTIFY], "SIGNED ✓ " + (ev.client_name || "event") + " · " + (ev.event_date ? String(ev.event_date).slice(0, 10) : "") + " — agreement signed by " + name);
+      send(desk, "SIGNED ✓ " + (ev.client_name || "event") + " · " + (ev.event_date ? String(ev.event_date).slice(0, 10) : "") + " — agreement signed by " + name);
     }
 
     // Hand back the frozen document too, so the page switches straight to it and the

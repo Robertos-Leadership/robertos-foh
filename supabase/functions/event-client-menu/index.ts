@@ -37,8 +37,29 @@ const cleanQty = (raw: unknown, dishIds: string[]) => {
 };
 const allowedDishes = (guests: number) => guests >= 30 ? 15 : (guests >= 20 ? 8 : (guests >= 15 ? 5 : 0));
 
-// Who hears about guest submissions the moment they land.
-const PE_NOTIFY = ["vdetoni@robertos.ae"];
+// Who hears about guest submissions the moment they land. This used to be one
+// person's address in code; when she left the organisation every guest submission
+// was announced to a dead mailbox and nobody knew. The live list is app_users.notify
+// ('events_desk'), managed on Admin → Emails, so the desk can change hands without a
+// deploy. The fallback is used only if nobody is ticked — an enquiry can never land
+// with no one told.
+const PE_NOTIFY_FALLBACK = ["kvukotic@robertos.ae"];
+const deskList = async (): Promise<string[]> => {
+  try {
+    const r = await fetch(Deno.env.get("SUPABASE_URL")! + "/rest/v1/app_users?select=email,notify", {
+      headers: {
+        apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        Authorization: "Bearer " + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      },
+    });
+    const rows = await r.json();
+    const to = (Array.isArray(rows) ? rows : [])
+      .filter((u: { notify?: string[] }) => Array.isArray(u.notify) && u.notify.indexOf("events_desk") !== -1)
+      .map((u: { email: string }) => u.email)
+      .filter((e: string) => typeof e === "string" && e.includes("@"));
+    return to.length ? to : PE_NOTIFY_FALLBACK;
+  } catch (_e) { return PE_NOTIFY_FALLBACK; }
+};
 const NOTIFY_FROM = "Roberto's DIFC Events <reports@kitchenteam.robertos.ae>";
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 // Fire-and-forget: a failed notification must never break the guest's submission.
@@ -57,7 +78,7 @@ const notifyTeam = async (subject: string, rows: Array<[string, string]>, note: 
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: NOTIFY_FROM, to: PE_NOTIFY, subject, html })
+      body: JSON.stringify({ from: NOTIFY_FROM, to: await deskList(), subject, html })
     });
   } catch (_e) { /* never block the guest */ }
 };

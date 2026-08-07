@@ -124,7 +124,7 @@ function render(data){
   var open = data.mode==='open';
   var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+(open?'Our canapé selection — pick your favourites':'Canapé selection for your event')+'</div>'+
-    (open ? '<div class="sub2">Tick what you like and send it to us — Valentina will take care of the rest.</div>'
+    (open ? '<div class="sub2">Tick what you like and send it to us — our events team will take care of the rest.</div>'
           : '<div class="sub2">'+esc([ev.client_name||ev.company, dt, ev.area].filter(Boolean).join(' · '))+(ev.guests?' · '+ev.guests+' guests':'')+'</div>');
   if(!open && ev.guests) guestCount = Number(ev.guests)||0;
   h += '<div class="gbox"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">How many guests will you be? <span style="color:var(--ink-faint)">(canapé events start from 15)</span></div>'+
@@ -168,7 +168,7 @@ function render(data){
   h += '<div class="note"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Anything we should know? Allergies, favourites, the occasion…</div>'+
        '<textarea id="cl-note" maxlength="900">'+esc(data.selection&&data.selection.note||'')+'</textarea></div>';
   h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send selection to Roberto’s</button>'+
-       '<div class="ft">Valentina will come back to you to confirm availability and final details.<br>'+
+       '<div class="ft">Our events team will come back to you to confirm availability and final details.<br>'+
        'A alcohol · D dairy · E egg · G gluten · H homemade · N nuts · R raw · S shellfish · V vegetarian</div></div>';
   el('card').innerHTML = h;
   document.body.classList.toggle('nogc', guestCount < 15);
@@ -256,7 +256,7 @@ function counts(){
     if(any && guestCount >= 15){
       tl.innerHTML = '<b>Estimated total: AED '+Math.round(total).toLocaleString('en-US')+'</b> · about AED '+Math.round(total/guestCount).toLocaleString('en-US')+' per guest'+
         (lowMin.length?'<br><span style="font-size:10.5px;color:var(--err)">Please check quantities — below the minimum for: '+esc(lowMin.join(', '))+'</span>':'')+
-        '<br><span style="font-size:10.5px;color:var(--ink-faint)">Adjust the pieces of each canapé as you like — Valentina will confirm your final quote.</span>';
+        '<br><span style="font-size:10.5px;color:var(--ink-faint)">Adjust the pieces of each canapé as you like — we will confirm your final quote.</span>';
     } else tl.innerHTML = '';
   }
 }
@@ -291,7 +291,7 @@ async function send(){
     var data = await r.json();
     if(!r.ok || data.error) throw new Error(data.error||'failed');
     el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
-      '<div class="msg">Grazie! Your selection has been sent.<br><br>Valentina will be in touch shortly to confirm everything for your evening.</div>';
+      '<div class="msg">Grazie! Your selection has been sent.<br><br>Our events team will be in touch shortly to confirm everything for your evening.</div>';
   }catch(e){
     btn.disabled = false; btn.textContent = 'Send selection to Roberto’s';
     flash('Could not send — please try again. '+(e.message||''));

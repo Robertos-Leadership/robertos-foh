@@ -104,10 +104,10 @@ async function sendPicks(){
     });
     if(!r.ok) throw new Error(r.status);
     if(btn) btn.style.display='none';
-    if(msg){ msg.style.color='var(--ok)'; msg.innerHTML='Grazie! Your choices are with us.<br>Valentina will come back to you shortly.'; }
+    if(msg){ msg.style.color='var(--ok)'; msg.innerHTML='Grazie! Your choices are with us.<br>Our events team will come back to you shortly.'; }
   }catch(e){
     if(btn){ btn.disabled=false; btn.textContent='Send my choices to Roberto’s'; }
-    if(msg){ msg.style.color='var(--err)'; msg.textContent='That did not send — please try once more, or simply reply to Valentina.'; }
+    if(msg){ msg.style.color='var(--err)'; msg.textContent='That did not send — please try once more, or simply reply to our last email.'; }
   }
 }
 
@@ -227,7 +227,7 @@ function render(menus, bevs, alc){
       }).join('')+'</div>';
   }
 
-  h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
+  h += '<div class="btnrow"><div class="ft">To book your occasion or ask us anything, simply reply to our last email — or write to '+
     '<a href="mailto:reservations@robertos.ae" style="color:var(--vino)">reservations@robertos.ae</a>.<br><br>'+
     (noPrice ? '' : 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>')+
     'Our chefs will do their best to accommodate your dietary requirements.</div></div>';

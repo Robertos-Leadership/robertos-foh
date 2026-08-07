@@ -134,12 +134,40 @@ function claimIds(claims: Record<string, unknown> | undefined, prop: string): st
 // that actually matched keeps the card honest -- and the source link is right
 // there for anyone who wants to check the entry itself.
 function matchedForm(name: string, forms: string[]): string | null {
-  const norm = (s: string) =>
-    String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
-      .toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const n = norm(name);
   if (!n) return null;
   return forms.find((f) => norm(f) === n) || null;
+}
+
+function norm(s: string): string {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// ── The name gate ───────────────────────────────────────────────────
+// EVERY source here is a RELEVANCE search, not a name lookup. Ask Google
+// Knowledge Graph for "Robert Marcus" and it answers with the most notable
+// entity in the neighbourhood of that string -- which on 5 Aug 2026 was Robert
+// Owen, the Welsh social reformer, at score 917. "Ibrahim Ahmed" came back as
+// Naguib Mahfouz. Neither shares a surname with the guest. Without this gate
+// the score floor is measuring the wrong thing entirely: it confirms the
+// ANSWER is famous, never that the answer is the guest's name.
+//
+// The rule: first and last name must both match once accents, punctuation and
+// case are normalised. Middle names are ignored, because the fullest legal form
+// is what these databases file people under -- "Mohamed Alabbar" has to be
+// allowed to match "Mohamed Ali Alabbar", the chairman of Emaar, or the
+// seniority route loses the guest it was built for.
+//
+// It is deliberately strict on spelling: "Mohammed Saad" does NOT match
+// "Mohamed Saad". That is a real hit lost, and it is the right trade -- the
+// whole file is built on missing a minor figure being cheaper than training
+// the team to ignore the chip.
+function nameGate(guest: string, candidate: string): boolean {
+  const a = norm(guest).split(" ").filter(Boolean);
+  const b = norm(candidate).split(" ").filter(Boolean);
+  if (a.length < 2 || b.length < 2) return false;
+  return a[0] === b[0] && a[a.length - 1] === b[b.length - 1];
 }
 
 // Names that cannot be meaningfully searched. A single word is far too likely
@@ -179,6 +207,37 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // ── Source 1: Google Knowledge Graph ────────────────────────────────
 // Returns null for "no notable match" and throws ONLY on "not authorised",
 // so the caller can tell a genuine miss apart from a key problem.
+// ── The death check, for Google hits ────────────────────────────────
+// The Wikidata branch drops anyone with a P570 "date of death" claim, and that
+// filter is the single biggest false-positive killer on common names. The
+// Google branch had no equivalent, because the Knowledge Graph search response
+// carries no death field at all -- so on 5 Aug 2026 the book flagged Robert
+// Owen (d. 1858) and Naguib Mahfouz (d. 2006). Nobody dead is sitting at table
+// 62.
+//
+// Every KG hit worth showing has a Wikipedia article (that IS the notability
+// test above), so the article title is the key back into Wikidata via the
+// enwiki sitelink -- one cheap request, only on hits.
+//
+// Returns true = dead, false = no death claim, null = COULD NOT CHECK. The
+// caller must treat null as "do not accept", never as "alive": an unverifiable
+// answer written as a match is the same permanent false positive, just rarer.
+async function diedPerWikidata(wikiUrl: string): Promise<boolean | null> {
+  const m = /^https?:\/\/en\.wikipedia\.org\/wiki\/([^?#]+)/.exec(String(wikiUrl || ""));
+  if (!m) return null;
+  const title = decodeURIComponent(m[1]).replace(/_/g, " ");
+  const u = "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json"
+    + "&sites=enwiki&props=claims&languages=en&titles=" + encodeURIComponent(title);
+  const j = await wdFetch(u);
+  if (!j) return null;
+  const ents = (j.entities as Record<string, { claims?: Record<string, unknown[]>; missing?: unknown }>) || {};
+  const ids = Object.keys(ents);
+  if (!ids.length) return null;
+  const e = ents[ids[0]];
+  if (!e || e.missing !== undefined || !e.claims) return null;
+  return ((e.claims.P570 as unknown[]) || []).length > 0;
+}
+
 async function googleKG(name: string, key: string): Promise<Outcome> {
   const url = "https://kgsearch.googleapis.com/v1/entities:search"
     + "?query=" + encodeURIComponent(name)
@@ -201,11 +260,22 @@ async function googleKG(name: string, key: string): Promise<Outcome> {
     const types: string[] = e["@type"] || [];
     if (score < KG_MIN_SCORE) continue;
     if (!types.includes("Person")) continue;
+    // The answer has to actually BE the guest's name. Google ranks by
+    // relevance, so without this the top result is simply the most famous
+    // person near the query string -- see nameGate.
+    if (!nameGate(name, String(e.name || ""))) continue;
     // detailedDescription is Google's way of saying "this entity has a
     // Wikipedia article". No article, no match -- that is the notability
     // test doing its job.
     const dd = e.detailedDescription;
     if (!dd || !dd.url) continue;
+    // Same rule the Wikidata branch applies via P570. Unverifiable counts as
+    // "do not accept": returning `failed` here sends this guest down the
+    // Wikidata path, which runs the full set of checks itself, and writes
+    // nothing if that fails too.
+    const dead = await diedPerWikidata(String(dd.url));
+    if (dead === null) return { kind: "failed" };
+    if (dead) continue;
     return {
       kind: "hit",
       hit: {
@@ -290,12 +360,18 @@ async function wikidata(name: string): Promise<Outcome> {
     //   seniority  -- a recorded role that carries commercial weight, an
     //                 exact name match, and a much lower fame bar. This is
     //                 the door a bank chief executive comes through.
-    const byFame = links >= WD_MIN_SITELINKS;
+    const aliases = ((e.aliases && e.aliases.en) as { value: string }[] || []).map((a) => a.value);
+    // wbsearchentities is fuzzy too, so the fame door gets the same name gate
+    // as Google -- first and last name, against the label or any alias. It
+    // costs nothing legitimate: a famous person matching this guest is filed
+    // under this guest's name. Without it the 12-Wikipedia floor only proves
+    // the answer is famous, not that it is the person who booked.
+    const byFame = links >= WD_MIN_SITELINKS
+      && [label as string].concat(aliases).some((f) => nameGate(name, f));
     const roles = claimIds(e.claims, "P106");
     const positions = claimIds(e.claims, "P39");
     const senior = roles.some((r) => WD_SENIOR_ROLES.has(r))
       || positions.some((p) => WD_SENIOR_POSITIONS.has(p));
-    const aliases = ((e.aliases && e.aliases.en) as { value: string }[] || []).map((a) => a.value);
     const matched = matchedForm(name, [label as string].concat(aliases));
     const bySeniority = senior && links >= WD_ROLE_MIN_SITELINKS && !!matched;
 

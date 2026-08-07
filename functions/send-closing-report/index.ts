@@ -15,7 +15,7 @@ const FROM = "Roberto's DIFC Operations <reports@kitchenteam.robertos.ae>";   //
 const FALLBACK_TO = [
   "fguarracino@robertos.ae", "asacchi@skelmore.com", "justin@skelmore.com",
   "musti@robertos.ae", "umavila@skelmore.com",
-  "kvukotic@robertos.ae", "mpetrosino@robertos.ae", "vdetoni@robertos.ae",
+  "kvukotic@robertos.ae", "mpetrosino@robertos.ae",
   "dvalla@robertos.ae", "jthomas@robertos.ae",
 ];
 

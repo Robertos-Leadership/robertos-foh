@@ -56,8 +56,20 @@ if (FOH_IS_DEV_SITE) {
   document.body.appendChild(devBadge);
 }
 
-const TEAM = ['Francesco','Manuel','Alessandro','Nicole','Danilo','Alper','Katerina','Valentina'];
+const TEAM = ['Francesco','Manuel','Alessandro','Nicole','Danilo','Alper','Katerina'];
 const CHAMPIONS = TEAM; // all team members can be champions
+// Someone who has left is off the list above, so no NEW work can be given to them.
+// But a task they already own must keep showing their name: if the name is simply
+// missing from the dropdown the field falls back to blank, and the next save quietly
+// wipes who owned it. So a departed owner stays selectable on their own records only,
+// marked as having left, until someone deliberately hands the task over.
+function teamOpts(list, current){
+  var names = (current && list.indexOf(current) === -1) ? [current].concat(list) : list;
+  return names.map(function(m){
+    var gone = list.indexOf(m) === -1;
+    return '<option value="'+m+'"'+(current===m?' selected':'')+'>'+m+(gone?' (left)':'')+'</option>';
+  }).join('');
+}
 const PRIORITIES = {
   non_negotiable: { label:'Non-Negotiable', rank:0 },
   important: { label:'Important', rank:1 },
@@ -346,7 +358,19 @@ function fohBlocked(module){
   var mods=(state.access && state.access.modules) ? state.access.modules : FOH_DEFAULT_MODULES;
   return mods.indexOf(m)===-1;
 }
+// ── Activations is paused (7 Aug 2026). The card stays visible and still opens —
+// nothing is taken away — it is just shaded back with a "Paused" badge so the
+// team can see at a glance that no activations are running. One switch: flip
+// this to false and the card, its badge and its status line all come back.
+var FOH_PAUSED_MODULES = ['events'];
+function fohModulePaused(m){ return FOH_PAUSED_MODULES.indexOf(m) !== -1; }
 function applyFohAccess(){
+  ['events'].forEach(function(m){
+    var c=document.getElementById('mod-card-'+m);
+    if(c) c.classList.toggle('module-paused', fohModulePaused(m));
+    var b=document.getElementById('mod-paused-'+m);
+    if(b) b.style.display = fohModulePaused(m) ? '' : 'none';
+  });
   ['events','operations','revenue','stocktake','privateevents','reviews'].forEach(function(m){
     var c=document.getElementById('mod-card-'+m);
     if(c) c.style.display = fohBlocked(m) ? 'none' : '';
@@ -420,7 +444,12 @@ async function fohLoadHubStats(){
       setStat('operations', fresh?'#2E6B34':'#B00020', (fresh?'Last night':'Last report '+dLbl)+' \u00b7 AED '+Math.round(net).toLocaleString('en-US'));
     }
   }catch(e){}
-  try{
+  // While the module is paused the card states that instead of querying for
+  // tonight — "Nothing scheduled tonight" under a Paused badge would read as a
+  // quiet night rather than a stopped module.
+  if(fohModulePaused('events')){
+    setStat('events', '#8B7355', 'Paused · no activations running');
+  } else try{
     var wd = new Date(RC.dubaiBusinessDate(new Date())+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long'});
     var r2 = await sb.from('events').select('name,day_of_week,status').limit(50);
     if(!r2.error && r2.data){
@@ -489,9 +518,25 @@ async function fohLoadHubStats(){
   // home screen never waits on their API. Blank until the first daily pull.
   try{
     if(!fohBlocked('reviews')){
-      var gv = await sb.from('google_reviews_daily').select('venue_key,snapshot_date,rating,user_rating_count').order('snapshot_date',{ascending:false}).limit(60);
+      // ── Why this is ordered by venue and not just "newest 60" ──
+      // It used to be .limit(60) ordered by date alone, then one row taken per
+      // venue. Seven venues are tracked, one row each per day, so 60 rows was
+      // about EIGHT DAYS of headroom. A venue that stopped being collected for
+      // nine days would fall out of the window entirely, silently vanish from
+      // the comparison, and improve Roberto's stated DIFC position for no
+      // reason — with nothing on screen saying a competitor had dropped out.
+      // Ordering by venue first means every venue's newest row is reached no
+      // matter how stale it is, and the cap stops mattering.
+      // The window is bounded by DATE, not by a row count, so it cannot overflow
+      // as history accumulates: 7 venues x 90 days = ~630 rows, and even twenty
+      // venues would be 1800 — under the cap for years. A flat row cap would have
+      // quietly started truncating again around a year from now.
+      var gvFrom = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+      var gv = await sb.from('google_reviews_daily').select('venue_key,snapshot_date,rating,user_rating_count')
+        .gte('snapshot_date', gvFrom)
+        .order('venue_key',{ascending:true}).order('snapshot_date',{ascending:false}).limit(2000);
       if(!gv.error && gv.data && gv.data.length){
-        var latest = {};   // newest row per venue (rows arrive newest-first)
+        var latest = {};   // newest row per venue (rows arrive newest-first within each venue)
         gv.data.forEach(function(x){ if(!latest[x.venue_key]) latest[x.venue_key] = x; });
         var all = Object.keys(latest).map(function(k){ return latest[k]; });
         var me = latest['robertos'];
@@ -594,12 +639,37 @@ async function loadFohAccess(){
       if(r.error) throw r.error;
       if(r.data && r.data[0]) state.access={ modules:r.data[0].modules||[], isAdmin:!!r.data[0].is_admin, name:r.data[0].name };
       else state.access={ modules:FOH_DEFAULT_MODULES.slice(), isAdmin:false, name:null };   // signed in but not in app_users yet
-      try{ localStorage.setItem('foh_access_'+e, JSON.stringify(state.access)); }catch(e2){}   // last-known access for offline/flaky loads
+      // Last-known access for offline/flaky loads. Stamped with _at so the reader
+      // can expire it — an unstamped cache (written before 7 Aug 2026) reads as
+      // stale and falls back to the day-to-day modules, which is the safe way round.
+      try{
+        var toCache = { modules:state.access.modules, isAdmin:state.access.isAdmin, name:state.access.name, _at:Date.now() };
+        localStorage.setItem('foh_access_'+e, JSON.stringify(toCache));
+      }catch(e2){}
       clearTimeout(state.accessRetryT);
     }catch(err){
       // Lookup FAILED (network/API) — fall back to this email's LAST KNOWN access
       // instead of failing open, and retry until a live read succeeds.
-      try{ var cached=localStorage.getItem('foh_access_'+e); if(cached) state.access=JSON.parse(cached); }catch(e2){}
+      //
+      // TIGHTENED 7 Aug 2026. Two things the cache must never do:
+      //  1. Carry ADMIN. localStorage is typed by the user, so a cached
+      //     {"isAdmin":true} was a way to open the Admin screen by hand. Admin
+      //     now requires a LIVE read, every time. (What it protects behind that
+      //     is another matter — that is the RLS work, not this.)
+      //  2. Outlive a revocation indefinitely. Access removed in Admin used to
+      //     survive for as long as the lookup kept failing. The cache is now
+      //     good for 24h; after that the user drops to the day-to-day modules
+      //     until a live read succeeds.
+      try{
+        var cached=localStorage.getItem('foh_access_'+e);
+        if(cached){
+          var c=JSON.parse(cached);
+          var fresh = c && c._at && (Date.now()-c._at) < 86400000;
+          state.access = fresh
+            ? { modules:(c.modules||[]), isAdmin:false, name:(c.name||null) }
+            : { modules:FOH_DEFAULT_MODULES.slice(), isAdmin:false, name:(c.name||null) };
+        }
+      }catch(e2){}
       clearTimeout(state.accessRetryT);
       state.accessRetryT=setTimeout(loadFohAccess, 10000);
     }
@@ -618,6 +688,7 @@ var ADMIN_MODULES=[{k:'events',n:'Activations'},{k:'privateevents',n:'Events'},{
 // so adding someone takes effect on the next send with no deploy.
 var ADMIN_NOTIFY=[
   {k:'closing_report',n:'Closing-report email'},
+  {k:'events_desk',   n:'Guest replies & signed agreements'},
   {k:'event_brief',   n:'Event brief to the team'},
   {k:'roster_foh',    n:'FOH roster to HR'},
   {k:'roster_kitchen',n:'Kitchen roster to HR'}
@@ -726,7 +797,29 @@ async function adminDeleteUser(email){
 }
 function adminRefresh(){ state.adminLoaded=false; loadAdminUsers(); }
 function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
+// flex-wrap on .adm-toggle: five chips need ~450px and a phone gives ~390, and
+// without wrapping they did not shrink — they made the whole Admin PAGE wider
+// than the screen. Every tab was affected (the topbar's own buttons ran off the
+// right edge too), which is why it read as "the app is broken on my phone".
 var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
+  // ── Inbox rows on a phone ──
+  // On a laptop a message is one line: kind, what they wrote, who, which app,
+  // where it has got to. On a phone those fixed columns cannot all fit, and as
+  // fixed columns they did not give way — they pushed the row off the screen and
+  // took the sender, the state and the photo marker with them.
+  // Below 640px the same row becomes two lines: their words, then everything
+  // about them underneath. Nothing is dropped; it is folded.
+  +'.fbi-row{display:flex;align-items:center;gap:11px;flex:1;min-width:0;text-align:left;background:transparent;border:0;padding:11px 14px;cursor:pointer;font-family:inherit;}'
+  +'.fbi-row .fbi-body{flex:1;min-width:0;font-size:13.5px;color:#4a3b2a;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+  +'.fbi-row .fbi-meta{display:flex;align-items:center;gap:10px;flex:none;}'
+  +'@media(max-width:640px){'
+  +  '.fbi-row{flex-wrap:wrap;align-items:flex-start;gap:8px 10px;}'
+  +  '.fbi-row .fbi-bar{align-self:stretch;}'
+  +  '.fbi-row .fbi-body{flex:1 1 100%;white-space:normal;overflow:visible;'
+  +    'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}'
+  +  '.fbi-row .fbi-meta{flex:1 1 100%;flex-wrap:wrap;justify-content:flex-start;font-size:11.5px;}'
+  +  '.fbi-row .fbi-chev{display:none;}'   /* the whole row is the tap target */
+  +'}'
   // ── Settings tab ────────────────────────────────────────────────────────
   // One card per switch, the explanation carrying more weight than the
   // control: an admin turning something on for the whole house should be able
@@ -799,7 +892,7 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.adm-tick.adm-notif{color:#2d6a4f;}'
   +'.adm-del{margin-left:10px;font-size:11px;color:#b3402f;background:none;border:1px solid #e3c9c4;border-radius:6px;padding:2px 8px;cursor:pointer;}'
   +'.adm-del:hover{background:#f7ecea;}'
-  +'.adm-toggle{display:flex;gap:6px;margin:2px 0 16px;}'
+  +'.adm-toggle{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 16px;}'
   +'.adm-toggle button{font-size:13px;padding:7px 15px;border:1px solid #d8cbb6;background:#fff;border-radius:20px;cursor:pointer;color:#6b5a44;}'
   +'.adm-toggle button.on{background:#400207;color:#fff;border-color:#400207;}'
   +'.ppl-sum{font-size:13px;color:#6b5a44;line-height:1.5;margin:2px 0 6px;}'
@@ -1069,6 +1162,13 @@ var ADM_MAIL_ABOUT={
   closing_report:{
     when:'Every night after the closing report is completed.',
     note:'Everyone here receives the full report.'
+  },
+  events_desk:{
+    when:'The moment a guest signs their agreement, or sends back their menu choices.',
+    note:'This is the events desk itself — whoever is looking after enquiries. Everyone here is '
+        +'told the moment a guest signs, and a guest replying to their proposal reaches this list. '
+        +'If it is ever left empty the emails fall back to Katarina, so a signature is never '
+        +'announced to nobody.'
   },
   event_brief:{
     when:'When someone presses “Send the team brief” on a private event.',
@@ -1601,6 +1701,23 @@ async function admFbFetchAll(){
   }
   return { data:all, error:null };
 }
+// The INBOX — what the team sent unprompted, through the "Tell us" button in
+// EITHER app. Paged the same way and for the same reason: a flat cap is how
+// this platform has lost rows three times, and this is the one table that only
+// ever grows. See foh-app-feedback-inbox.sql and feedback-button.js.
+async function admFbInboxFetchAll(){
+  var all=[], from=0, PAGE=1000;
+  for(;;){
+    var r=await sb.from('app_feedback_inbox').select('id,app,screen,kind,body,who,build,device,shot,created_at')
+      .order('created_at',{ascending:false}).range(from, from+PAGE-1);
+    if(r.error) return { data:null, error:r.error };
+    var rows=r.data||[];
+    all=all.concat(rows);
+    if(rows.length<PAGE) break;
+    from+=PAGE;
+  }
+  return { data:all, error:null };
+}
 async function admFbLoad(){
   state.fbRows=null; state.fbErr=null;
   if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
@@ -1609,6 +1726,15 @@ async function admFbLoad(){
     if(r.error) throw r.error;
     state.fbRows=r.data||[];
   }catch(err){ state.fbErr=(err&&err.message)||'Could not load the feedback.'; }
+  // The inbox is its own lane and its own failure. A missing table here (the
+  // SQL not run yet) must never take the rounds down with it — the same rule
+  // the work state and the send log already follow below.
+  state.fbInbox=null; state.fbInboxErr=null;
+  try{
+    var ib=await admFbInboxFetchAll();
+    if(ib.error) throw ib.error;
+    state.fbInbox=ib.data||[];
+  }catch(err){ state.fbInboxErr=(err&&err.message)||'Could not load the inbox.'; }
   // The work state and the send log are EXTRAS: if foh-app-feedback-status.sql
   // has not been run, the replies above still render exactly as they always did.
   // A missing table must never take the answers down with it.
@@ -1717,6 +1843,32 @@ async function admFbSaveWork(row){
 // One item's part of a brief. Shared by the single-item and the many-item
 // versions so they can never drift into describing the same work differently.
 function admFbBriefBlock(topic, qkey, n){
+  // An inbox item briefs from what they actually wrote plus the context the app
+  // captured. Same shape as a round item's brief so a mixed batch reads as one
+  // document — and the verbatim rule matters more here, not less: this is the
+  // only description of the problem that exists.
+  if(topic==='inbox'){
+    var ib=admInboxRow(qkey);
+    if(!ib) return null;
+    var cur2=admFbWorkOf('inbox', qkey);
+    var head2 = n ? ('--- ' + n + '. ' + String(ib.body||'').replace(/\s+/g,' ').slice(0,80) + ' ---')
+                  : 'ITEM:  sent through the "Tell us" button';
+    var o=[ head2,
+      'SOURCE: the ' + (FB_APP_NAME[ib.app]||ib.app) + ' app, ' + (ib.kind==='problem'?'reported as a problem':'sent as an idea')
+        + '   (record the fix against inbox / ' + ib.id + ')',
+      '',
+      'WHAT THEY WROTE (verbatim — their words, their spelling):',
+      '  ' + String(ib.body||''),
+      '',
+      'WHO AND WHERE:',
+      '  ' + (ib.who || 'anonymous') + ' — on ' + (ib.screen || 'an unnamed screen')
+        + (ib.device?', '+ib.device:'') + (ib.build?', build '+ib.build:'') ];
+    if(cur2 && cur2.status){
+      o.push('', 'ALREADY RECORDED: ' + cur2.status + (cur2.build?' in build '+cur2.build:'')
+        + (cur2.what_changed?' — "'+cur2.what_changed+'"':''));
+    }
+    return o.join('\n');
+  }
   var round=FB_ROUNDS[topic];
   if(!round) return null;
   var it=round.items[fbKeyPos(round,qkey)];
@@ -2139,7 +2291,9 @@ function admFbBar(items){
 }
 function admFbPanelHTML(){
   var s=admFbSel(); if(!s) return '';
-  var round=FB_ROUNDS[s.topic], f=state.fbForm||{};
+  var isInbox = s.topic==='inbox';
+  var ib = isInbox ? admInboxRow(s.qkey) : null;
+  var round=isInbox?null:FB_ROUNDS[s.topic], f=state.fbForm||{};
   var it=round ? round.items[fbKeyPos(round,s.qkey)] : null;
   var strip=function(x){ return String(x||''); };
   var lbl='font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;margin:15px 0 4px;';
@@ -2149,7 +2303,7 @@ function admFbPanelHTML(){
   // Everyone who flagged it, and what they wrote.
   var says=[];
   (state.fbRows||[]).forEach(function(r){
-    if(r.topic!==s.topic) return;
+    if(isInbox || r.topic!==s.topic) return;
     var a=(r.answers||{})[s.qkey];
     if(!a||!a.a||!FB_WORK_ANSWERS[a.a]) return;
     says.push({who:r.who||'someone', a:a.a, note:a.note});
@@ -2159,6 +2313,56 @@ function admFbPanelHTML(){
   // top:12px the panel slid UNDER it and the item's title and close button were
   // hidden behind the nav. max-height + overflow keep a long panel on screen
   // and scrolling inside itself instead of running off the bottom.
+  // ── An inbox item ──
+  // The panel's whole top half is "what we asked and what they answered". An
+  // inbox item has no question: their sentence IS the item, so it becomes the
+  // title, and the context the app captured (which screen, which app, which
+  // build, which device) takes the place of the round's framing. Everything
+  // below — the state, the evidence, Save — is the same code, on purpose.
+  if(isInbox){
+    if(!ib) return '<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;">'
+      +'<div style="font-size:13px;color:#9c8a72;">That message is not in the list any more. <button class="btn btn-sm" style="'+FB_NOSHOUT+'" onclick="admFbClose()">Close</button></div></div>';
+    var meta=[ (FB_APP_NAME[ib.app]||ib.app||'—')+' app', ib.screen||null, ib.device||null,
+               ib.build?('build '+ib.build):null, admUsageAgo(ib.created_at) ].filter(Boolean);
+    var hi='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
+      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+        +'<div><div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;">'
+        + (ib.kind==='problem'?'Something&rsquo;s wrong':'An idea') +' &middot; '+admEsc(ib.who||'Anonymous')+'</div>'
+        +'<h3 style="font-size:15.5px;color:#400207;margin:5px 0 0;font-weight:600;line-height:1.45;white-space:pre-wrap;">'+admEsc(ib.body)+'</h3></div>'
+        +'<button class="btn btn-sm" style="background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbClose()" aria-label="Close">&#10005;</button>'
+      +'</div>'
+      +'<div style="'+lbl+'">Where they were</div>'
+      +'<div style="font-size:12.5px;color:#4a3b2a;line-height:1.6;">'+admEsc(meta.join(' · '))+'</div>';
+    // ── Their photo ──
+    // The bucket is private, so there is no URL to print: the image arrives only
+    // through a short-lived signed link this signed-in session mints. Fetched
+    // after the panel paints (admFbShotPaint) rather than blocking the render on
+    // a network call — the words are the point and must never wait on a picture.
+    if(ib.shot){
+      hi+='<div style="'+lbl+'">What they were looking at</div>'
+        +'<div id="fb-shot-box" style="font-size:12px;color:#9c8a72;">Loading the photo&hellip;</div>';
+      admFbShotPaint(ib.shot);
+    }
+    if(!ib.who){
+      hi+='<div style="'+hint+'">Sent without a name, so there is nobody to tell when it&rsquo;s fixed &mdash; and no status link. That was their choice to make.</div>';
+    }
+    // ── Delete ──
+    // Everywhere else on this screen, what a person said is theirs and cannot be
+    // removed — "Back on the list" only ever deletes OUR record of the work. This
+    // is the one exception, and it exists for a plain reason: Francesco tests
+    // this button himself, and his own test messages should not sit in the work
+    // list forever pretending to be the team.
+    // So it is a panel action behind a confirm, not a quiet ✕ on the row: the row
+    // is a door, and a delete you can hit while scanning is a delete you will hit
+    // by accident. The confirm names who sent it, because the moment it is not
+    // one of his own tests, this is somebody's message.
+    var del='<div style="border-top:1px solid #f1e9da;margin-top:13px;padding-top:11px;">'
+      +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border:1px solid #E0C4BE;color:#8A2A1A;border-radius:8px;" onclick="admInboxDelete(\''+admEsc(ib.id)+'\')">Delete this message</button>'
+      +'<div style="'+hint+'">For your own test messages. It cannot be undone, and if someone sent it, it goes from their status page too.</div>'
+      +'</div>';
+    return hi + admFbStateFormHTML(s, f, lbl, inp, hint, del);
+  }
+
   var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
     +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
       +'<div><div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9c8a72;">'+admEsc(admFbTopicName(s.topic))+' &middot; item '+admEsc(admFbItemNo(s.topic,s.qkey))+'</div>'
@@ -2231,7 +2435,18 @@ function admFbPanelHTML(){
       +'</div>';
   }
 
-  // ── Where it has got to ──
+  return h + admFbStateFormHTML(s, f, lbl, inp, hint);
+}
+// ── Where it has got to, and the evidence ───────────────────────────────────
+// ONE copy, used by a round item and an inbox item alike. Two copies would mean
+// two definitions of what counts as proof, and the one that drifted would be
+// the one quietly accepting a tick again.
+// Returns the state block AND the panel's closing </div> — its callers open the
+// panel, this closes it. `extra` is anything that belongs INSIDE the panel below
+// the form (the inbox lane's Delete); a round item passes nothing, because a
+// round answer is never deletable.
+function admFbStateFormHTML(s, f, lbl, inp, hint, extra){
+  var h='';
   var seg='display:flex;border:1.5px solid #e3d5c2;border-radius:8px;overflow:hidden;';
   var noshout='text-transform:none;letter-spacing:0;';
   var on='background:#400207;color:#E8D9C7;', off='background:#fbf7f1;color:#9c8a72;';
@@ -2278,12 +2493,238 @@ function admFbPanelHTML(){
   if(w && w.status==='fixed'){
     h+='<div style="'+hint+'border-top:1px solid #f1e9da;margin-top:11px;padding-top:9px;">Shipped, but nobody has driven it yet &mdash; it still only has our word for it.</div>';
   }
+  h+= extra || '';
   h+='</div></div>';
   return h;
 }
+/* ── THE INBOX ───────────────────────────────────────────────────────────────
+   Two lanes, one screen. ROUNDS is the push loop: he writes a round and asks.
+   INBOX is the pull lane: the team press "Tell us" in either app, whenever they
+   like, and it lands here.
+
+   They are deliberately NOT two screens. The whole reason this sits inside
+   Admin → Feedback is that a second screen is a second habit, and the one he
+   opened less often would be the one going unread — which is precisely how a
+   feedback button dies.
+
+   An inbox item's work state is an ordinary app_feedback_work row with
+   topic='inbox' and qkey=<the row's id>. So "fixed, with what changed, which
+   build and how to check it" — and the database constraint that refuses a bare
+   tick — apply here exactly as they do to a round item, with no second state
+   machine to keep in step. admFbStateOf / admFbWorkOf / admFbSaveForm all work
+   on an inbox item untouched.
+   ────────────────────────────────────────────────────────────────────────── */
+function admFbLane(){ return state.fbLane==='inbox' ? 'inbox' : 'rounds'; }
+function admFbSetLane(l){ state.fbLane=l; state.fbSel=null; state.fbForm=null; renderMain(); }
+// How many inbox items still need him. Read by the lane toggle so a new message
+// is visible from the Rounds lane — otherwise the only way to find out that
+// somebody wrote to you is to go and look, which is how you stop looking.
+function admFbInboxOpenCount(){
+  var n=0;
+  (state.fbInbox||[]).forEach(function(r){ var st=admFbStateOf('inbox', r.id); if(st==='open'||st==='prog') n++; });
+  return n;
+}
+function admFbLaneHTML(){
+  var lane=admFbLane(), waiting=admFbInboxOpenCount();
+  var seg='display:inline-flex;border:1px solid #e3d5c2;border-radius:9px;overflow:hidden;margin-bottom:2px;';
+  var mk=function(k,label,badge){
+    var on=lane===k;
+    return '<button class="btn btn-sm" style="border:0;border-radius:0;'+FB_NOSHOUT
+      + (on?'background:#400207;color:#E8D9C7;':'background:#fff;color:#6b5a45;')
+      + '" onclick="admFbSetLane(\''+k+'\')">'+label
+      + (badge?'<span style="margin-left:6px;font-size:10.5px;padding:1px 7px;border-radius:10px;background:'+(on?'rgba(232,217,199,.22)':'#F7DED9')+';color:'+(on?'#E8D9C7':'#8A2A1A')+';">'+badge+'</span>':'')
+      +'</button>';
+  };
+  return '<div style="'+seg+'">'
+    + mk('rounds','Rounds &mdash; what you asked','')
+    + mk('inbox','Inbox &mdash; what they sent', waiting||'')
+    +'</div>';
+}
+var FB_APP_NAME={ kitchen:'Kitchen', foh:'FOH' };
+function admInboxRowHTML(r){
+  var sel=admFbSel(), isSel = sel && sel.topic==='inbox' && String(sel.qkey)===String(r.id);
+  var st=admFbStateOf('inbox', r.id);
+  var app=FB_APP_NAME[r.app]||r.app||'—';
+  var line=String(r.body||'').replace(/\s+/g,' ');
+  // The meta (who, which app, where it has got to) is ONE group, so on a phone it
+  // folds to a second line together instead of three items scattering.
+  return '<div style="display:flex;align-items:center;border-bottom:1px solid #f6efe4;background:'+(isSel?'#fbf7f1':'transparent')+';">'
+    +'<button class="fbi-row" onclick="admFbOpen(\'inbox\',\''+admEsc(r.id)+'\')">'
+    +'<span class="fbi-bar" style="width:3px;align-self:stretch;border-radius:2px;flex:none;background:'+FB_STATE_COL[st]+';"></span>'
+    // The kind is a single character's worth of meaning; a coloured word for it
+    // would compete with the state colour already down the left.
+    +'<span style="font-size:11px;color:'+(r.kind==='problem'?'#8A2A1A':'#12456E')+';white-space:nowrap;flex:none;">'+(r.kind==='problem'?'wrong':'idea')+'</span>'
+    +'<span class="fbi-body">'+admEsc(line)+'</span>'
+    +'<span class="fbi-meta">'
+      // A camera on the row, so a message that brought evidence is worth opening
+      // first. Not the photo itself — forty thumbnails would turn a work list
+      // into a gallery, and this screen is read at a glance.
+      + (r.shot?'<span title="Has a photo" style="font-size:12px;color:#9c8a72;">&#128247;</span>':'')
+      +'<span style="color:#9c8a72;white-space:nowrap;">'+admEsc((r.who||'Anonymous').split(' ')[0])+' &middot; '+admEsc(app)+'</span>'
+      +'<span style="white-space:nowrap;color:'+(st==='ok'?'#2E6B34':(st==='open'?'#8A2A1A':'#9c8a72'))+';">'+admFbStateLabel('inbox',r.id,true)+'</span>'
+      +'<span class="fbi-chev" style="color:#e3d5c2;font-size:15px;">&rsaquo;</span>'
+    +'</span>'
+    +'</button></div>';
+}
+function admInboxHTML(){
+  var h='<div class="adm-wrap">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
+      +'<div><h2 style="font-size:19px;color:#400207;margin:0;font-weight:600;">Feedback</h2></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
+      +'</div>'
+    +'</div>'
+    +'<div style="margin-top:10px;">'+admFbLaneHTML()+'</div>';
+
+  if(state.fbInboxErr){
+    return h+'<div class="ppl-empty" style="margin-top:14px;">Couldn&rsquo;t load the inbox &mdash; '+admEsc(state.fbInboxErr)
+      +'<br><br>If this is the first time, run <b>foh-app-feedback-inbox.sql</b> once in Supabase, then tap Refresh. '
+      +'Until it has run, the button in both apps says it could not send &mdash; it never pretends it worked.</div></div>';
+  }
+  if(!state.fbInbox) return h+'<div class="loading">Loading&hellip;</div></div>';
+
+  var rows=state.fbInbox.slice();
+  var counts={ok:0,ship:0,prog:0,open:0};
+  rows.forEach(function(r){ counts[admFbStateOf('inbox',r.id)]++; });
+  var total=rows.length, waiting=counts.open+counts.prog;
+
+  var truth = !total
+    ? 'Nothing sent yet. The button is bottom-right on every screen of both apps &mdash; theirs to press, no login.'
+    : (waiting
+        ? '<b>'+waiting+'</b> waiting on you &mdash; out of '+total+' the team have sent.'
+        : 'Nothing waiting on you. All '+total+' sorted.');
+  h+='<div style="font-size:12.5px;color:#9c8a72;margin-top:9px;">'+truth+'</div>';
+
+  if(!total){
+    return h+'<div class="ppl-empty" style="margin-top:14px;">Nothing in the inbox yet.</div></div>';
+  }
+
+  h+=admFbBar(rows.map(function(r){ return {st:admFbStateOf('inbox',r.id)}; })).html;
+
+  // Same filter vocabulary as the Rounds lane, so there is one set of words for
+  // one set of states across the whole screen.
+  var filter=state.fbInboxFilter || (counts.open ? 'open' : (counts.prog ? 'prog' : 'all'));
+  var appF=state.fbInboxApp || 'all';
+  var F=[['open','Needs you',counts.open],['prog','In progress',counts.prog],['all','Everything',total],['done','Done',counts.ok+counts.ship]];
+  h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">'
+    + F.map(function(f){
+        var on=filter===f[0];
+        return '<button class="btn btn-sm" style="border-radius:20px;'+FB_NOSHOUT+(on?'background:#400207;color:#E8D9C7;border-color:#400207;':'background:#fff;border:1px solid #e3d5c2;color:#6b5a45;')+'" onclick="admInboxSetFilter(\''+f[0]+'\')">'
+          + f[1]+' <b style="font-weight:400;opacity:.7;">'+f[2]+'</b></button>';
+      }).join('')
+    +'</div>';
+
+  // Which app it came from. Only on screen once both apps have actually sent
+  // something — a filter with one option is a control that teaches nothing.
+  var apps={}; rows.forEach(function(r){ apps[r.app||'?']=(apps[r.app||'?']||0)+1; });
+  var appKeys=Object.keys(apps);
+  if(appKeys.length>1){
+    h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;">'
+      + [['all','Both apps',total]].concat(appKeys.map(function(k){ return [k,(FB_APP_NAME[k]||k),apps[k]]; })).map(function(f){
+          var on=appF===f[0];
+          return '<button class="btn btn-sm" style="border-radius:20px;'+FB_NOSHOUT+'font-size:11.5px;'+(on?'background:#6b5a45;color:#fff;border-color:#6b5a45;':'background:#fff;border:1px solid #ede2d2;color:#8b7355;')+'" onclick="admInboxSetApp(\''+admEsc(f[0])+'\')">'
+            + admEsc(f[1])+' <b style="font-weight:400;opacity:.7;">'+f[2]+'</b></button>';
+        }).join('')
+      +'</div>';
+  }
+
+  var shown=rows.filter(function(r){
+    if(appF!=='all' && r.app!==appF) return false;
+    var st=admFbStateOf('inbox',r.id);
+    if(filter==='all') return true;
+    if(filter==='done') return st==='ok'||st==='ship';
+    return st===filter;
+  });
+
+  var list = shown.length
+    ? '<div style="border:1px solid #e8ddcd;border-radius:11px;background:#fff;overflow:hidden;margin-top:14px;">'+shown.map(admInboxRowHTML).join('')+'</div>'
+    : (filter==='open'||filter==='prog')
+      ? '<div style="background:#fff;border:1px solid #e8ddcd;border-radius:11px;padding:26px 20px;text-align:center;margin-top:16px;">'
+        +'<div style="font-size:15.5px;color:#400207;font-weight:600;">Nothing is waiting on you.</div>'
+        +'<div style="font-size:12.5px;color:#9c8a72;margin-top:6px;">All '+total+' sorted.</div></div>'
+      : '<div class="ppl-empty" style="padding:24px 8px;">Nothing here &mdash; try another filter.</div>';
+
+  var sel=admFbSel();
+  h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;margin-top:6px;" class="'+(sel?'fb-split':'')+'">'
+    +'<div id="fb-list">'+list+'</div>'
+    + (sel?admFbPanelHTML():'')
+    +'</div>';
+  return h+'</div>';
+}
+function admInboxSetFilter(f){ state.fbInboxFilter=f; state.fbSel=null; renderMain(); }
+function admInboxSetApp(a){ state.fbInboxApp=a; state.fbSel=null; renderMain(); }
+// Delete one inbox message, and our record of the work on it. Both, or the work
+// row is orphaned: topic='inbox' + qkey=<a row id that no longer exists> would
+// sit in app_feedback_work forever, invisible and uncountable.
+// The message goes first — if the second call fails, what is left behind is a
+// stray work row, not a message we told him was gone and is not.
+// Mint a signed link for one message's photo and drop it into the panel. The
+// bucket is private on purpose (a photo can hold a roster, a guest name, a
+// payslip), so this is the ONLY way the image is reachable — and only for
+// someone already signed in to the app.
+async function admFbShotPaint(path){
+  setTimeout(async function(){
+    var box=document.getElementById('fb-shot-box'); if(!box) return;
+    try{
+      var r=await sb.storage.from('feedback-shots').createSignedUrl(path, 3600);
+      if(r.error) throw r.error;
+      var u=r.data && r.data.signedUrl;
+      if(!u) throw new Error('no link came back');
+      box=document.getElementById('fb-shot-box'); if(!box) return;   // panel may have closed while we waited
+      // Opens full size in a new tab: a screenshot of a spreadsheet is unreadable
+      // at panel width, and that is exactly the kind of thing they photograph.
+      box.innerHTML='<a href="'+admEsc(u)+'" target="_blank" rel="noopener" title="Open it full size">'
+        +'<img src="'+admEsc(u)+'" alt="What they were looking at" style="max-width:100%;border-radius:9px;border:1px solid #e3d5c2;display:block;">'
+        +'</a><div style="font-size:11px;color:#9c8a72;margin-top:5px;">Tap to open it full size. The link is temporary &mdash; the picture is not public.</div>';
+    }catch(err){
+      box=document.getElementById('fb-shot-box'); if(!box) return;
+      box.innerHTML='<span style="color:#8A2A1A;">Couldn&rsquo;t load the photo &mdash; '
+        +admEsc(String(err&&err.message||err).slice(0,80))+'</span>';
+    }
+  },0);
+}
+async function admInboxDelete(id){
+  var r=admInboxRow(id);
+  if(!r){ toast('That message is not in the list any more.', true); return; }
+  var who=r.who ? r.who : 'someone who did not leave a name';
+  var line=String(r.body||'').replace(/\s+/g,' ').slice(0,80);
+  if(!confirm('Delete this message for good?\n\n“'+line+'”\n— '+who+', '+(FB_APP_NAME[r.app]||r.app)+'\n\nThis cannot be undone. If it was a real message, it disappears from their status page as well.')) return;
+  try{
+    var d=await sb.from('app_feedback_inbox').delete().eq('id', id);
+    if(d.error) throw d.error;
+    // supabase-js does not throw on a failed write, it RETURNS the error — the
+    // trap this whole module was bitten by. Checked, not assumed.
+    var w=await sb.from('app_feedback_work').delete().eq('topic','inbox').eq('qkey',String(id));
+    if(w.error) throw w.error;
+    // And the photo, or the image outlives the words it belonged to in a bucket
+    // nobody ever looks in. Best-effort and last: the message is already gone, so
+    // a storage hiccup must not report the delete as failed when it succeeded.
+    if(r.shot){ try{ await sb.storage.from('feedback-shots').remove([r.shot]); }catch(e){} }
+    toast('Deleted');
+  }catch(err){
+    var m=String(err&&err.message||err);
+    // No DELETE policy is the likeliest failure, and it is a one-line fix rather
+    // than something to puzzle over.
+    toast(/policy|permission|row-level/i.test(m)
+      ? 'Not deleted — run foh-app-feedback-inbox-delete.sql once in Supabase first.'
+      : 'Not deleted — '+m.slice(0,90), true);
+  }
+  state.fbSel=null; state.fbForm=null;
+  admFbLoad();
+}
+function admInboxRow(id){
+  var out=null;
+  (state.fbInbox||[]).forEach(function(r){ if(String(r.id)===String(id)) out=r; });
+  return out;
+}
+
 function admFbHTML(){
+  if(admFbLane()==='inbox') return admInboxHTML();
   var head='<div class="ppl-sum" style="margin:0;"></div>';
+  // The lane toggle comes BEFORE the failure, not after it: rounds being broken
+  // is no reason to lock him out of the inbox, which is a different table.
   if(state.fbErr) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2><button class="btn btn-sm" onclick="admFbLoad()">Refresh</button></div>'
+    +'<div style="margin-bottom:12px;">'+admFbLaneHTML()+'</div>'
     +'<div class="ppl-empty">Couldn&rsquo;t load the replies &mdash; '+admEsc(state.fbErr)+'<br><br>If this is the first time, run <b>foh-app-feedback.sql</b> once in Supabase, then tap Refresh.</div></div>';
   if(!state.fbRows) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2></div><div class="loading">Loading&hellip;</div></div>';
 
@@ -2364,6 +2805,7 @@ function admFbHTML(){
         +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border-color:transparent;color:#9c8a72;" onclick="admFbLoad()">Refresh</button>'
       +'</div>'
     +'</div>'
+    +'<div style="margin-top:10px;">'+admFbLaneHTML()+'</div>'
     + bar.html;
 
   if(!total && !state.fbRows.length){
@@ -3541,6 +3983,24 @@ async function fohLoadAttendance(){
   if(!empIds.length) return;
   var res = await sbKitchen.from('attendance').select('*')
     .gte('att_date', from).lte('att_date', to).in('emp_id', empIds).limit(2000);
+  // This reads the KITCHEN project, not ours — a second database, so it is the
+  // most likely read in the app to fail. It used to ignore res.error entirely:
+  // on a failure res.data is undefined, every clock-in and clock-out rendered
+  // blank, and that is indistinguishable from a night nobody turned up. Say it
+  // failed and keep whatever was already on screen — the same way the roster
+  // load above does it.
+  if(res.error){
+    console.error('Attendance load error:', res.error);
+    toast('Could not load clock-ins — showing the last loaded times.', true);
+    return;
+  }
+  // Row cap: ~29 active staff over a 10-day window is ~290 rows, so 2000 has
+  // real headroom. If it ever fills, punches are being dropped and the hours
+  // undercount — which must not be a thing only the console knows.
+  if((res.data || []).length >= 2000){
+    console.warn('Attendance load hit the 2000-row cap — some punches may be missing.');
+    toast('Too many clock-ins to show at once — hours may be short. Tell Francesco.', true);
+  }
   fohSchedAttendance = {};
   (res.data || []).forEach(function(a){
     fohSchedAttendance[fohSchedAttKey(a.emp_id, String(a.att_date).slice(0,10))] = a;

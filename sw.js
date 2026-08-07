@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260804a';
+const CACHE = 'robertos-foh-v20260807c';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -36,6 +36,9 @@ const ASSETS = [
   // network-first like everything else, so it can go stale only while genuinely
   // offline, where those pages never worked anyway (they are not cached at all).
   './foh-rounds.js',
+  // The "Tell us" button — mounted on every screen, so an uncached copy means
+  // the offline app is the one place the team cannot report that it is broken.
+  './feedback-button.js',
   './foh-events.js',
   // Pre-existing gap, unrelated to the split: the largest module (365KB) was
   // never precached, so the events desk was already offline-broken.

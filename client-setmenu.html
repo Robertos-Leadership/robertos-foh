@@ -154,7 +154,7 @@ function render(){
         }).join('')+'</div>';
     });
     h += '<div class="btnrow"><button class="save noprint" onclick="window.print()">Save or print this menu</button>'+
-      '<div class="ft">To book your occasion or ask us anything, simply reply to Valentina — or write to '+
+      '<div class="ft">To book your occasion or ask us anything, simply reply to our last email — or write to '+
       '<a href="mailto:reservations@robertos.ae" style="color:var(--vino)">reservations@robertos.ae</a>.<br><br>'+
       (priceLine ? 'All prices are in AED and inclusive of 5% VAT, 7% DIFC Authority Fee and 10% Service Charge.<br>' : '')+
       'Our chefs will do their best to accommodate your dietary requirements.</div></div>';
@@ -187,7 +187,7 @@ function render(){
   h += '<div class="note"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:5px">Anything we should change or know? A vegan main, allergies, the occasion…</div>'+
        '<textarea id="cl-note" maxlength="900"></textarea></div>';
   h += '<div class="btnrow"><button class="btn" id="cl-send" onclick="send()">Send my choices to Roberto’s</button>'+
-       '<div class="ft">Valentina will confirm everything back to you.<br>Our chefs will do their best to accommodate your dietary requirements.</div></div>';
+       '<div class="ft">Our events team will confirm everything back to you.<br>Our chefs will do their best to accommodate your dietary requirements.</div></div>';
   el('card').innerHTML = h;
   sums();
 }
@@ -235,7 +235,7 @@ async function send(){
       body: JSON.stringify(payload) });
     if(!r.ok){ var t = await r.text(); throw new Error(t.slice(0,120)); }
     el('card').innerHTML = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
-      '<div class="msg">Grazie! Your choices have been sent.<br><br>Valentina will confirm everything back to you shortly.</div>';
+      '<div class="msg">Grazie! Your choices have been sent.<br><br>Our events team will confirm everything back to you shortly.</div>';
   }catch(e){
     btn.disabled = false; btn.textContent = 'Send my choices to Roberto’s';
     flash('Could not send — please try again in a moment.');
