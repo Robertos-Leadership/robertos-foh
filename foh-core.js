@@ -361,7 +361,7 @@ function fohBlocked(module){
 // ── Activations is paused (7 Aug 2026). The card stays visible and still opens —
 // nothing is taken away — it is just shaded back with a "Paused" badge so the
 // team can see at a glance that no activations are running. One switch: flip
-// this to false and the card, its badge and its status line all come back.
+// this to [] and the card, its badge and its status line all come back.
 var FOH_PAUSED_MODULES = ['events'];
 function fohModulePaused(m){ return FOH_PAUSED_MODULES.indexOf(m) !== -1; }
 function applyFohAccess(){
