@@ -2236,7 +2236,21 @@ function admFbPanelHTML(){
     if(!ib.who){
       hi+='<div style="'+hint+'">Sent without a name, so there is nobody to tell when it&rsquo;s fixed &mdash; and no status link. That was their choice to make.</div>';
     }
-    return hi + admFbStateFormHTML(s, f, lbl, inp, hint);
+    // ── Delete ──
+    // Everywhere else on this screen, what a person said is theirs and cannot be
+    // removed — "Back on the list" only ever deletes OUR record of the work. This
+    // is the one exception, and it exists for a plain reason: Francesco tests
+    // this button himself, and his own test messages should not sit in the work
+    // list forever pretending to be the team.
+    // So it is a panel action behind a confirm, not a quiet ✕ on the row: the row
+    // is a door, and a delete you can hit while scanning is a delete you will hit
+    // by accident. The confirm names who sent it, because the moment it is not
+    // one of his own tests, this is somebody's message.
+    var del='<div style="border-top:1px solid #f1e9da;margin-top:13px;padding-top:11px;">'
+      +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border:1px solid #E0C4BE;color:#8A2A1A;border-radius:8px;" onclick="admInboxDelete(\''+admEsc(ib.id)+'\')">Delete this message</button>'
+      +'<div style="'+hint+'">For your own test messages. It cannot be undone, and if someone sent it, it goes from their status page too.</div>'
+      +'</div>';
+    return hi + admFbStateFormHTML(s, f, lbl, inp, hint, del);
   }
 
   var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
@@ -2318,8 +2332,10 @@ function admFbPanelHTML(){
 // two definitions of what counts as proof, and the one that drifted would be
 // the one quietly accepting a tick again.
 // Returns the state block AND the panel's closing </div> — its callers open the
-// panel, this closes it.
-function admFbStateFormHTML(s, f, lbl, inp, hint){
+// panel, this closes it. `extra` is anything that belongs INSIDE the panel below
+// the form (the inbox lane's Delete); a round item passes nothing, because a
+// round answer is never deletable.
+function admFbStateFormHTML(s, f, lbl, inp, hint, extra){
   var h='';
   var seg='display:flex;border:1.5px solid #e3d5c2;border-radius:8px;overflow:hidden;';
   var noshout='text-transform:none;letter-spacing:0;';
@@ -2367,6 +2383,7 @@ function admFbStateFormHTML(s, f, lbl, inp, hint){
   if(w && w.status==='fixed'){
     h+='<div style="'+hint+'border-top:1px solid #f1e9da;margin-top:11px;padding-top:9px;">Shipped, but nobody has driven it yet &mdash; it still only has our word for it.</div>';
   }
+  h+= extra || '';
   h+='</div></div>';
   return h;
 }
@@ -2518,6 +2535,36 @@ function admInboxHTML(){
 }
 function admInboxSetFilter(f){ state.fbInboxFilter=f; state.fbSel=null; renderMain(); }
 function admInboxSetApp(a){ state.fbInboxApp=a; state.fbSel=null; renderMain(); }
+// Delete one inbox message, and our record of the work on it. Both, or the work
+// row is orphaned: topic='inbox' + qkey=<a row id that no longer exists> would
+// sit in app_feedback_work forever, invisible and uncountable.
+// The message goes first — if the second call fails, what is left behind is a
+// stray work row, not a message we told him was gone and is not.
+async function admInboxDelete(id){
+  var r=admInboxRow(id);
+  if(!r){ toast('That message is not in the list any more.', true); return; }
+  var who=r.who ? r.who : 'someone who did not leave a name';
+  var line=String(r.body||'').replace(/\s+/g,' ').slice(0,80);
+  if(!confirm('Delete this message for good?\n\n“'+line+'”\n— '+who+', '+(FB_APP_NAME[r.app]||r.app)+'\n\nThis cannot be undone. If it was a real message, it disappears from their status page as well.')) return;
+  try{
+    var d=await sb.from('app_feedback_inbox').delete().eq('id', id);
+    if(d.error) throw d.error;
+    // supabase-js does not throw on a failed write, it RETURNS the error — the
+    // trap this whole module was bitten by. Checked, not assumed.
+    var w=await sb.from('app_feedback_work').delete().eq('topic','inbox').eq('qkey',String(id));
+    if(w.error) throw w.error;
+    toast('Deleted');
+  }catch(err){
+    var m=String(err&&err.message||err);
+    // No DELETE policy is the likeliest failure, and it is a one-line fix rather
+    // than something to puzzle over.
+    toast(/policy|permission|row-level/i.test(m)
+      ? 'Not deleted — run foh-app-feedback-inbox-delete.sql once in Supabase first.'
+      : 'Not deleted — '+m.slice(0,90), true);
+  }
+  state.fbSel=null; state.fbForm=null;
+  admFbLoad();
+}
 function admInboxRow(id){
   var out=null;
   (state.fbInbox||[]).forEach(function(r){ if(String(r.id)===String(id)) out=r; });
