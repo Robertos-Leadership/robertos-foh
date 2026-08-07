@@ -26,6 +26,28 @@
 (function(){
   var boot = null, reloading = false;
   function tagOf(res){ return res.headers.get('ETag') || res.headers.get('Last-Modified') || ''; }
+  /* THE RELOAD LOOP, found in the Kitchen app 4 Aug 2026 and fixed here the same day
+     because this guard is its twin. Reloading whenever the tag is merely DIFFERENT is
+     not the same question as "is there a new version". GitHub Pages writes the ETag as
+     W/"<build time in hex>-<size in hex>", and the build time is NOT identical on every
+     edge server: the same untouched file came back one second apart from two of them,
+     byte for byte the same file. So the app flipped between the two answers and
+     reloaded itself every five minutes, all day, with nothing deployed at all.
+     What identifies the CONTENT is the size half. What identifies a real deploy is a
+     build time minutes newer — never one second. */
+  var SKEW = 120000;                       // ms of edge-to-edge disagreement to ignore
+  function parseTag(t){
+    var m = /"([0-9a-f]+)-([0-9a-f]+)"/i.exec(t);          // GitHub Pages ETag
+    if (m) return { size: m[2], at: parseInt(m[1], 16) * 1000 };
+    var d = Date.parse(t);                                  // Last-Modified fallback
+    return isFinite(d) ? { size: null, at: d } : null;
+  }
+  function isNewer(now, was){
+    var a = parseTag(now), b = parseTag(was);
+    if (!a || !b) return now !== was;                       // a shape we don't know — behave as before
+    if (a.size !== null && b.size !== null && a.size !== b.size) return true;   // the file itself changed
+    return a.at > b.at + SKEW;                              // a genuinely newer build, not clock skew
+  }
   function busy(){
     var el = document.activeElement;
     if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;   // don't nuke someone mid-typing
@@ -38,7 +60,7 @@
   // ReferenceError on every controllerchange — before swReload() had set its
   // guard or called location.reload(). So the reload-on-new-worker path was
   // dead: a deploy that changed sw.js never refreshed the screen, and the app
-  // only caught up later when the ETag check happened to notice. Shared here
+  // only caught up when the ETag check above happened to notice. Shared here
   // deliberately rather than duplicated — two copies of "is he mid-edit?" is
   // how one of them ends up wrong.
   window.__fohBusy = busy;
@@ -49,7 +71,7 @@
         var tag = tagOf(res);
         if (!tag) return;
         if (boot === null) { boot = tag; return; }       // first run: remember what we booted with
-        if (tag !== boot && !reloading && !busy()) {      // newer version is live → refresh
+        if (isNewer(tag, boot) && !reloading && !busy()) {   // newer version is live → refresh
           reloading = true;
           location.reload();
         }
@@ -112,7 +134,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="foh-styles.css?v=20260807b">
+<link rel="stylesheet" href="foh-styles.css?v=20260807c">
 </head>
 <body>
 
@@ -146,7 +168,7 @@ if ('serviceWorker' in navigator) {
     <div class="foh-hero-content">
       <img class="foh-hero-logo" src="robertos-logo-white.svg" alt="Roberto's">
     </div>
-    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-08-03.12</div>
+    <div id="foh-build" style="position:absolute;bottom:6px;right:10px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.4);z-index:3;font-variant-numeric:tabular-nums;">build 2026-08-07.02</div>
   </div>
 
   <!-- main scroll area -->
@@ -399,15 +421,15 @@ if ('serviceWorker' in navigator) {
      Loaded here, not with the foh-*.js at the foot of the body, because the
      inline Admin code below READS it rather than just calling into it. -->
 <script src="foh-rounds.js?v=20260731a"></script>
-<script src="foh-core.js?v=20260807c"></script>
+<script src="foh-core.js?v=20260807f"></script>
 <script src="foh-events.js?v=20260731a"></script>
-<script src="foh-privateevents.js?v=20260807c"></script>
+<script src="foh-privateevents.js?v=20260807f"></script>
 <script src="foh-revenue.js?v=20260727a"></script>
 <script src="foh-closing.js?v=20260714a"></script>
 <script src="foh-ops.js?v=20260710b"></script>
 <script src="stock-take.js?v=20260801d"></script>
 <script src="foh-reviews.js?v=20260801a"></script>
-<script src="foh-reservations.js?v=20260801f"></script>
+<script src="foh-reservations.js?v=20260807a"></script>
 <script src="foh-resreports.js?v=20260801a"></script>
 
 <!-- "Tell us" — the button the team press when THEY have something to say.
@@ -470,7 +492,7 @@ window.FB_INBOX = {
   }
 };
 </script>
-<script src="feedback-button.js?v=20260807a"></script>
+<script src="feedback-button.js?v=20260807d"></script>
 
 <!-- FOH Schedule: PIN modal -->
 <div id="foh-sch-pin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center" onclick="fohSchedClosePin(event)">
