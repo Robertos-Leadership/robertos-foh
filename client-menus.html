@@ -43,6 +43,9 @@ function clean(list, re){
 }
 var foodKeys = clean(q.get('food'), /^[a-z0-9-]{1,60}$/i);
 var bevIds   = clean(q.get('bev'),  /^[0-9a-f-]{36}$/i);
+// Canapé packages (event_packages), ticked beside the set menus so a reception
+// with canapés and a beverage package arrives as ONE link, not three.
+var packIds  = clean(q.get('pack'), /^[0-9a-f-]{36}$/i);
 var who      = (q.get('n')||'').slice(0, 40).trim();
 // Minimum-spend clients are sent the menu WITHOUT prices — the price lives in the
 // proposal / contract, not on this page.
@@ -118,8 +121,16 @@ async function get(path){
 }
 
 async function load(){
-  if(!foodKeys.length && !bevIds.length && !alcIds.length && !alcAll){
+  if(!foodKeys.length && !bevIds.length && !alcIds.length && !alcAll && !packIds.length){
     return fail('This link is incomplete — please use the link Roberto’s sent you, or get in touch and we’ll resend it.');
+  }
+  // The canapé view is created by foh-events-canape-public.sql. If that has not
+  // been run yet, this returns nothing rather than taking the whole page down —
+  // the set menus and beverage the guest was also sent still arrive.
+  async function getPacks(){
+    if(!packIds.length) return [];
+    try{ return await get('event_packages_public?id='+inList(packIds)+'&select=id,name,price_pp,dishes'); }
+    catch(e){ return []; }
   }
   // Fetch beverage packages asking for the pdf column, but fall back to the older
   // column set if the pdf field isn't on the view yet — so an existing link never
@@ -137,30 +148,34 @@ async function load(){
       getBevs(),
       (alcAll || alcIds.length)
         ? get('event_alacarte?'+(alcAll ? '' : 'id='+inList(alcIds)+'&')+'active=is.true&select=id,section,name,description,price,unit,tiers,market_price,allergens,sort_order&order=sort_order')
-        : []
+        : [],
+      getPacks()
     ]);
-    render(res[0]||[], res[1]||[], res[2]||[]);
+    render(res[0]||[], res[1]||[], res[2]||[], res[3]||[]);
   }catch(e){
     fail('Could not load the menus — please check your connection and reopen the link.');
   }
 }
 
-function render(menus, bevs, alc){
+function render(menus, bevs, alc, packs){
   alc = alc || [];
+  packs = packs || [];
   window.__alc = alc;
-  if(!menus.length && !bevs.length && !alc.length){
+  if(!menus.length && !bevs.length && !alc.length && !packs.length){
     return fail('These menus are no longer available — please get in touch and we’ll help right away.');
   }
   // Keep the order Valentina ticked them in, not whatever the database returns.
   menus.sort(function(a,b){ return foodKeys.indexOf(a.key) - foodKeys.indexOf(b.key); });
   bevs.sort(function(a,b){ return bevIds.indexOf(a.id) - bevIds.indexOf(b.id); });
+  packs.sort(function(a,b){ return packIds.indexOf(a.id) - packIds.indexOf(b.id); });
 
-  var both = (menus.length || alc.length) && bevs.length;
+  var both = (menus.length || alc.length || packs.length) && bevs.length;
   var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub">'+(
       (menus.length && alc.length) ? 'Menus &amp; our à la carte'
       : both ? 'Menus &amp; beverage packages'
       : menus.length ? 'Our set menus'
+      : packs.length ? 'Our canapé packages'
       : alc.length ? 'Our à la carte'
       : 'Beverage packages')+'</div>'+
     '<div class="sub2">'+(who ? 'For '+esc(who)+' · ' : '')+'DIFC, Dubai — private dining &amp; events</div>';
@@ -176,6 +191,22 @@ function render(menus, bevs, alc){
           ((noPrice || m.price_pp==null) ? '' : '<div class="pr">AED '+money(m.price_pp)+' per guest</div>')+
           (m.line ? '<span class="ds">'+esc(m.line)+'</span>' : '')+
           '<a class="open" href="'+esc(href)+'" target="_blank" rel="noopener">View the full menu</a></div>';
+      }).join('')+'</div>';
+  }
+
+  // A canapé package is a list of canapés, so it is written out in full — there is
+  // no designed PDF to open the way a set menu has one.
+  if(packs.length){
+    h += '<div class="sect">'+((both||menus.length) ? '<div class="sect-t">The canapés</div>' : '')+
+      packs.map(function(p){
+        var dishes = p.dishes || [];
+        return '<div class="item"><div class="nm">'+esc(p.name)+'</div>'+
+          ((noPrice || p.price_pp==null) ? '' : '<div class="pr">AED '+money(p.price_pp)+' per guest</div>')+
+          dishes.map(function(d){
+            return '<span class="ds" style="display:block;margin-top:5px">'+esc(d.name)+
+              ((d.allergens && d.allergens.length) ? ' <span class="codes" style="font-size:10px;color:var(--ink-faint)">('+d.allergens.join(')(')+')</span>' : '')+
+              (d.description ? '<br><span style="color:var(--ink-faint)">'+esc(d.description)+'</span>' : '')+'</span>';
+          }).join('')+'</div>';
       }).join('')+'</div>';
   }
 

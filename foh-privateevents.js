@@ -28,6 +28,7 @@ var peState = {
   cmBusy:false,
   log:{},                 // event_id -> log rows (loaded per event)
   logEdit:null,           // id of the log line currently being corrected in place
+  canapeViewOk:null,      // is event_packages_public there yet? asked once, lazily
   aiDesc:null, aiBusy:false,
   editDishId:null, editBevId:null, editPackId:null,
   chefTab:'canape',       // canape | set — Chef Corner sub-tab
@@ -418,6 +419,13 @@ function peToday(){ return localISO(new Date()); }
 function peMonthKey(d){ return String(d).slice(0,7); }
 function peDishById(id){ for(var i=0;i<peState.dishes.length;i++) if(peState.dishes[i].id===id) return peState.dishes[i]; return null; }
 function peBevById(id){ for(var i=0;i<peState.bevs.length;i++) if(peState.bevs[i].id===id) return peState.bevs[i]; return null; }
+// A canapé package (event_packages) by id — the ticked keys come back from the
+// DOM as strings, so compare as strings or a ticked package resolves to nothing.
+function peCanapePackById(id){
+  var all = peState.packs||[];
+  for(var i=0;i<all.length;i++) if(String(all[i].id)===String(id)) return all[i];
+  return null;
+}
 function peEvById(id){ for(var i=0;i<peState.events.length;i++) if(peState.events[i].id===id) return peState.events[i]; return null; }
 function peDLabel(ds){ if(!ds) return '—'; var d=new Date(String(ds).slice(0,10)+'T12:00:00'); return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 // A timestamp a person can read. "2026-07-30 14:22" is a database value, not
@@ -4498,6 +4506,24 @@ function peRenderPacksView(){
           '</span></div>';
       }).join('')+'</div>';
   }
+  // Katarina, 8 Aug 2026: the canapé packages had their own tab and no way onto a
+  // send. A canapé reception with a beverage package is the most common shape of
+  // enquiry she answers, so it has to travel in the SAME one email, ticked here
+  // beside the set menus — not as a second message the guest has to join up.
+  var packs = (peState.packs||[]).filter(function(p){ return p.active!==false; });
+  if(packs.length){
+    h += '<div class="pe-card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="color:#400207">Canapé packages</b>'+peSelLinks('pack')+'</div>'+
+      '<div style="font-size:11px;color:#8B7355;margin:2px 0 8px">The reception canapés — the email lists every canapé in the package. Build and edit them under “Canapé packages”.</div>'+
+      packs.map(function(p){
+        var names = (p.dish_ids||[]).map(function(id){ var d=peDishById(id); return d?d.name:null; }).filter(Boolean);
+        return '<div class="pe-dishrow"><span><label style="cursor:pointer"><input type="checkbox" class="pe-mp-check" data-kind="pack" data-key="'+p.id+'" onchange="peMpCount()" style="accent-color:#400207;margin-right:8px;vertical-align:-2px">'+
+          '<b>'+peEsc(p.name)+'</b>'+(p.price_pp!=null?' · AED '+peMoney(p.price_pp)+' / guest':' · <span style="background:#FAEEDA;color:#854F0B;font-size:10.5px;padding:1px 8px;border-radius:20px">price on the proposal</span>')+'</label><br>'+
+          '<span style="font-size:11px;color:#8B7355">'+(names.length?peEsc(names.join(' · ')):'No canapés on this package yet')+'</span></span>'+
+          '<span style="display:flex;gap:6px;flex-shrink:0">'+
+          (peCanEdit()?'<button class="pe-btn sec sm" onclick="peState.packsTab=\'canape\';peState.editPackId=\''+p.id+'\';renderMain()">Edit</button>':'')+
+          '</span></div>';
+      }).join('')+'</div>';
+  }
   // À la carte, tickable dish by dish. Valentina (30 Jul): a guest wants to see
   // the à la carte and say what they'd like — she picks what goes on the link,
   // with or without prices, and the guest ticks from exactly that.
@@ -5850,7 +5876,7 @@ function peMpSelectAll(kind, on){
 }
 function peMpCount(){
   var t = peMpTicked();
-  var n = t.food.length + t.bev.length + (t.alc||[]).length;
+  var n = t.food.length + t.bev.length + (t.alc||[]).length + (t.pack||[]).length;
   var el = document.getElementById('pe-mp-count');
   if(el) el.innerHTML = n ? 'Will send: <b style="color:#400207">'+peEsc(peMpSummary(t))+'</b> — by email, or one WhatsApp with one link.'
                           : 'Nothing ticked yet — tick at least one menu or package above.';
@@ -5886,16 +5912,20 @@ function peMenuPackEmailForm(){
 // What Valentina has ticked, in the order the screen shows them — read once and
 // used by both doors, so email and WhatsApp can never disagree about what's sent.
 function peMpTicked(){
-  var food = [], bev = [], alc = [];
+  var food = [], bev = [], alc = [], pack = [];
   document.querySelectorAll('.pe-mp-check:checked').forEach(function(el){
     var k = el.getAttribute('data-kind');
-    (k==='food' ? food : k==='alc' ? alc : bev).push(el.getAttribute('data-key'));
+    (k==='food' ? food : k==='alc' ? alc : k==='pack' ? pack : bev).push(el.getAttribute('data-key'));
   });
-  return { food:food, bev:bev, alc:alc };
+  return { food:food, bev:bev, alc:alc, pack:pack };
 }
+// Nothing ticked is nothing ticked, whichever card it was on — every door out of
+// this screen asks this one question so they can't disagree.
+function peMpAny(t){ return !!(t.food.length || t.bev.length || (t.alc||[]).length || (t.pack||[]).length); }
 function peMpSummary(t){
   var parts = [];
   if(t.food.length) parts.push(t.food.length+' set menu'+(t.food.length>1?'s':''));
+  if((t.pack||[]).length) parts.push(t.pack.length+' canapé package'+(t.pack.length>1?'s':''));
   if((t.alc||[]).length) parts.push(t.alc.length+' à la carte dish'+(t.alc.length>1?'es':''));
   if(t.bev.length) parts.push(t.bev.length+' beverage package'+(t.bev.length>1?'s':''));
   return parts.join(' + ');
@@ -5905,6 +5935,7 @@ function peMpSummary(t){
 function peMenuPackUrl(t, name, noPrice){
   var p = [];
   if(t.food.length) p.push('food='+t.food.map(encodeURIComponent).join(','));
+  if((t.pack||[]).length) p.push('pack='+t.pack.map(encodeURIComponent).join(','));
   if((t.alc||[]).length) p.push('alc='+t.alc.map(encodeURIComponent).join(','));
   if(t.bev.length)  p.push('bev='+t.bev.map(encodeURIComponent).join(','));
   if(name) p.push('n='+encodeURIComponent(name));
@@ -5932,7 +5963,7 @@ function peWaDigits(phone){
   if(d.length <= 9) d = '971'+d;
   return d.length >= 11 ? d : '';
 }
-function peSendMenuPackWa(){
+async function peSendMenuPackWa(){
   if(!peCanEdit()){ peToast('View only — ask Katarina, Andrea or Francesco to make changes', true); return; }
   var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
   var phone = g('pe-mp-phone'), name = g('pe-mp-name'), note = g('pe-mp-note');
@@ -5944,7 +5975,18 @@ function peSendMenuPackWa(){
   var noPriceElW = document.getElementById('pe-mp-noprice');
   var noPrice = !!(noPriceElW && noPriceElW.checked);
   var t = peMpTicked();
-  if(!t.food.length && !t.bev.length && !(t.alc||[]).length){ peToast('Tick at least one menu, dish or package to send', true); return; }
+  if(!peMpAny(t)){ peToast('Tick at least one menu, dish or package to send', true); return; }
+  // The guest page reads canapé packages from a guest-safe view that only exists
+  // once foh-events-canape-public.sql has been run. Rather than send a link that
+  // quietly arrives without the canapés, say so and let her choose.
+  if((t.pack||[]).length && !(await peCanapeLinkReady())){
+    if(!(await peConfirm({
+      title:'The canapés can’t travel on a WhatsApp link yet',
+      html:'One database step is still to be run, so the guest page can’t show canapé packages. The link would arrive with '+
+        peEsc(peMpSummary({food:t.food, bev:t.bev, alc:t.alc, pack:[]})||'nothing else')+' and <b>no canapés</b>.<br><br>'+
+        '<b>Send by email instead</b> — the email carries the canapés in full, written out canapé by canapé.',
+      ok:'Send the link anyway', cancel:'I’ll use email', danger:true }))) return;
+  }
   var msg = 'Ciao'+(name?' '+name.split(' ')[0]:'')+'! Thank you for thinking of Roberto’s for your occasion.'+
     (note?'\n\n'+note:'')+
     '\n\nHere is everything for your occasion ('+peMpSummary(t)+'), on one page:\n'+
@@ -5954,6 +5996,16 @@ function peSendMenuPackWa(){
   // WhatsApp opens with the message written — she still presses send there, so
   // this never claims it has gone.
   peToast('WhatsApp opened for '+phone+' with '+peMpSummary(t)+' — press send in WhatsApp to deliver it');
+}
+// Asked once per session, and only when a canapé package is actually ticked for a
+// WhatsApp link — an existing view answers instantly and is never asked again.
+async function peCanapeLinkReady(){
+  if(peState.canapeViewOk != null) return peState.canapeViewOk;
+  try{
+    var r = await sb.from('event_packages_public').select('id').limit(1);
+    peState.canapeViewOk = !r.error;
+  }catch(e){ peState.canapeViewOk = false; }
+  return peState.canapeViewOk;
 }
 function peBaseUrl(){ return location.origin + location.pathname.replace(/[^\/]*$/, ''); }
 function peGuestEmailHTML(title, intro, name, note, inner, noPrice){
@@ -5972,8 +6024,10 @@ function peGuestEmailHTML(title, intro, name, note, inner, noPrice){
 function peMailSection(label){
   return '<div style="text-align:center;margin:30px 0 2px"><span style="font-size:11px;letter-spacing:3px;color:#B99C03;text-transform:uppercase">'+label+'</span></div>';
 }
-function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pickUrl){
+function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pickUrl, packIds){
   alcIds = alcIds || [];
+  packIds = packIds || [];
+  var packs = packIds.map(peCanapePackById).filter(Boolean);
   // Include unpriced menus too — a no-price send (minimum-spend client) needs them,
   // and a priced send simply omits the price line for any that has none.
   // Resolve by KEY, not by filtering the designed-menu list — a menu Valentina
@@ -5981,15 +6035,25 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
   // absent from that list. peSetMenuByKey finds both.
   var menus = foodKeys.map(peSetMenuByKey).filter(Boolean);
   var bevs = bevKeys.map(peBevById).filter(Boolean);
-  var both = menus.length && bevs.length;
-  var title = both ? 'Menus & Beverage Packages' : (menus.length ? 'Set Menus' : 'Beverage Packages');
+  var both = (menus.length || packs.length) && bevs.length;
+  // More than one kind in the email means each kind is announced, so the guest
+  // can tell the canapés from the set menus without reading every line.
+  var kinds = [menus.length, packs.length, alcIds.length, bevs.length].filter(Boolean).length;
+  var multi = kinds > 1;
+  var title = both ? 'Menus & Beverage Packages'
+            : menus.length ? 'Set Menus'
+            : packs.length ? 'Canapé Packages'
+            : alcIds.length ? 'Our À La Carte'
+            : 'Beverage Packages';
   var intro = 'Thank you for thinking of Roberto’s for your occasion. ' + (both
-    ? 'Please find our set menus and beverage packages below — the button under each menu opens the full menu.'
+    ? 'Please find our menus and beverage packages below — the button under each set menu opens the full menu.'
     : menus.length ? 'Please find our set menus below — the button under each one opens the full menu.'
+    : packs.length ? 'Please find our canapé packages below, with everything served in each one.'
+    : alcIds.length ? 'Please find our à la carte below.'
                    : 'Please find our beverage packages below.');
   var inner = '';
   if(menus.length){
-    if(both) inner += peMailSection('The food — set menus');
+    if(multi) inner += peMailSection('The food — set menus');
     inner += menus.map(function(m){
       // Menus with a designed PDF link to it; menus without one (chef-added)
       // print their courses inline so the guest still sees the full menu.
@@ -6016,6 +6080,23 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
         '<div class="dish"><span class="d">'+peEsc(m.line||peSmSummary(m.courses))+'</span></div>'+extra;
     }).join('');
   }
+  // The canapé packages, written out canapé by canapé. A package is a list of
+  // dishes and nothing else, so unlike a set menu there is no PDF to link to —
+  // the guest has to be able to read what they are getting here.
+  if(packs.length){
+    if(multi) inner += peMailSection(packs.length>1 ? 'The canapés — packages' : 'The canapés');
+    inner += packs.map(function(p){
+      var priceTag = (noPrice || p.price_pp==null) ? '' : ' — '+pePerPerson(p.price_pp);
+      var dishes = (p.dish_ids||[]).map(peDishById).filter(Boolean);
+      return '<div class="sec">'+peEsc(p.name)+priceTag+'</div>'+
+        (dishes.length
+          ? dishes.map(function(d){
+              return '<div class="dish">'+peEsc(d.name)+peEsc(peCmAlgCodes(d.allergens))+
+                (d.description?'<br><span class="d">'+peEsc(d.description)+'</span>':'')+'</div>';
+            }).join('')
+          : '');
+    }).join('');
+  }
   // The à la carte dishes she ticked, grouped the way the menu is printed, with
   // the English description and the allergens — the same standard as every
   // other menu we send.
@@ -6039,7 +6120,7 @@ function peMenuPackEmailHTML(foodKeys, bevKeys, name, note, noPrice, alcIds, pic
     }
   }
   if(bevs.length){
-    if(both) inner += peMailSection('The beverages — packages');
+    if(multi) inner += peMailSection('The beverages — packages');
     inner += bevs.map(function(b){
       var priceTag = (noPrice || b.price_pp==null) ? '' : ' · '+pePerPerson(b.price_pp);
       var extra = b.pdf
@@ -6060,8 +6141,8 @@ async function peSendMenuPack(){
   peInlineErr(document.getElementById('pe-mp-email'),'');
   var noPriceEl = document.getElementById('pe-mp-noprice');
   var noPrice = !!(noPriceEl && noPriceEl.checked);
-  var t = peMpTicked(), food = t.food, bev = t.bev, alc = t.alc||[];
-  if(!food.length && !bev.length && !alc.length){ peToast('Tick at least one menu, dish or package to send', true); return; }
+  var t = peMpTicked(), food = t.food, bev = t.bev, alc = t.alc||[], pack = t.pack||[];
+  if(!peMpAny(t)){ peToast('Tick at least one menu, dish or package to send', true); return; }
   // The gate, on the way OUT. A menu whose allergens we have not finished can
   // no longer reach a guest quietly just because the guest-facing text stopped
   // announcing the gap.
@@ -6075,15 +6156,16 @@ async function peSendMenuPack(){
   if(!(await peConfirm({title:'Send to the guest?', html:'Send <b>'+peEsc(peMpSummary(t))+'</b> to <b>'+peEsc(email)+'</b> in one email now?'+(noPrice?'<br><span style="color:#854F0B">Without prices — the guest sees the dishes and packages only.</span>':''), ok:'Send email', cancel:'Not yet'}))) return;
   // The sender is copied and set as reply-to, same as client proposals.
   var sender = state.userEmail || 'reservations@robertos.ae';
-  var subject = (food.length||alc.length) && bev.length ? 'Roberto’s — menus & beverage packages for your occasion'
+  var subject = (food.length||alc.length||pack.length) && bev.length ? 'Roberto’s — menus & beverage packages for your occasion'
               : food.length ? 'Roberto’s — our set menus'
+              : pack.length ? 'Roberto’s — our canapé packages'
               : alc.length ? 'Roberto’s — our à la carte for your occasion'
               : 'Roberto’s — beverage packages for your occasion';
   var btn = document.getElementById('pe-mp-send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     var r = await sb.functions.invoke('send-event-email', { body:{
       to: peSendTo(email, sender), reply_to:sender, from_name:peSenderName(), subject:subject,
-      html: peMenuPackEmailHTML(food, bev, name, note, noPrice, alc, alc.length ? peMenuPackUrl(t, name, noPrice) : '')
+      html: peMenuPackEmailHTML(food, bev, name, note, noPrice, alc, alc.length ? peMenuPackUrl(t, name, noPrice) : '', pack)
     }});
     if(r.error || (r.data&&r.data.error)) throw (r.error||r.data.error);
     peToast('Sent to '+email+' ✓ — you are copied and replies come to you');
