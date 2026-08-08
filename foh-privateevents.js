@@ -27,6 +27,7 @@ var peState = {
   cm:null,                // the "Customise a menu" draft (see peCmStart)
   cmBusy:false,
   log:{},                 // event_id -> log rows (loaded per event)
+  logEdit:null,           // id of the log line currently being corrected in place
   aiDesc:null, aiBusy:false,
   editDishId:null, editBevId:null, editPackId:null,
   chefTab:'canape',       // canape | set — Chef Corner sub-tab
@@ -836,6 +837,12 @@ function peScrollTop(){
   '@media(max-width:640px){.pe-cal{display:none}.pe-agenda{display:block}}'+
   '.pe-log{font-size:12px;padding:6px 0;border-bottom:1px solid rgba(107,31,42,0.08)}'+
   '.pe-log .t{color:#8B7355;font-size:10.5px}'+
+  '.pe-log-h{display:flex;justify-content:space-between;align-items:center;gap:10px}'+
+  '.pe-log-acts{display:flex;gap:4px;flex:none}'+
+  '.pe-log-act{font-size:10.5px;color:#8B7355;background:none;border:1px solid rgba(107,31,42,0.16);border-radius:7px;padding:4px 9px;min-height:26px;cursor:pointer;line-height:1}'+
+  '.pe-log-act:hover{color:var(--vino);border-color:var(--vino)}'+
+  '.pe-log-act.danger:hover{color:#8A2A1A;border-color:#8A2A1A}'+
+  '@media(max-width:640px){.pe-log-act{min-height:32px;padding:6px 11px;font-size:11.5px}}'+
   '.pe-modal-bg{position:fixed;inset:0;background:rgba(44,24,16,0.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}'+
   '.pe-modal{background:#FBF7F1;border-radius:14px;max-width:640px;width:100%;max-height:86vh;overflow-y:auto;padding:18px 20px}'+
   '.pe-steps{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}'+
@@ -2322,7 +2329,25 @@ function peRenderEvent(){
     (ce?'<div style="display:flex;gap:6px;margin:8px 0"><input class="pe-in" id="pe-fu-note" placeholder="e.g. Called Ramona — waiting on final guest count"><button class="pe-btn sm" onclick="peAddFollowup(\''+e.id+'\')">Add</button></div>':'<div style="margin:8px 0"></div>')+
     (log.length ? log.map(function(l){
       var d = new Date(l.created_at);
-      return '<div class="pe-log"><span class="t">'+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · '+peEsc(l.actor||'')+'</span><br>'+peEsc(peLogLine(l))+'</div>';
+      var head = '<span class="t">'+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · '+peEsc(l.actor||'')+'</span>';
+      // Katarina, 8 Aug 2026: the log was append-only, so a note typed into the wrong
+      // box stayed on the event forever. Her own words can be corrected in place; the
+      // recorded history can only be removed, never rewritten.
+      if(ce && String(peState.logEdit) === String(l.id)){
+        return '<div class="pe-log"><div class="pe-log-h">'+head+'</div>'+
+          '<textarea class="pe-in" id="pe-log-edit-'+l.id+'" rows="2" style="margin:5px 0">'+peEsc(peLogEditablePart(l))+'</textarea>'+
+          (l.action==='lost' ? '<div style="font-size:10.5px;color:#8B7355;margin:-2px 0 5px">This is also the lost reason shown on the event.</div>' : '')+
+          '<div class="pe-log-acts"><button class="pe-btn sm" onclick="peSaveLogEdit(\''+e.id+'\','+l.id+')">Save</button>'+
+          '<button class="pe-btn sm sec" onclick="peCancelLogEdit()">Cancel</button></div></div>';
+      }
+      var acts = '';
+      if(ce){
+        acts = '<div class="pe-log-acts">'+
+          (PE_LOG_EDITABLE[l.action] ? '<button class="pe-log-act" onclick="peStartLogEdit('+l.id+')">Edit</button>' : '')+
+          (l.action==='created' ? '' : '<button class="pe-log-act danger" onclick="peDeleteLogLine(\''+e.id+'\','+l.id+')">Delete</button>')+
+          '</div>';
+      }
+      return '<div class="pe-log"><div class="pe-log-h">'+head+acts+'</div>'+peEsc(peLogLine(l))+'</div>';
     }).join('') : '<div style="font-size:12px;color:#8B7355">Nothing logged yet.</div>')+'</div>';
   h += '</div><div>';
   // totals
@@ -3193,6 +3218,79 @@ async function peAddFollowup(id){
   var r = await sb.from('event_log').insert({event_id:id, action:'followup', detail:el.value.trim().slice(0,500), actor:peActor()});
   if(r.error){ peToast('Note NOT saved — check connection', true); return; }
   el.value=''; peToast('Saved ✓'); peLoadLog(id);
+}
+// ── correcting the follow-up log ─────────────────────────────────────────────
+// Only the lines that are somebody's own words can be rewritten. "Status — sent →
+// lost", "Email sent", "Client signed" are the record of what happened; those can
+// be removed if they were made by mistake, but never edited into something else.
+var PE_LOG_EDITABLE = { followup:1, lost:1 };
+function peLogRow(eventId, logId){
+  var found = null;
+  (peState.log[eventId]||[]).forEach(function(l){ if(String(l.id)===String(logId)) found = l; });
+  return found;
+}
+// A lost line is stored as "sent → lost — Guest cancelled — …". She only ever wrote
+// the part after the arrow, so that is the only part she gets to edit.
+function peLostPrefix(l){ var m = String(l.detail||'').match(/^.*?→ lost — /); return m ? m[0] : ''; }
+function peLogEditablePart(l){
+  var d = String(l.detail||'');
+  return l.action==='lost' ? d.slice(peLostPrefix(l).length) : d;
+}
+function peStartLogEdit(logId){
+  if(!peCanEdit()){ peToast('View only — ask Katarina, Andrea or Francesco to make changes', true); return; }
+  peState.logEdit = logId;
+  renderMain();
+  var el = document.getElementById('pe-log-edit-'+logId);
+  if(el){ el.focus(); try{ el.setSelectionRange(el.value.length, el.value.length); }catch(err){} }
+}
+function peCancelLogEdit(){ peState.logEdit = null; renderMain(); }
+// The lost reason on the event card is read from the most recent 'lost' line, so it
+// has to be re-derived whenever one is edited or removed — otherwise the card keeps
+// showing the words she just corrected until the next full reload.
+function peRefreshLostReason(eventId){
+  if(!peState.lostReasons) return;
+  var latest = null;
+  (peState.log[eventId]||[]).forEach(function(l){
+    if(l.action!=='lost') return;
+    if(!latest || new Date(l.created_at) >= new Date(latest.created_at)) latest = l;
+  });
+  if(latest) peState.lostReasons[eventId] = peLogEditablePart(latest);
+  else delete peState.lostReasons[eventId];
+}
+async function peSaveLogEdit(eventId, logId){
+  if(!peCanEdit()){ peToast('View only — ask Katarina, Andrea or Francesco to make changes', true); return; }
+  var el = document.getElementById('pe-log-edit-'+logId); if(!el) return;
+  var txt = el.value.trim();
+  if(!txt){ peToast('Write something, or use Delete to remove the line', true); return; }
+  var row = peLogRow(eventId, logId); if(!row) return;
+  var detail = row.action==='lost'
+    ? peLostPrefix(row) + txt.slice(0,300)
+    : txt.slice(0,500);
+  var r = await sb.from('event_log').update({detail:detail}).eq('id', row.id);
+  if(r.error){ peToast('NOT saved — check connection', true); return; }
+  row.detail = detail;
+  peState.logEdit = null;
+  if(row.action==='lost') peRefreshLostReason(eventId);
+  peToast('Saved ✓');
+  renderMain();
+}
+async function peDeleteLogLine(eventId, logId){
+  if(!peCanEdit()){ peToast('View only — ask Katarina, Andrea or Francesco to make changes', true); return; }
+  var row = peLogRow(eventId, logId); if(!row) return;
+  var own = row.action==='followup';
+  if(!(await peConfirm({
+    title: own ? 'Delete this note?' : 'Remove this line from the history?',
+    html: own
+      ? 'It disappears from the log for everyone. This can’t be undone.'
+      : 'This line records something that happened — “<b>'+peEsc(peLogLine(row))+'</b>”.<br><br>Only remove it if it was recorded by mistake. It disappears for everyone and can’t be undone.',
+    ok:'Delete it', cancel:'Keep it', danger:true }))) return;
+  var r = await sb.from('event_log').delete().eq('id', row.id);
+  if(r.error){ peToast('NOT deleted — check connection', true); return; }
+  peState.log[eventId] = (peState.log[eventId]||[]).filter(function(l){ return String(l.id)!==String(logId); });
+  if(peState.logEdit && String(peState.logEdit)===String(logId)) peState.logEdit = null;
+  if(row.action==='lost') peRefreshLostReason(eventId);
+  peToast('Deleted');
+  renderMain();
 }
 
 // ── dishes on an event ───────────────────────────────────────────────────────
