@@ -6324,12 +6324,90 @@ async function fohSchedDownloadXlsx(){
 // ── Send to HR (uses Kitchen App edge function + ExcelJS) ──
 // Pass _downloadOnly=true to build the workbook and return {xlsxBuffer,fileName,...}
 // without emailing — used by the Download Excel button above.
+// ── Where a Send-to-HR test goes ────────────────────────────────────────────
+// On the local preview only, the roster email is addressed to one mailbox and
+// nobody else — not HR, not the Cc list. The Edge Function has had a `testTo`
+// for this since the recipients moved into Admin → Emails; nothing was wired to
+// it, so the only way to see what the email looked like was to send a real one
+// to HR. On robertos-foh-dev.pages.dev and on live this returns null and the
+// send behaves exactly as it always has.
+function fohRosterTestTo(){
+  var h = location.hostname;
+  return (h === 'localhost' || h === '127.0.0.1') ? 'fguarracino@robertos.ae' : null;
+}
+
+// ── "What changed in this roster?" ──────────────────────────────────────────
+// Antonio asked for this from the Kitchen app on 10 Aug 2026: he had already
+// sent the week to HR when a chef asked to swap his day off, so the sheet
+// changed by two cells and the email had no way to say which. Re-sending it
+// meant HR checking every person; a WhatsApp message instead is what actually
+// happened, which puts the change outside the record entirely. Same email, same
+// function, both apps — so it is the same fix here.
+//
+// The note is OPTIONAL. Resolves {note, update}, or null if cancelled.
+function fohHRNoteAsk(wkStr, wasSent){
+  return new Promise(function(resolve){
+    var done=false, testTo=fohRosterTestTo();
+    function onKey(e){ if(e.key==='Escape') finish(null); }
+    function finish(v){ if(done) return; done=true; var o=document.getElementById('fhrn-ovl'); if(o) o.remove(); document.removeEventListener('keydown',onKey); resolve(v); }
+    var ov=document.createElement('div'); ov.id='fhrn-ovl';
+    ov.setAttribute('style','position:fixed;inset:0;z-index:100050;background:rgba(40,2,7,.5);display:flex;align-items:flex-start;justify-content:center;padding:22px 14px;overflow:auto;');
+    ov.onclick=function(e){ if(e.target===ov) finish(null); };
+    ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:540px;width:100%;padding:18px 18px 16px;box-shadow:0 14px 50px rgba(40,2,7,.3);">'
+      +'<div style="font-family:Georgia,serif;color:#6B1F2A;font-size:19px;">Send the roster to HR</div>'
+      +'<div style="font-size:12.5px;color:#8a7a62;margin:2px 0 14px;">Week of '+admEsc(wkStr)+'.</div>'
+      // Ticked for them when we already have a record of sending this week, but
+      // still theirs to change: the record is only as good as what got logged.
+      +'<label style="display:flex;gap:9px;align-items:flex-start;background:#faf7f2;border:1px solid #e4dccd;border-radius:9px;padding:11px 12px;cursor:pointer;">'
+        +'<input type="checkbox" id="fhrn-upd" '+(wasSent?'checked':'')+' style="margin-top:2px;width:18px;height:18px;flex:none;">'
+        +'<span style="font-size:13.5px;color:#2c1810;line-height:1.4;">This replaces a roster I already sent for this week'
+          +'<span style="display:block;font-size:11.5px;color:#8a7a62;margin-top:2px;">Adds a line telling HR to discard the earlier one.</span></span></label>'
+      +'<div style="font-size:13.5px;color:#2c1810;font-weight:600;margin:15px 0 3px;">What changed? <span style="font-weight:400;color:#8a7a62;">(optional)</span></div>'
+      +'<div style="font-size:11.5px;color:#8a7a62;margin-bottom:7px;">HR read this at the top of the email, so they don&rsquo;t have to check every person to find it.</div>'
+      +'<textarea id="fhrn-note" rows="4" placeholder="e.g. Two closing shifts swapped on Friday. Everyone else is unchanged." '
+        +'style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #e4dccd;border-radius:9px;font-size:15px;font-family:inherit;line-height:1.45;resize:vertical;"></textarea>'
+      +'<div id="fhrn-count" style="font-size:11px;color:#a89880;text-align:right;margin-top:3px;">&nbsp;</div>'
+      +(testTo?'<div style="margin-top:10px;background:#fdeaea;border:1px solid #e0a9a9;border-radius:9px;padding:9px 11px;font-size:12.5px;color:#7f1d1d;">Local preview &mdash; this goes only to '+admEsc(testTo)+'. HR will not receive it.</div>':'')
+      +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid #e4dccd;padding-top:13px;">'
+        +'<button id="fhrn-cancel" style="font-size:13px;color:#8a7a62;border:1px solid #e4dccd;background:#fff;border-radius:9px;padding:10px 15px;cursor:pointer;">Cancel</button>'
+        +'<button id="fhrn-send" style="font-size:13px;font-weight:600;color:#fff;background:#6B1F2A;border:1px solid #6B1F2A;border-radius:9px;padding:10px 17px;cursor:pointer;">'+(testTo?'Send test':'Send to HR')+'</button></div></div>';
+    document.body.appendChild(ov);
+    document.addEventListener('keydown',onKey);
+    var ta=document.getElementById('fhrn-note'), cnt=document.getElementById('fhrn-count');
+    // 2000 is the Edge Function's own limit. Saying so here means nothing is ever
+    // silently cut off after they have pressed Send.
+    ta.oninput=function(){ var n=ta.value.length; cnt.textContent = n>1700 ? (2000-n)+' characters left' : ' '; if(n>2000) ta.value=ta.value.slice(0,2000); };
+    setTimeout(function(){ try{ ta.focus(); }catch(e){} }, 30);
+    document.getElementById('fhrn-cancel').onclick=function(){ finish(null); };
+    document.getElementById('fhrn-send').onclick=function(){
+      finish({ note: ta.value.trim(), update: document.getElementById('fhrn-upd').checked });
+    };
+  });
+}
+
 async function fohSchedSendToHR(_downloadOnly){
   var _wkEnd = addDays(fohSchedWeekStart, 6);
   var _wkStr = fohSchedWeekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' to ' + _wkEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  // The scope string reset_log actually stores for a roster send — the long form
+  // built below from `days`. Built here too, because the dialog has to know
+  // whether this week has been sent before it opens.
+  var _fullWk = fohSchedWeekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) +
+    ' to ' + _wkEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var _note = '', _isUpdate = false;
   if(!_downloadOnly){
     var rosterWho = await fohRequireStaffId("email this week's roster (" + _wkStr + ") to HR", 'roster');
     if(!rosterWho) return;
+    // Have we sent this week before? Only pre-ticks the box in the dialog — the
+    // person sending decides, so a missing or unreadable log costs nothing.
+    var _wasSent=false;
+    try {
+      var _prior=await sb.from('reset_log').select('id')
+        .eq('app','foh').eq('action','roster_send').eq('scope',_fullWk).limit(1);
+      _wasSent=!!(_prior && _prior.data && _prior.data.length);
+    } catch(e){ console.warn('[roster] re-send check failed', e); }
+    var _ask = await fohHRNoteAsk(_wkStr, _wasSent);
+    if(!_ask) return;                        // Cancel means nothing is sent.
+    _note = _ask.note; _isUpdate = _ask.update;
   }
   var btn = _downloadOnly ? null : document.getElementById('foh-svt-hr');
   if(btn){ btn.textContent = '⏳ Generating...'; btn.disabled = true; }
@@ -6463,29 +6541,29 @@ async function fohSchedSendToHR(_downloadOnly){
 
     if(btn) btn.textContent = '📧 Sending...';
 
-    // Re-send detection: if this exact week was already emailed to HR, flag it as an
-    // update so the email says "discard the previous roster, this is the latest version".
-    var isUpdate=false;
-    try {
-      var prior=await sb.from('reset_log').select('id')
-        .eq('app','foh').eq('action','roster_send').eq('scope',weekStr).limit(1);
-      isUpdate=!!(prior && prior.data && prior.data.length);
-    } catch(e){ console.warn('[roster] re-send check failed', e); }
+    // "This replaces a roster I already sent" — read off the dialog above, where
+    // the re-send record only pre-ticked the box. The person sending gets the
+    // last word: they know whether HR has seen this week better than a log does.
 
     // Use Kitchen App edge function (same Resend setup, same recipients for now)
     var emailRes = await fetch('https://zrpglswalgjbtghudmhu.supabase.co/functions/v1/send-roster', {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY },
-      body:JSON.stringify({ weekStr:weekStr, fileName:fileName, xlsxBase64:xlsxBase64, source:'FOH', sentBy:rosterWho.name, update:isUpdate })
+      body:JSON.stringify({ weekStr:weekStr, fileName:fileName, xlsxBase64:xlsxBase64, source:'FOH',
+                            sentBy:rosterWho.name, update:_isUpdate, note:_note,
+                            testTo: fohRosterTestTo() || undefined })
     });
 
     var emailData = await emailRes.json();
     if(!emailRes.ok) throw new Error(emailData.message||'Email failed: '+emailRes.status);
+    // The function reports back how much of the note it actually printed. If we
+    // typed one and it arrived empty, the tick must not say it went.
+    if(_note && !emailData.noted) throw new Error('The roster was sent, but your note did not reach the email. Please tell HR the change directly.');
 
     fohLogSend(rosterWho, 'roster_send', weekStr);
 
     if(btn){
-      btn.textContent = '✓ Sent to HR';
+      btn.textContent = _note ? '✓ Sent with your note' : '✓ Sent to HR';
       btn.style.background='rgba(45,122,79,.3)'; btn.style.borderColor='rgba(45,122,79,.6)'; btn.style.color='#7fc08e';
       setTimeout(function(){ btn.textContent='📧 Send to HR'; btn.style.background=''; btn.style.borderColor=''; btn.style.color=''; btn.disabled=false; }, 3000);
     }

@@ -22,6 +22,13 @@
 // Admin → Emails screen. Add or drop someone there and the very next send
 // obeys it; no redeploy. Keys: 'roster_foh' / 'roster_kitchen'.
 //
+// WHAT CHANGED IN THIS ROSTER
+// ---------------------------
+// `note` — free text the manager types on the Send-to-HR screen. It is printed
+// under the greeting so HR reads the change instead of comparing two sheets
+// person by person. Optional; when it is empty the email is exactly as before.
+// Escaped, never trusted as HTML. `sentBy` signs it.
+//
 // If that lookup fails or returns nobody, we fall back to the exact list that
 // was hardcoded here before this change. A roster that quietly reaches nobody
 // is far worse than one that reaches a slightly stale list.
@@ -55,6 +62,11 @@ const FALLBACK_CC: Record<string, string[]> = {
   roster_kitchen: ["lmadlag@robertos.ae", "dsaxena@robertos.ae", "fguarracino@robertos.ae",
                    "dvalla@robertos.ae", "astellacci@robertos.ae"],
 };
+
+// Anything a person typed goes through this before it reaches HR's inbox.
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -98,7 +110,21 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { xlsxBase64, fileName, weekStr, source, update } = body;
+    const { xlsxBase64, fileName, weekStr, source, update, sentBy } = body;
+
+    // The line the manager typed on the Send-to-HR screen: what changed in this
+    // roster, in their own words.
+    //
+    // Antonio asked for this on 10 Aug 2026. He had already sent the week to HR
+    // when Gaejindra asked to swap his day off with Joker, so the roster changed
+    // by two cells — and the email had no way to say so. The only options were to
+    // send an identical-looking attachment and leave HR to compare every person
+    // line by line, or to tell Leverina on WhatsApp instead, which is what he did.
+    //
+    // Typed text, never markup: escaped here, so a stray < or & from a phone
+    // keyboard cannot break the email or inject anything into HR's inbox.
+    const note   = typeof body.note === "string" ? body.note.trim().slice(0, 2000) : "";
+    const noteBy = typeof sentBy === "string" ? sentBy.trim().slice(0, 80) : "";
 
     // Brand + recipients depend on which app sent it (FOH app passes source:'FOH')
     const isFOH = source === "FOH";
@@ -138,13 +164,23 @@ serve(async (req) => {
       ? "<p>Dear HR Team,</p><p>Please find attached the <strong>updated</strong> " + bodyLabel + " roster for the week of <strong>" + weekStr + "</strong>. It <strong>replaces</strong> any earlier version sent for this week.</p>"
       : "<p>Dear HR Team,</p><p>Please find attached the <strong>" + bodyLabel + "</strong> roster for the week of <strong>" + weekStr + "</strong>.</p>";
 
+    // Sits directly under the greeting — above the attachment sentence — because
+    // it is the reason HR would otherwise have to re-read the whole sheet.
+    const noteHtml = note
+      ? '<div style="background:#F5F0E8;border-left:4px solid #6B1F2A;padding:12px 15px;border-radius:4px;margin:16px 0">'
+        + '<div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6B1F2A;font-weight:bold;margin-bottom:7px">What changed in this roster</div>'
+        + '<div style="color:#3D0F15;line-height:1.5">' + esc(note).replace(/\n/g, "<br>") + "</div>"
+        + (noteBy ? '<div style="font-size:12px;color:#7a6b55;margin-top:9px;font-style:italic">&mdash; ' + esc(noteBy) + "</div>" : "")
+        + "</div>"
+      : "";
+
     const emailPayload = {
       from: fromName + " <roster@kitchenteam.robertos.ae>",
       to: to,
       cc: cc,
       reply_to: replyTo,
       subject: subject,
-      html: banner + intro + "<p>The Excel file contains shift times, total hours and days worked per person.</p><p>Best regards,<br>" + signOff + "<br>Roberto's DIFC</p>",
+      html: banner + intro + noteHtml + "<p>The Excel file contains shift times, total hours and days worked per person.</p><p>Best regards,<br>" + signOff + "<br>Roberto's DIFC</p>",
       attachments: [{ filename: fileName, content: xlsxBase64 }],
     };
 
@@ -162,7 +198,9 @@ serve(async (req) => {
     // The caller shows a green tick on 2xx, so tell it who was actually copied.
     // usedFallback:true is the one thing worth noticing — it means the Admin
     // list could not be read and the built-in list was used instead.
-    return new Response(JSON.stringify({ ...data, cc: cc.length, usedFallback }), {
+    // `noted` is how the sending screen can say "your note went with it" without
+    // guessing — if the note were ever dropped on the way here, the tick would say so.
+    return new Response(JSON.stringify({ ...data, cc: cc.length, usedFallback, noted: note.length }), {
       status: res.status,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
