@@ -926,7 +926,11 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.us-mods{flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;}'
   +'.us-mod{font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;}'
   +'.us-none{font-size:12px;color:#9c8a72;}'
-  +'@media(max-width:640px){.us-fig{min-width:0;flex:1 1 46%;}.us-mods{flex:1 1 100%;}}'
+  // On a phone the name takes its own line: sharing one with the first figure
+  // squeezed it to a column narrow enough to break "Francesco Guarracino" over
+  // three lines and split the address mid-word. Figures then sit two-by-two and
+  // the module chips run full width underneath.
+  +'@media(max-width:640px){.us-who{flex:1 1 100%;}.us-fig{min-width:0;flex:1 1 46%;}.us-mods{flex:1 1 100%;}}'
   // ── Reservation reports ─────────────────────────────────────────────────
   +'.rp-row{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;'
     +'padding:12px 0;border-bottom:1px solid #F4EDE2;}'
@@ -2023,7 +2027,22 @@ async function admSaveSigners(){
    they open most — plus a short recent-activity list. Admin-only (reached
    only through the admin tab, which fohBlocked already gates).
    =================================================================== */
-var USAGE_MODULE_NAMES={events:'Activations',privateevents:'Events',operations:'Closing Report',revenue:'Revenue',stocktake:'Stock Take',admin:'Admin',resreports:'Reservation reports'};
+// Built FROM ADMIN_MODULES rather than retyped beside it. As its own hand-written
+// copy it had silently fallen two behind: Guest Reviews and Reservations shipped,
+// nobody added them here, and every count for those two printed the raw database
+// key — "reviews · 81", "reservations · 139" — on a screen that names everything
+// else properly. It stayed invisible because the row only ever showed a person's
+// top three modules; showing all of them put it on screen for most of the team.
+// Adding a module to ADMIN_MODULES now names it here automatically.
+var USAGE_MODULE_NAMES=(function(){
+  var m={};
+  (typeof ADMIN_MODULES!=='undefined'?ADMIN_MODULES:[]).forEach(function(x){ m[x.k]=x.n; });
+  // Two that are real activity but are not grantable modules, so they are not in
+  // ADMIN_MODULES: the Admin area itself, and the Reservation-reports sub-screen.
+  m.admin='Admin';
+  m.resreports='Reservation reports';
+  return m;
+})();
 function admUsageModName(m){ return USAGE_MODULE_NAMES[m]||m||'—'; }
 function admUsageWho(email){ var u=adminFind((email||'').toLowerCase()); return (u&&u.name)?u.name:(email||'unknown'); }
 function admUsageAgo(ts){
@@ -2128,12 +2147,19 @@ function admUsageHTML(){
   // ── per-user summary (counted in SQL, complete for all time — see admUsageLoad) ──
   var rows=people.map(function(u){
     var mods=u.mods||{};
-    var top=Object.keys(mods).sort(function(a,b){ return mods[b]-mods[a]; }).slice(0,3)
+    // EVERY module the person has opened, most-used first — not the top three.
+    // The cap was invisible: with real data most of the team hold seven modules
+    // and several open all of them, so three chips silently hid more than half
+    // of what this row is for. "Which modules does he use, and how much" is the
+    // whole question the screen answers, and a truncated answer to it reads as
+    // the missing ones never having been opened.
+    var top=Object.keys(mods).sort(function(a,b){ return mods[b]-mods[a]; })
       .map(function(m){ return '<span class="us-mod">'+admEsc(admUsageModName(m))+' &middot; '+mods[m]+'</span>'; }).join('');
     return '<div class="us-row">'
       +'<div class="us-who"><b>'+admEsc(admUsageWho(u.user_email))+'</b><span>'+admEsc(u.user_email)+'</span></div>'
       +'<div class="us-fig"><em>Last seen</em><b>'+admEsc(admUsageAgo(u.last_seen))+'</b></div>'
       +'<div class="us-fig"><em>Sign-ins, 7 days</em><b>'+(u.logins7||0)+'</b></div>'
+      +'<div class="us-fig"><em>Opens, all time</em><b>'+(u.events||0)+'</b></div>'
       +'<div class="us-mods">'+(top||'<span class="us-none">no modules opened yet</span>')+'</div></div>';
   }).join('');
 
