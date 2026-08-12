@@ -1437,7 +1437,7 @@ async function admSaveSigners(){
    they open most — plus a short recent-activity list. Admin-only (reached
    only through the admin tab, which fohBlocked already gates).
    =================================================================== */
-var USAGE_MODULE_NAMES={events:'Activations',privateevents:'Events',operations:'Closing Report',revenue:'Revenue',stocktake:'Stock Take',admin:'Admin'};
+var USAGE_MODULE_NAMES={events:'Activations',privateevents:'Events',operations:'Closing Report',revenue:'Revenue',stocktake:'Stock Take',admin:'Admin',resreports:'Reservation reports'};
 function admUsageModName(m){ return USAGE_MODULE_NAMES[m]||m||'—'; }
 function admUsageWho(email){ var u=adminFind((email||'').toLowerCase()); return (u&&u.name)?u.name:(email||'unknown'); }
 function admUsageAgo(ts){
@@ -1459,7 +1459,7 @@ function admUsageAgo(ts){
 // The raw read below is ONLY the short "recent activity" ticker, where a limit is
 // the actual intent rather than an accident.
 async function admUsageLoad(){
-  state.usageSummary=null; state.usageRecent=null; state.usageErr=null;
+  state.usageSummary=null; state.usageRecent=null; state.usageReports=null; state.usageErr=null;
   if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
   try{
     var s=await sb.from('app_activity_summary').select('user_email,last_seen,events,logins7,mods').order('last_seen',{ascending:false});
@@ -1468,6 +1468,15 @@ async function admUsageLoad(){
     var r=await sb.from('app_activity').select('user_email,action,module,created_at').order('created_at',{ascending:false}).limit(30);
     if(r.error) throw r.error;
     state.usageRecent=r.data||[];
+    // Reservation-report actions (report:<id> = built, excel:<id> = downloaded).
+    // Tallied in the browser, which the comment above forbids for the per-person
+    // totals — deliberately accepted HERE because the Supabase access from this
+    // session is read-only (no new SQL view without Francesco), and because a
+    // report run costs minutes of pulling, so this window covers the latest
+    // 1,000 report actions ≈ years of use, not days. If report volume ever
+    // grows, move this into app_activity_summary's SQL like everything else.
+    var rr=await sb.from('app_activity').select('user_email,action,created_at').eq('module','resreports').like('action','%:%').order('created_at',{ascending:false}).limit(1000);
+    if(!rr.error) state.usageReports=rr.data||[];
   }catch(err){ state.usageErr=(err&&err.message)||'Could not load usage data.'; }
   if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
 }
@@ -1489,14 +1498,49 @@ function admUsageHTML(){
       +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+(u.logins7||0)+'</b></div>'
       +'<div style="flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;">'+(top||'<span style="font-size:12px;color:#9c8a72;">no modules opened yet</span>')+'</div></div>';
   }).join('');
+  // ── Reservation reports — who runs what (see admUsageLoad for why this
+  //    one tally lives in the browser) ──
+  var repSec='';
+  if(state.usageReports && state.usageReports.length){
+    var byRep={};
+    state.usageReports.forEach(function(r){
+      var i=r.action.indexOf(':'), kind=r.action.slice(0,i), id=r.action.slice(i+1);
+      if(kind!=='report' && kind!=='excel') return;
+      var g=byRep[id]||(byRep[id]={runs:0,dl:0,who:{},last:r.created_at});
+      if(kind==='report') g.runs++; else g.dl++;
+      g.who[r.user_email]=(g.who[r.user_email]||0)+1;
+      if(r.created_at>g.last) g.last=r.created_at;
+    });
+    var rows=Object.keys(byRep).sort(function(a,b){ return (byRep[b].runs+byRep[b].dl)-(byRep[a].runs+byRep[a].dl); }).map(function(id){
+      var g=byRep[id];
+      var rep=(typeof rrReport==='function')?rrReport(id):null;
+      var who=Object.keys(g.who).sort(function(a,b){ return g.who[b]-g.who[a]; })
+        .map(function(e){ return admEsc(admUsageWho(e))+' &middot; '+g.who[e]; }).join(', ');
+      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
+        +'<div style="min-width:200px;flex:1.4;font-weight:600;color:#2c1810;font-size:14px;">'+admEsc(rep?rep.name:id)+'</div>'
+        +'<div style="min-width:80px;font-size:12.5px;color:#6b5a44;">Built<br><b style="color:#400207;">'+g.runs+'</b></div>'
+        +'<div style="min-width:100px;font-size:12.5px;color:#6b5a44;">Downloaded<br><b style="color:#400207;">'+g.dl+'</b></div>'
+        +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last used<br><b style="color:#400207;">'+admEsc(admUsageAgo(g.last))+'</b></div>'
+        +'<div style="flex:2;min-width:160px;font-size:12px;color:#6b5a44;">'+who+'</div></div>';
+    }).join('');
+    repSec='<div class="ppl-grp" style="margin-top:26px;">Reservation reports <span>&middot; built = worked out on screen, downloaded = took the Excel</span></div>'+rows;
+  }
   // ── short recent-activity list ──
   var recent=(state.usageRecent||[]).map(function(r){
-    var what=r.action==='login' ? 'signed in' : ('opened <b style="color:#400207;">'+admEsc(admUsageModName(r.module))+'</b>');
+    var what;
+    if(r.action==='login') what='signed in';
+    else if(r.action.indexOf('report:')===0 || r.action.indexOf('excel:')===0){
+      var rid=r.action.slice(r.action.indexOf(':')+1);
+      var rp=(typeof rrReport==='function')?rrReport(rid):null;
+      what=(r.action.indexOf('excel:')===0?'downloaded':'built')+' <b style="color:#400207;">'+admEsc(rp?rp.name:rid)+'</b>';
+    }
+    else what='opened <b style="color:#400207;">'+admEsc(admUsageModName(r.module))+'</b>';
     return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
   }).join('');
   var totalEvents=people.reduce(function(a,u){ return a+(u.events||0); },0);
   return '<div class="adm-wrap">'+head
     +'<div class="ppl-grp">By person <span>&middot; '+people.length+' people, '+totalEvents+' records all-time</span></div>'+cards
+    +repSec
     +'<div class="ppl-grp" style="margin-top:26px;">Recent activity</div>'+recent+'</div>';
 }
 
