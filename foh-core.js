@@ -1480,9 +1480,19 @@ async function admUsageLoad(){
   }catch(err){ state.usageErr=(err&&err.message)||'Could not load usage data.'; }
   if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
 }
+// The report breakdown lives behind a button, not inline — Francesco asked
+// (12 Aug 2026): the who-ran-what lists only ever grow, and after a few months
+// they would bury the person list the page exists for.
+function admUsageReportsToggle(){ state.usageRepView=!state.usageRepView; renderMain(); }
 function admUsageHTML(){
-  var head='<div class="adm-head"><h2>Usage — who&rsquo;s using the app</h2><button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div>'
-    +'<div class="ppl-sum">Every sign-in and module open, recorded automatically from this build on. Read-only — nothing here changes anyone&rsquo;s access.</div>';
+  var inRep=!!state.usageRepView;
+  var head='<div class="adm-head"><h2>Usage — who&rsquo;s using the app</h2><div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-sm" onclick="admUsageReportsToggle()">'+(inRep?'&larr; Back to usage':'Reservation reports')+'</button>'
+    +'<button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div></div>'
+    +'<div class="ppl-sum">'+(inRep
+      ? 'Which reservation report gets used, by whom. Built = worked out on screen, downloaded = took the Excel.'
+      : 'Every sign-in and module open, recorded automatically from this build on. Read-only — nothing here changes anyone&rsquo;s access.')+'</div>';
+  if(inRep) return admUsageReportsHTML(head);
   if(state.usageErr) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Couldn&rsquo;t load the usage data — '+admEsc(state.usageErr)+'<br><br>If this is the first time, run <b>foh-app-activity.sql</b> once in Supabase, then tap Refresh.</div></div>';
   if(!state.usageSummary) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
   var people=state.usageSummary;
@@ -1498,33 +1508,6 @@ function admUsageHTML(){
       +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+(u.logins7||0)+'</b></div>'
       +'<div style="flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;">'+(top||'<span style="font-size:12px;color:#9c8a72;">no modules opened yet</span>')+'</div></div>';
   }).join('');
-  // ── Reservation reports — who runs what (see admUsageLoad for why this
-  //    one tally lives in the browser) ──
-  var repSec='';
-  if(state.usageReports && state.usageReports.length){
-    var byRep={};
-    state.usageReports.forEach(function(r){
-      var i=r.action.indexOf(':'), kind=r.action.slice(0,i), id=r.action.slice(i+1);
-      if(kind!=='report' && kind!=='excel') return;
-      var g=byRep[id]||(byRep[id]={runs:0,dl:0,who:{},last:r.created_at});
-      if(kind==='report') g.runs++; else g.dl++;
-      g.who[r.user_email]=(g.who[r.user_email]||0)+1;
-      if(r.created_at>g.last) g.last=r.created_at;
-    });
-    var rows=Object.keys(byRep).sort(function(a,b){ return (byRep[b].runs+byRep[b].dl)-(byRep[a].runs+byRep[a].dl); }).map(function(id){
-      var g=byRep[id];
-      var rep=(typeof rrReport==='function')?rrReport(id):null;
-      var who=Object.keys(g.who).sort(function(a,b){ return g.who[b]-g.who[a]; })
-        .map(function(e){ return admEsc(admUsageWho(e))+' &middot; '+g.who[e]; }).join(', ');
-      return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
-        +'<div style="min-width:200px;flex:1.4;font-weight:600;color:#2c1810;font-size:14px;">'+admEsc(rep?rep.name:id)+'</div>'
-        +'<div style="min-width:80px;font-size:12.5px;color:#6b5a44;">Built<br><b style="color:#400207;">'+g.runs+'</b></div>'
-        +'<div style="min-width:100px;font-size:12.5px;color:#6b5a44;">Downloaded<br><b style="color:#400207;">'+g.dl+'</b></div>'
-        +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last used<br><b style="color:#400207;">'+admEsc(admUsageAgo(g.last))+'</b></div>'
-        +'<div style="flex:2;min-width:160px;font-size:12px;color:#6b5a44;">'+who+'</div></div>';
-    }).join('');
-    repSec='<div class="ppl-grp" style="margin-top:26px;">Reservation reports <span>&middot; built = worked out on screen, downloaded = took the Excel</span></div>'+rows;
-  }
   // ── short recent-activity list ──
   var recent=(state.usageRecent||[]).map(function(r){
     var what;
@@ -1540,8 +1523,45 @@ function admUsageHTML(){
   var totalEvents=people.reduce(function(a,u){ return a+(u.events||0); },0);
   return '<div class="adm-wrap">'+head
     +'<div class="ppl-grp">By person <span>&middot; '+people.length+' people, '+totalEvents+' records all-time</span></div>'+cards
-    +repSec
     +'<div class="ppl-grp" style="margin-top:26px;">Recent activity</div>'+recent+'</div>';
+}
+// ── Reservation reports — its own page behind the button above (see
+//    admUsageLoad for why this one tally lives in the browser) ──
+function admUsageReportsHTML(head){
+  if(!state.usageReports) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
+  if(!state.usageReports.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">No reports run yet — counting started 12 Aug 2026. Check back after Nicole or the team has built one.</div></div>';
+  var byRep={};
+  state.usageReports.forEach(function(r){
+    var i=r.action.indexOf(':'), kind=r.action.slice(0,i), id=r.action.slice(i+1);
+    if(kind!=='report' && kind!=='excel') return;
+    var g=byRep[id]||(byRep[id]={runs:0,dl:0,who:{},last:r.created_at});
+    if(kind==='report') g.runs++; else g.dl++;
+    g.who[r.user_email]=(g.who[r.user_email]||0)+1;
+    if(r.created_at>g.last) g.last=r.created_at;
+  });
+  var rows=Object.keys(byRep).sort(function(a,b){ return (byRep[b].runs+byRep[b].dl)-(byRep[a].runs+byRep[a].dl); }).map(function(id){
+    var g=byRep[id];
+    var rep=(typeof rrReport==='function')?rrReport(id):null;
+    var who=Object.keys(g.who).sort(function(a,b){ return g.who[b]-g.who[a]; })
+      .map(function(e){ return admEsc(admUsageWho(e))+' &middot; '+g.who[e]; }).join(', ');
+    return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
+      +'<div style="min-width:200px;flex:1.4;font-weight:600;color:#2c1810;font-size:14px;">'+admEsc(rep?rep.name:id)+'</div>'
+      +'<div style="min-width:80px;font-size:12.5px;color:#6b5a44;">Built<br><b style="color:#400207;">'+g.runs+'</b></div>'
+      +'<div style="min-width:100px;font-size:12.5px;color:#6b5a44;">Downloaded<br><b style="color:#400207;">'+g.dl+'</b></div>'
+      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last used<br><b style="color:#400207;">'+admEsc(admUsageAgo(g.last))+'</b></div>'
+      +'<div style="flex:2;min-width:160px;font-size:12px;color:#6b5a44;">'+who+'</div></div>';
+  }).join('');
+  // Report runs only, newest first — bounded by the same 30-row read the main
+  // page's ticker uses, so this list cannot grow past a screen.
+  var recent=(state.usageReports||[]).slice(0,30).map(function(r){
+    var rid=r.action.slice(r.action.indexOf(':')+1);
+    var rp=(typeof rrReport==='function')?rrReport(rid):null;
+    var what=(r.action.indexOf('excel:')===0?'downloaded':'built')+' <b style="color:#400207;">'+admEsc(rp?rp.name:rid)+'</b>';
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
+  }).join('');
+  return '<div class="adm-wrap">'+head
+    +'<div class="ppl-grp">By report</div>'+rows
+    +'<div class="ppl-grp" style="margin-top:26px;">Recent report activity</div>'+recent+'</div>';
 }
 
 /* ===================================================================
