@@ -10,7 +10,24 @@
   body{margin:0;background:var(--page);font-family:var(--font-body);color:var(--ink)}
   .wrap{max-width:640px;margin:0 auto;padding:18px 14px 40px}
   .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;padding-bottom:26px}
-  .brand{text-align:center;padding:26px 20px 20px}
+  /* The room, behind a wine wash, with the occasion on top of it. Same device
+     as the Kitchen Recipes screens; the wash is what makes cream lettering
+     readable over a daylight photograph, not decoration. */
+  .room{position:relative;background:#cdbba6;padding:32px 24px 36px;text-align:center;
+        background-image:url(venue-chandelier.jpg);background-size:cover;background-position:center}
+  .room::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(180deg,rgba(43,1,4,.60) 0,rgba(43,1,4,.44) 55px,
+      rgba(43,1,4,.36) 62%,rgba(43,1,4,.56) 100%)}
+  .room>*{position:relative;z-index:1}
+  .room-eyebrow{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#F2D3B8;
+    font-family:var(--font-body)}
+  .room-lede{font-family:var(--font-display);font-size:26px;color:#FBF3E9;margin-top:7px}
+  /* #F0E2D6 measured 3.06:1 over this room; the softer #E6D3C6 gave 2.68, under
+     the 2.82 the approved Cortina screen gives its sub-line. */
+  .room-stand{font-size:12.5px;color:#F0E2D6;margin-top:3px;font-family:var(--font-body)}
+  /* Printed, the photograph is a toner cost and a worse read -- wine band only. */
+  @media print{.room{background-image:none;background:var(--vino)}.room::after{display:none}}
+  .brand{text-align:center;padding:22px 20px 16px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .rule{width:70px;height:1px;background:var(--gold);margin:10px auto}
   .h2{font-size:15px;letter-spacing:2px;color:var(--olive);text-align:center;font-weight:normal;text-transform:uppercase}
@@ -90,9 +107,18 @@ function render(data){
     card.appendChild(fr);
     return;
   }
-  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="rule"></div>'+
-    '<div class="h2">Your Event Proposal &amp; Agreement</div>'+
-    '<div class="sub">'+(ev.client_name?'Prepared for '+esc(ev.client_name)+' · ':'')+esc(dLabel(ev.event_date))+(ev.area?' · '+esc(ev.area):'')+'</div>';
+  // The room, then the wordmark, then the agreement. The occasion sits on the
+  // photograph in cream; the wordmark stays on paper because the official
+  // artwork is wine and only reads on a light ground.
+  var h = '<div class="room">'+
+      '<div class="room-eyebrow">Roberto’s DIFC · Private events</div>'+
+      '<div class="room-lede">'+esc(dLabel(ev.event_date))+'</div>'+
+      '<div class="room-stand">'+(ev.client_name?esc(ev.client_name)+(ev.area?' · ':''):'')+(ev.area?esc(ev.area):'')+'</div>'+
+    '</div>'+
+    '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div><div class="rule"></div>'+
+    // The date, the client and the area are on the band above -- printing them
+    // again here would be the same three facts twice on one screen.
+    '<div class="h2">Your Event Proposal &amp; Agreement</div>';
 
   // booking facts
   function row(l,v){ if(v==null||v===''||v==='—') return ''; return '<tr><td class="l">'+l+'</td><td>'+v+'</td></tr>'; }

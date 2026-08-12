@@ -783,6 +783,32 @@ function peScrollTop(){
   '.pe-snav.on{background:var(--vino);border-color:var(--vino);color:var(--cream);font-weight:600}'+
   '.pe-main{flex:1;min-width:0}'+
   '@media(max-width:820px){.pe-shell{display:block}.pe-side{width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;margin-bottom:12px}.pe-side .pe-btn{width:auto}.pe-sdiv{display:none}.pe-slbl{display:none}.pe-snav{border:1px solid rgba(107,31,42,0.3);border-radius:14px;padding:6px 14px;font-size:12px}.pe-snav.on{border-color:var(--vino)}}'+
+  // ── the room band ──────────────────────────────────────────────────────────
+  // Room behind, wine wash over it, content above -- the same device that is
+  // live on the Kitchen Recipes screens. It goes ONLY on a way-in screen (the
+  // events list, Chef corner, Beverage corner); never over a screen where the
+  // work happens, because nobody reads a table off a photograph.
+  //
+  // The wash is not decoration: cream lettering needs it. Each room was
+  // measured against the Cortina screen (heading 4.31:1) that was approved for
+  // Kitchen, and every room used here meets or beats it at this wash.
+  '.pe-room{position:relative;background:#cdbba6;border-radius:12px;overflow:hidden;'+
+    'padding:22px 22px 24px;margin-bottom:14px}'+
+  '.pe-room::before,.pe-room::after{content:"";position:absolute;inset:0;pointer-events:none}'+
+  '.pe-room::before{background:var(--pe-room) center/cover}'+
+  '.pe-room::after{background:linear-gradient(180deg,'+
+    'rgba(43,1,4,.60) 0,rgba(43,1,4,.44) 55px,rgba(43,1,4,.36) 62%,rgba(43,1,4,.56) 100%)}'+
+  '.pe-room>*{position:relative;z-index:1}'+
+  '.pe-room .pe-eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#F2D3B8}'+
+  '.pe-room .pe-lede{font-family:\'Playfair Display\',serif;font-size:25px;color:#FBF3E9;margin:5px 0 3px}'+
+  // #F0E2D6, not the softer #E6D3C6 it started as: measured over these rooms the
+  // softer cream fell to 2.65:1, under the 2.82 the approved Cortina screen gives
+  // its sub-line. Lifting the ink was the fix; darkening the room was not.
+  '.pe-room .pe-stand{font-size:12.5px;color:#F0E2D6}'+
+  '@media(max-width:520px){.pe-room{padding:18px 16px 20px}.pe-room .pe-lede{font-size:21px}}'+
+  // A slow connection should get the wine, not a grey hole, so the band is
+  // readable before the photograph arrives and readable if it never does.
+  '@media print{.pe-room{background:var(--vino)}.pe-room::before{display:none}}'+
   '.pe-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}'+
   '.pe-title{font-family:\'Playfair Display\',serif;font-size:22px;color:var(--vino-dark)}'+
   '.pe-tabs{display:flex;gap:6px;flex-wrap:wrap}'+
@@ -900,6 +926,20 @@ function peSetMenusBanner(){
     '<strong>The set menus didn’t load.</strong> They are hidden rather than shown out of date — '+
     'don’t quote a set menu until this clears. Check the connection and reopen Events.'+
     '</div>';
+}
+// The room band for a way-in screen. One room per screen and no repeats -- the
+// same photograph twice reads as the same screen. Every room here is a daylight
+// frame, measured at this wash against the Cortina standard:
+//   dining-art 4.55 · mural 4.53 · foliage 5.09  (Cortina, approved, is 4.31)
+var PE_ROOMS = { list:'venue-dining-art.jpg', chef:'venue-mural.jpg', bev:'venue-foliage.jpg' };
+function peRoom(which, eyebrow, lede, stand){
+  var img = PE_ROOMS[which];
+  if(!img) return '';
+  return '<div class="pe-room" style="--pe-room:url(' + img + ')">'+
+    '<div class="pe-eyebrow">'+peEsc(eyebrow)+'</div>'+
+    '<div class="pe-lede">'+peEsc(lede)+'</div>'+
+    (stand ? '<div class="pe-stand">'+peEsc(stand)+'</div>' : '')+
+  '</div>';
 }
 function peHeader(active){
   var mine = [['list','Events'],['calendar','Calendar'],['report','Monthly report']];
@@ -1316,8 +1356,12 @@ function peRenderList(){
   all.forEach(function(e){ var t = peEventValue(e); if(t && ['draft','sent','confirmed','deposit'].indexOf(e.status)>=0) pipeline += t; });
   var st = peLandingStats();
   var h = peHeader('list');
-  h += '<div style="margin-bottom:10px"><div class="pe-title">Events</div>'+
-    '<div style="font-size:12px;color:#8B7355">'+(peCanEdit()?'Create a booking, quote it, send the agreement.':'Every booking, readable end to end.')+'</div></div>';
+  // The band says what is true right now, not "Events" -- the word above a list
+  // of events earns nothing. Live = the four statuses that are still work.
+  var onBook = all.filter(function(e){ return ['draft','sent','confirmed','deposit'].indexOf(e.status) >= 0; }).length;
+  h += peRoom('list', 'Roberto’s DIFC · Private events',
+    onBook ? (onBook + ' event' + (onBook>1?'s':'') + ' on the book') : 'Nothing on the book yet',
+    peCanEdit() ? 'Create a booking, quote it, send the agreement.' : 'Every booking, readable end to end.');
   h += peViewBanner();
   h += peTonightHTML();   // what is on TODAY outranks everything else on this screen
   h += peRepliesHTML();   // then replies: a reply that waits is the costliest thing here
@@ -4433,22 +4477,34 @@ async function peSendPaymentLink(id){
 function peRenderChefCorner(){
   var tab = peState.chefTab || 'canape';
   var h = peHeader('chef');
+  // The count has to be the SAME count the library below prints, or the band is
+  // a second version of the truth. Dishes: peRenderDishLib's own total.
+  // The sentence that used to sit in grey under the tabs moves INTO the band --
+  // same words, said once. Nothing is duplicated and nothing is invented.
+  var lede, stand;
+  if(tab==='set'){
+    var nSet = peSetMenusLoaded() ? peSetMenusDesigned().length : 0;
+    lede  = nSet ? (nSet + ' set menu' + (nSet===1?'':'s')) : 'Set menus';
+    stand = 'Plated set menus — saved here they appear in the events desk booking dropdown, the guest proposal and the kitchen brief.';
+  } else {
+    var nDish = peState.dishes.filter(function(d){ return d.active; }).length;
+    lede  = nDish ? (nDish + ' dish' + (nDish===1?'':'es') + ' in the library') : 'The dish library';
+    stand = 'The kitchen’s home: add and update canapés — everything saved here is instantly available to the events desk and the guest menu.';
+  }
+  h += peRoom('chef', 'Chef corner', lede, stand);
   var tabs = [['canape','Canap\u00e9s'],['set','Set menus']];
   h += '<div class="pe-tabs" style="margin-bottom:12px">'+tabs.map(function(t){
     return '<span class="pe-tab'+(tab===t[0]?' on':'')+'" onclick="peState.chefTab=\''+t[0]+'\';renderMain()">'+t[1]+'</span>';
   }).join('')+'</div>';
-  if(tab==='set'){
-    h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Plated set menus \u2014 saved here they appear in the events desk booking dropdown, the guest proposal and the kitchen brief.</div>';
-    h += peRenderSetMenuLib();
-  } else {
-    h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">The kitchen\u2019s home: add and update canap\u00e9s \u2014 everything saved here is instantly available to the events desk and the guest menu.</div>';
-    h += peRenderDishLib();
-  }
+  h += (tab==='set') ? peRenderSetMenuLib() : peRenderDishLib();
   return h+PE_FOOT;
 }
 function peRenderBevCorner(){
   var h = peHeader('bev');
-  h += '<div style="font-size:12px;color:#8B7355;margin-bottom:10px">Manuel\u2019s home: beverage packages for events \u2014 name, hours, price per guest and what\u2019s included.</div>';
+  var nBev = peState.bevs.filter(function(b){ return b.active!==false; }).length;
+  h += peRoom('bev', 'Beverage corner',
+    nBev ? (nBev + ' package' + (nBev===1?'':'s')) : 'Beverage packages',
+    'Manuel\u2019s home: beverage packages for events \u2014 name, hours, price per guest and what\u2019s included.');
   h += peRenderBevLib();
   return h+PE_FOOT;
 }

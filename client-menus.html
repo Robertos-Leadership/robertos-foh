@@ -10,7 +10,21 @@
   body{margin:0;background:var(--page);font-family:var(--font-body);color:var(--ink)}
   .wrap{max-width:520px;margin:0 auto;padding:18px 14px 40px}
   .card{background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden}
-  .brand{text-align:center;padding:26px 20px 20px}
+  /* The room, behind a wine wash, with the title on top of it. Same device as
+     the Kitchen Recipes screens. The wash is what makes cream lettering
+     readable over a daylight photograph -- it is not decoration. */
+  .room{position:relative;background:#cdbba6;padding:30px 22px 34px;text-align:center;
+        background-image:url(venue-pergola.jpg);background-size:cover;background-position:center}
+  .room::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(180deg,rgba(43,1,4,.60) 0,rgba(43,1,4,.44) 55px,
+      rgba(43,1,4,.36) 62%,rgba(43,1,4,.56) 100%)}
+  .room>*{position:relative;z-index:1}
+  .room-eyebrow{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#F2D3B8;
+    font-family:var(--font-body)}
+  .room-lede{font-family:var(--font-display);font-size:23px;color:#FBF3E9;margin-top:7px}
+  /* Printed, the photograph is a toner cost and a worse read -- wine band only. */
+  @media print{.room{background-image:none;background:var(--vino)}.room::after{display:none}}
+  .brand{text-align:center;padding:20px 20px 14px}
   .brand img{display:block;width:min(250px,64%);height:auto;margin:0 auto}
   .sub{font-size:14px;color:var(--ink-soft);text-align:center}
   .sub2{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:3px;font-family:var(--font-body)}
@@ -170,14 +184,20 @@ function render(menus, bevs, alc, packs){
   packs.sort(function(a,b){ return packIds.indexOf(a.id) - packIds.indexOf(b.id); });
 
   var both = (menus.length || alc.length || packs.length) && bevs.length;
-  var h = '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
-    '<div class="sub">'+(
-      (menus.length && alc.length) ? 'Menus &amp; our à la carte'
-      : both ? 'Menus &amp; beverage packages'
-      : menus.length ? 'Our set menus'
-      : packs.length ? 'Our canapé packages'
-      : alc.length ? 'Our à la carte'
-      : 'Beverage packages')+'</div>'+
+  // The room, then the wordmark, then the menu. The title moves onto the
+  // photograph in cream; the wordmark stays on paper because the official
+  // artwork is wine and only reads on a light ground.
+  var h = '<div class="room">'+
+      '<div class="room-eyebrow">Private dining &amp; events</div>'+
+      '<div class="room-lede">'+(
+        (menus.length && alc.length) ? 'Menus &amp; our à la carte'
+        : both ? 'Menus &amp; beverage packages'
+        : menus.length ? 'Our set menus'
+        : packs.length ? 'Our canapé packages'
+        : alc.length ? 'Our à la carte'
+        : 'Beverage packages')+'</div>'+
+    '</div>'+
+    '<div class="brand"><img src="robertos-logo-wordmark.svg" alt="Roberto’s"></div>'+
     '<div class="sub2">'+(who ? 'For '+esc(who)+' · ' : '')+'DIFC, Dubai — private dining &amp; events</div>';
 
   if(menus.length){
