@@ -323,6 +323,53 @@ Deno.serve(async (req) => {
     const compAge = compLast ? Math.round((Date.parse(today) - Date.parse(compLast)) / 86400000) : 9999;
     const compDue = compAge >= compDays;   // never seen = due now
 
+    // ── SEARCH BUDGET (Francesco, 12 Aug 2026) ────────────────────────
+    // The tier is 250 a month; the rule is SPEND AT MOST 240, so ten are
+    // always left over for a bad night. This is not a local counter that
+    // can drift out of step with the provider - the allowance is asked of
+    // SerpApi itself every run, so it is right even after a manual test,
+    // a retry, or a redeploy, and it resets when THEIR cycle resets (16th)
+    // without us having to know the date.
+    //
+    // WHY A HARD CAP AND NOT A WARNING: running out is not free. The
+    // fallback below is Google's Enterprise+Atmosphere tier, which is
+    // billed - so an overrun does not stop the spend, it moves it to a
+    // different bill and quietly drops the reviews back to the rotating
+    // five. The cap is the thing that prevents that.
+    //
+    // Checking the account does NOT itself cost a search.
+    const SERP_CAP = 240;
+    let serpLeft = SERP_CAP;              // assume full until told otherwise
+    let serpUsed: number | null = null;
+    let budgetNote: string | null = null;
+    {
+      const K = Deno.env.get("SERPAPI_KEY");
+      if (K) {
+        try {
+          const aR = await fetch("https://serpapi.com/account?api_key=" + K);
+          if (aR.ok) {
+            const a = await aR.json();
+            // Their field names have moved before; take the usage figure if
+            // it is there, else derive it from what the plan has left.
+            const used = Number(a.this_month_usage);
+            const left = Number(a.total_searches_left ?? a.plan_searches_left);
+            if (Number.isFinite(used)) serpUsed = used;
+            else if (Number.isFinite(left) && Number.isFinite(Number(a.searches_per_month))) {
+              serpUsed = Number(a.searches_per_month) - left;
+            }
+            if (serpUsed != null) serpLeft = Math.max(0, SERP_CAP - serpUsed);
+            else budgetNote = "account read gave no usable usage figure";
+          } else budgetNote = "account read failed: " + aR.status;
+        } catch (e) {
+          budgetNote = String((e as Error)?.message || e).slice(0, 120);
+        }
+      }
+      // If the account could not be read we must not assume a full tank.
+      // Spend only what one careful night needs (us, one page) until the
+      // next run can ask again - never the whole allowance on a guess.
+      if (budgetNote) serpLeft = 2;
+    }
+
     // ── PRIMARY NET: SerpApi (Francesco's informed go, 16 Jul) ─────────
     // Returns the actual NEWEST reviews per venue - the thing Google's own
     // API refuses to do. Cost is capped by the two rules above (once a day,
@@ -336,6 +383,7 @@ Deno.serve(async (req) => {
     const SERP = Deno.env.get("SERPAPI_KEY");
     let serpKept = 0, serpFail = 0, serpSearches = 0, serpTried = 0;
     const serpCapped: string[] = [];
+    const budgetSkipped: string[] = [];   // reported below, so declared out here
     if (SERP) {
       // SerpApi's page 1 is HARD-LOCKED to 8 rows - their docs, verbatim:
       // "Parameter cannot be used on the initial page when neither
@@ -374,7 +422,16 @@ Deno.serve(async (req) => {
         list.length ? Date.parse(list[list.length - 1].iso_date || "") : 0;
 
       // Us every night; the competitors only when their timer is up.
-      const pullList = VENUES.filter((v) => v.us || compDue);
+      // ORDER MATTERS: our own venue is allocated its search first, so a
+      // tight budget costs the competitors' freshness and never our own
+      // alarm. One search is reserved per venue BEFORE any network call -
+      // priority is settled up front, and page 2 is only ever bought out
+      // of what is left over.
+      const ordered = VENUES.filter((v) => v.us || compDue)
+        .sort((a, b) => (b.us ? 1 : 0) - (a.us ? 1 : 0));
+      const pullList = ordered.slice(0, serpLeft);
+      ordered.slice(serpLeft).forEach((v) => budgetSkipped.push(v.key));
+      let pageTwoLeft = Math.max(0, serpLeft - pullList.length);
       serpTried = pullList.length;
       await Promise.all(pullList.map(async (v) => {
         try {
@@ -394,8 +451,25 @@ Deno.serve(async (req) => {
           // second page the thing that keeps the catch COMPLETE, and the lower
           // frequency more than pays for it. Their RATINGS (the board, the
           // race) come from Google's own free API and never touch SerpApi.
+          //
+          // 12 Aug 2026 - the rule changed from "cover the whole 7-day
+          // window" to "cover the gap since we last looked". Re-reading a
+          // week every night is what made all-7-nightly cost ~390 searches
+          // a month instead of ~220: page 1 holds 8 rows, which reaches
+          // back about five days even at La Petite Maison's rate, so at a
+          // daily cadence page 2 has nothing left to find. If nights are
+          // missed the gap widens and page 2 comes back on its own - the
+          // catch stays complete either way, because a review is only ever
+          // KEPT when it is under 7 days old regardless of which page it
+          // arrived on.
+          const lastLook = v.us
+            ? Date.parse(today) - 86400000              // us: every night
+            : (compLast ? Date.parse(compLast) : weekAgo);
+          const coverFrom = Math.max(weekAgo, lastLook - 86400000); // a day of slack
           const tok = d1.serpapi_pagination && d1.serpapi_pagination.next_page_token;
-          if (!tok || !p1.length || oldestOf(p1) < weekAgo) return;
+          if (!tok || !p1.length || oldestOf(p1) < coverFrom) return;
+          if (pageTwoLeft <= 0) { serpCapped.push(v.key); return; } // budget, not Google
+          pageTwoLeft--;
           serpSearches++;
           const r2 = await fetch(base + "&num=20&next_page_token=" + encodeURIComponent(tok));
           const d2 = await r2.json();
@@ -628,6 +702,14 @@ Deno.serve(async (req) => {
       competitors_pulled: compDue,
       competitor_interval_days: compDays,
       competitors_last_pulled: compDue ? today : compLast,
+      // Budget, in the open too. budget_skipped_venues is the one to watch:
+      // a name in there means we ran out of allowance before reaching that
+      // venue, NOT that Google refused us.
+      budget_cap: SERP_CAP,
+      budget_used_at_start: serpUsed,
+      budget_allowance_this_run: serpLeft,
+      budget_skipped_venues: budgetSkipped,
+      budget_note: budgetNote,
     });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e).slice(0, 200) }, 500);
