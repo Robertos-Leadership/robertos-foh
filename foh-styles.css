@@ -2433,6 +2433,29 @@
   .gr-race-neg .gr-race-val{color:#B3402F}
   .gr-race-val{font-size:12.5px;color:#8B7355;text-align:right;font-variant-numeric:tabular-nums}
   @media(max-width:560px){.gr-race-row{grid-template-columns:96px 1fr 44px}}
+  /* The race rebuilt on guest dates, 12 Aug 2026 */
+  .gr-race-basis{font-family:var(--font-sans);font-size:11.5px;color:#A89880;margin:-6px 0 13px}
+  .gr-race-flag{margin-left:5px;font-size:11px;color:#C9822A;cursor:help}
+  .gr-race-thin .gr-race-bar{background:#D9D0C2}
+  .gr-race-thin .gr-race-name,.gr-race-thin .gr-race-val{color:#A89880}
+  .gr-race-spike{background:#FDF6EA;border-left:3px solid #C9822A;border-radius:0 6px 6px 0;padding:10px 13px;margin-top:13px;font-family:var(--font-sans);font-size:12.5px;line-height:1.6;color:#6B5744}
+  .gr-race-spike b{color:var(--ink,#2C1810)}
+  /* Explainer prose folds away by default — only the work stays on screen */
+  .gr-fold{margin-top:12px}
+  .gr-fold>summary{cursor:pointer;list-style:none;font-family:var(--font-sans);font-size:12.5px;font-weight:600;color:var(--vino)}
+  .gr-fold>summary::-webkit-details-marker{display:none}
+  .gr-fold>summary:before{content:"› "}
+  .gr-fold[open]>summary:before{content:"⌄ "}
+  /* Guests wrote vs Google published */
+  .gr-scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .gr-rec{width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:13.5px}
+  .gr-rec th{text-align:left;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8B7355;font-weight:600;padding:0 8px 9px;border-bottom:1px solid #E3D7C8;white-space:nowrap}
+  .gr-rec th.n,.gr-rec td.n{text-align:right}
+  .gr-rec td{padding:10px 8px;border-bottom:1px solid #F0E9DE;color:#4A3728;white-space:nowrap}
+  .gr-rec tr.gr-me td{font-weight:700;color:var(--ink,#2C1810)}
+  .gr-rec-ok{color:#3E7D4F;font-weight:600}
+  .gr-rec-warn{color:#C9822A;font-weight:600}
+  .gr-rec-mut{color:#A89880}
   .gr-chev{color:var(--gold,#C9A84C);font-size:16px}
   .gr-me .gr-chev{color:var(--vino)}
   .gr-exp td{background:#FBF7F1;padding:14px 8px}

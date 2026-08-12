@@ -46,7 +46,7 @@ var GR_VENUES = [
   { key:'gattopardo', name:'Il Gattopardo' },
   { key:'chicnonna',  name:'Chic Nonna' }
 ];
-var GR = { loading:false, loaded:false, rows:null, err:null, open:null, week:null, weekErr:null, pace:null, paceErr:null, raceView:'30', comp:null };
+var GR = { loading:false, loaded:false, rows:null, err:null, open:null, seen:null, week:null, weekErr:null, pace:null, paceErr:null, raceView:'all', comp:null };
 
 // Competitors are collected on a timer (see the cost note in the edge
 // function). One sentence, reused by both the list and the empty state, so the
@@ -109,14 +109,21 @@ async function grLoad(){
   // The collected-this-week store is loaded separately and is allowed to fail
   // alone: if its SQL has not been run yet the board above must still work.
   try{
-    var wk = new Date(Date.now() - 7*24*3600*1000).toISOString();
+    // Load the WHOLE stored collection (it purges itself at 30 days), not
+    // just the last 7. The race below counts reviews by the date the guest
+    // wrote them, so it needs every row we still hold; the week's list and
+    // the "New this week" tile are derived from it, so the two can never
+    // disagree about what "this week" means.
+    var mon = new Date(Date.now() - 31*24*3600*1000).toISOString();
     var w = await sb.from('google_reviews_seen')
                     .select('venue_key,review_key,rating,review_text,author,author_uri,maps_uri,publish_time,lang,first_seen')
-                    .gte('publish_time', wk).order('publish_time',{ascending:false});
+                    .gte('publish_time', mon).order('publish_time',{ascending:false});
     if(w.error) throw w.error;
-    GR.week = w.data || [];
+    GR.seen = w.data || [];
+    var wkCut = Date.now() - 7*24*3600*1000;
+    GR.week = GR.seen.filter(function(x){ return Date.parse(x.publish_time) >= wkCut; });
   }catch(e2){
-    GR.week = [];
+    GR.seen = []; GR.week = [];
     GR.weekErr = String((e2 && e2.message) || e2);
   }
   // Pace: our own long-term measurement (see foh-google-reviews-pace.sql for
@@ -244,9 +251,24 @@ function renderReviews(){
     h.push(grTrendHTML());
   }
 
-  // ── The race ──
-  h.push('<div class="gr-sec">The race · new ratings</div>');
-  h.push(grRaceHTML(board));
+  // ── The race ── counts reviews by the guest's own date; see grRaceHTML for
+  //    why this is no longer built on Google's published total.
+  h.push('<div class="gr-sec">The race · reviews guests wrote</div>');
+  h.push(grRaceHTML());
+
+  // ── The two numbers side by side, with the gaps named ──
+  var recon = grReconHTML();
+  if(recon){
+    h.push('<div class="gr-sec">Against Google’s published total</div>');
+    h.push(recon);
+  }
+
+  // ── Not how many wrote, but what they gave ──
+  var qual = grQualityHTML();
+  if(qual){
+    h.push('<div class="gr-sec">And how they rated us · last 4 weeks</div>');
+    h.push(qual);
+  }
 
   // ── Board ──
   h.push('<div class="gr-sec">How DIFC compares · tap any venue</div>');
@@ -332,7 +354,7 @@ function grTrendHTML(){
   h.push('</div>');
   if(rows.length<2){
     h.push('<div class="gr-note">The growth line draws itself from tomorrow — it needs at least two mornings of totals. '
-      + 'It can only ever show the last 30 days (Google’s rule); the race below keeps the longer story.</div>');
+      + 'It can only ever show the last 30 days (Google’s rule) — the race below counts the reviews themselves, by the date each guest wrote.</div>');
     h.push('</div>');
     return h.join('');
   }
@@ -357,7 +379,7 @@ function grTrendHTML(){
     + '<text x="'+(W-P)+'" y="'+(H-7)+'" font-size="10" fill="#8B7355" text-anchor="end">'
     + grEsc(grDate(rows[rows.length-1].snapshot_date))+' · '+grNum(vals[vals.length-1])+'</text>'
     + '</svg>');
-  h.push('<div class="gr-note">Our official Google total each morning. It can only ever look back 30 days (Google’s rule) — the race below keeps the longer story.</div>');
+  h.push('<div class="gr-note">Our official Google total each morning. It can only ever look back 30 days (Google’s rule) — the race below counts the reviews themselves, by the date each guest wrote.</div>');
   h.push('</div>');
   return h.join('');
 }
@@ -379,73 +401,267 @@ function grRankMove(board, rank){
 }
 
 // ── The race ──────────────────────────────────────────────────────────────
-// Who is collecting ratings fastest. Built ONLY from google_reviews_pace —
-// our own daily measurements, which we may keep long-term (the raw Google
-// totals never live past 30 days; see foh-google-reviews-pace.sql).
-// Two views: last 30 days, and everything since we started watching.
-function grRaceHTML(board){
-  if(GR.pace===null) return '<div class="gr-card"><div class="gr-loading gr-loading-sm">Reading the pace history…</div></div>';
-  if(GR.paceErr && !(GR.pace||[]).length){
-    return '<div class="gr-card"><div class="gr-note">The pace history isn’t switched on yet — its table is missing from the database. The rest of this page is unaffected.</div></div>';
-  }
-  var cut30 = new Date(Date.now() - 30*24*3600*1000).toISOString().slice(0,10);
-  var all = GR.pace||[];
-  var use = GR.raceView==='30' ? all.filter(function(x){ return String(x.day) >= cut30; }) : all;
-  if(!use.length){
-    return '<div class="gr-card"><div class="gr-note">The race starts tomorrow. It needs at least two mornings of watching before the first bars can appear — from then on it builds every day, and this history is ours to keep.</div></div>';
-  }
+// WHAT CHANGED, 12 Aug 2026 — read this before "restoring" the old version.
+//
+// This used to sum the nightly CHANGE in Google's published rating count
+// (google_reviews_pace). That number is an aggregate Google recomputes on its
+// own schedule, NOT a feed of reviews as they are written — the proof is that
+// it falls as well as rises. On 11 Aug it added 43 to Zuma in a single night
+// after three weeks of standing still: a catch-up on a stale listing, not a
+// busy Tuesday. Summed, that one night was 43 of Zuma's 63 and it alone
+// produced the headline "Zuma is being rated 2 times as often as we are",
+// putting us 4th. The same flaw cut the other way on our own page: our count
+// fell 12 in three days while 8 guests were writing about us, so a good
+// weekend could show the team a bar going BACKWARDS.
+//
+// So the race now counts REVIEWS, each filed under the date its own guest
+// wrote it (google_reviews_seen). One row per review: it cannot run backwards
+// and it carries no catch-up lumps. Google's published totals are NOT thrown
+// away — they are shown beside this in the reconciliation below, where the
+// two are compared in the open instead of being blended into one figure.
+//
+// Views: last 7 days, last 4 weeks, and everything we still hold (the table
+// purges at 30 days, so that is the honest limit of the long view).
+function grRaceRows(days){
+  var cut = days ? (Date.now() - days*24*3600*1000) : 0;
   var sums = {};
-  use.forEach(function(x){ sums[x.venue_key] = (sums[x.venue_key]||0) + Number(x.gained||0); });
-  var entries = GR_VENUES.map(function(v){
-    return { key:v.key, name:v.name, us:!!v.us, sum:(sums[v.key]!=null?sums[v.key]:null) };
-  }).filter(function(x){ return x.sum!=null; });
-  entries.sort(function(a,b){ return b.sum-a.sum; });
-  // Bars scale against the biggest GAIN only. A negative total (Google pruned
-  // more than the venue gained) draws as a small muted stub — the minus sign
-  // carries the story; a long bar would falsely read as leading the race.
+  (GR.seen||[]).forEach(function(r){
+    var t = Date.parse(r.publish_time); if(!t) return;
+    if(cut && t < cut) return;
+    sums[r.venue_key] = (sums[r.venue_key]||0) + 1;
+  });
+  return GR_VENUES.map(function(v){
+    return { key:v.key, name:v.name, us:!!v.us, n:(sums[v.key]||0) };
+  }).sort(function(a,b){ return b.n - a.n; });
+}
+// A day where Google's published total jumped or fell far beyond that venue's
+// normal movement — i.e. its page was recalculated, not that many guests wrote
+// at once. Flagged on screen and explained in words; never silently smoothed.
+// Threshold is per venue (4x its own median day, floor 8) so a busy listing is
+// not judged by a quiet one's standard.
+function grSpikes(){
+  var by = {}, out = {};
+  (GR.pace||[]).forEach(function(p){ (by[p.venue_key] = by[p.venue_key] || []).push(p); });
+  Object.keys(by).forEach(function(k){
+    var abs = by[k].map(function(p){ return Math.abs(Number(p.gained||0)); }).sort(function(a,b){ return a-b; });
+    var med = abs.length ? abs[Math.floor(abs.length/2)] : 0;
+    var thr = Math.max(8, med*4);
+    by[k].forEach(function(p){
+      if(Math.abs(Number(p.gained||0)) >= thr) (out[k] = out[k] || []).push(p);
+    });
+  });
+  return out;
+}
+function grRaceHTML(){
+  if(GR.seen===null) return '<div class="gr-card"><div class="gr-loading gr-loading-sm">Reading the collection…</div></div>';
+  var v = GR.raceView, days = v==='7' ? 7 : v==='28' ? 28 : 0;
+  var rows = grRaceRows(days);
+  if(!rows.some(function(x){ return x.n; })){
+    return '<div class="gr-card"><div class="gr-note">Nothing collected in this period yet. Reviews are gathered every night and filed under the day the guest wrote them, so the first bars appear as soon as one arrives.</div></div>';
+  }
+  var oldest = null;
+  (GR.seen||[]).forEach(function(r){ var t=String(r.publish_time).slice(0,10); if(!oldest || t<oldest) oldest=t; });
   var max = 1;
-  entries.forEach(function(x){ if(x.sum > max) max = x.sum; });
+  rows.forEach(function(x){ if(x.n > max) max = x.n; });
+  var spikes = grSpikes();
 
-  var sinceAll = String(all[0].day).slice(0,10);
-  var since = String(use[0].day).slice(0,10);
-  var days = Math.round((Date.now() - new Date(since+'T12:00:00').getTime())/86400000);
   var h = ['<div class="gr-card">'];
   h.push('<div class="gr-race-tabs">'
-    + '<button class="gr-race-tab'+(GR.raceView==='30'?' on':'')+'" onclick="grRaceSwitch(\'30\')">Last 30 days</button>'
-    + '<button class="gr-race-tab'+(GR.raceView!=='30'?' on':'')+'" onclick="grRaceSwitch(\'all\')">Since '+grDate(sinceAll)+'</button>'
+    + '<button class="gr-race-tab'+(v==='7'?' on':'')+'" onclick="grRaceSwitch(\'7\')">Last 7 days</button>'
+    + '<button class="gr-race-tab'+(v==='28'?' on':'')+'" onclick="grRaceSwitch(\'28\')">Last 4 weeks</button>'
+    + '<button class="gr-race-tab'+(v==='all'?' on':'')+'" onclick="grRaceSwitch(\'all\')">Since '+grDate(oldest)+'</button>'
     + '</div>');
+  h.push('<div class="gr-race-basis">Every review counted once, on the day the guest wrote it</div>');
   h.push('<div class="gr-race">');
-  entries.forEach(function(x){
-    var neg = x.sum < 0;
-    var pct = x.sum > 0 ? Math.max(4, Math.round(x.sum/max*100)) : 2;
-    h.push('<div class="gr-race-row'+(x.us?' gr-race-us':'')+(neg?' gr-race-neg':'')+'">'
+  rows.forEach(function(x){
+    var pct = x.n > 0 ? Math.max(4, Math.round(x.n/max*100)) : 2;
+    // No spike flag on these bars, deliberately: a spike is a fault in
+    // GOOGLE'S published total, and these bars do not use it. Marking them
+    // here would imply the bar is affected when it is not. The spike is named
+    // in the note below and in the reconciliation, where it actually applies.
+    h.push('<div class="gr-race-row'+(x.us?' gr-race-us':'')+'">'
       + '<div class="gr-race-name">'+grEsc(x.name)+'</div>'
       + '<div class="gr-race-track"><div class="gr-race-bar" style="width:'+pct+'%"></div></div>'
-      + '<div class="gr-race-val">'+(neg?'−':'+')+grNum(Math.abs(x.sum))+'</div>'
+      + '<div class="gr-race-val">'+grNum(x.n)+'</div>'
       + '</div>');
   });
   h.push('</div>');
-  // The reading, derived from the numbers only.
-  var us = entries.find(function(x){ return x.us; });
-  var top = entries[0];
+
+  // The reading, derived from the numbers on screen and nothing else.
+  var us = rows.find(function(x){ return x.us; }), top = rows[0];
   if(us && top){
     var line;
-    if(top.us){ line = 'Nobody in DIFC is collecting ratings faster than us right now.'; }
-    else if(us.sum > 0){
-      var ratio = us.sum>0 ? (top.sum/us.sum) : null;
-      line = grEsc(top.name)+' is being rated '+(ratio && ratio>=1.15 ? (Math.round(ratio*10)/10)+' times as often as we are' : 'about as often as we are')+' over this period.';
+    if(top.us){
+      var second = rows.find(function(x){ return !x.us && x.n > 0; });
+      var ratio = (second && second.n) ? (us.n/second.n) : null;
+      line = '<b>We are first in DIFC'
+        + (ratio && ratio >= 1.8 ? ' — twice as many guests wrote about us as about '+grEsc(second.name)
+          : ratio && ratio >= 1.25 ? ' — more guests wrote about us than about '+grEsc(second.name) : '')
+        + '.</b>';
     }else{
-      line = grEsc(top.name)+' leads the period; our own count has not grown over it.';
+      line = '<b>'+grEsc(top.name)+' is ahead over this period</b> with '+grNum(top.n)+' to our '+grNum(us.n)+'.';
     }
-    h.push('<div class="gr-note">'+line+' Counted by us each morning'+(days>1?(' for '+days+' days'):'')+' — this history is our own measurement and is never deleted. '
-      + 'A minus means Google showed fewer ratings than the day before: it deletes reviews it decides are spam, and its public total can wobble slightly day to day. Over the weeks the noise cancels out and the real pace shows.</div>');
+    h.push('<div class="gr-note">'+line+'</div>');
   }
+
+  // The spike, named. Only on the long view, where it is actually visible.
+  if(v==='all'){
+    var worst = null, worstKey = null;
+    Object.keys(spikes).forEach(function(k){
+      spikes[k].forEach(function(p){
+        if(!worst || Math.abs(Number(p.gained)) > Math.abs(Number(worst.gained))){ worst = p; worstKey = k; }
+      });
+    });
+    if(worst){
+      var n = Math.abs(Number(worst.gained)), up = Number(worst.gained) > 0;
+      h.push('<div class="gr-race-spike"><b>⚡ One night to explain — '+grEsc(grName(worstKey))+', '+grDate(worst.day)+'.</b> '
+        + 'Google '+(up?'added <b>':'took <b>')+grNum(n)+'</b>'+(up?' to':' off')+' its published total in a single night. '
+        + 'Reviews do not arrive in one lump like that — Google had simply not updated that page for a while and then caught up. '
+        + 'The bars above are unaffected: they count each review on the day its guest wrote it.</div>');
+    }
+  }
+
+  h.push('<details class="gr-fold"><summary>How this is counted</summary>'
+    + '<div class="gr-note">One row per review, filed under the date the guest wrote it — not the date Google got round to counting it. '
+    + 'A review already written can never be taken off the week it belongs to, so this number only ever goes up. '
+    + 'Collected every night from every DIFC venue, and kept for 30 days (Google’s rule).</div></details>');
   h.push('</div>');
   return h.join('');
 }
 function grRaceSwitch(v){
-  GR.raceView = (v==='all') ? 'all' : '30';
+  GR.raceView = (v==='7'||v==='28') ? v : 'all';
   renderMain();
+}
+
+// ── Against Google's published total ──────────────────────────────────────
+// The two numbers side by side, over the same window. This is the honest
+// answer to "then the consolidated figure won't match reality": it always
+// matches — it is printed right here, and where the columns disagree the
+// reason is named. Clap and Il Gattopardo landing within one of each other
+// is the check that the counting method is sound.
+function grReconHTML(){
+  var pace = GR.pace||[];
+  if(!pace.length || !(GR.seen||[]).length) return '';
+  var start = String(pace[0].day).slice(0,10);
+  var startMs = Date.parse(start+'T00:00:00');
+  var wrote = {}, pub = {};
+  (GR.seen||[]).forEach(function(r){
+    var t = Date.parse(r.publish_time);
+    if(t && t >= startMs) wrote[r.venue_key] = (wrote[r.venue_key]||0)+1;
+  });
+  pace.forEach(function(p){ pub[p.venue_key] = (pub[p.venue_key]||0) + Number(p.gained||0); });
+  var spikes = grSpikes();
+  var rows = GR_VENUES.map(function(v){
+    return { key:v.key, name:v.name, us:!!v.us, wrote:(wrote[v.key]||0), pub:(pub[v.key]!=null?pub[v.key]:null) };
+  }).filter(function(x){ return x.pub!=null; }).sort(function(a,b){ return b.wrote-a.wrote; });
+  if(!rows.length) return '';
+
+  var h = ['<div class="gr-card">'];
+  h.push('<div class="gr-scrollx"><table class="gr-rec">'
+    + '<tr><th>Venue</th><th class="n">Guests wrote</th><th class="n">Google published</th><th></th></tr>');
+  rows.forEach(function(x){
+    // The GAP is the headline where it is big — that is the thing worth
+    // acting on. A one-night spike only gets the column when the two totals
+    // otherwise agree, because on our own row "-8 in one night" would hide
+    // the far bigger fact that Google is 30 reviews behind.
+    var gap = x.wrote - x.pub, note = '', cls = 'gr-rec-ok';
+    var sp = spikes[x.key] && spikes[x.key].length ? spikes[x.key][0] : null;
+    // A spike is only the right caption when it is big enough to BE the
+    // explanation for the gap (Zuma: +43 is why it reads 27 ahead). Our own
+    // row has a small -8 spike against a 30-review gap, and captioning that
+    // would hide the thing that actually matters.
+    var spBig = sp && Math.abs(Number(sp.gained)) >= 15;
+    if(spBig){
+      note = (Number(sp.gained)>0?'+':'−')+grNum(Math.abs(Number(sp.gained)))+' in one night';
+      cls = 'gr-rec-warn';
+    }else if(Math.abs(gap) >= 15){
+      note = 'Google '+grNum(Math.abs(gap))+(gap>0?' behind':' ahead'); cls = 'gr-rec-warn';
+    }else if(sp){
+      note = (Number(sp.gained)>0?'+':'−')+grNum(Math.abs(Number(sp.gained)))+' in one night';
+      cls = 'gr-rec-warn';
+    }else if(Math.abs(gap) <= 1){ note = '✓ within 1'; }
+    else if(gap > 1){ note = 'Google '+grNum(gap)+' behind'; cls = 'gr-rec-mut'; }
+    else { note = grNum(Math.abs(gap))+' ahead'; cls = 'gr-rec-mut'; }
+    h.push('<tr class="'+(x.us?'gr-me':'')+'"><td class="gr-name">'+grEsc(x.name)+'</td>'
+      + '<td class="n">'+grNum(x.wrote)+'</td>'
+      + '<td class="n">'+(x.pub<0?'−':'+')+grNum(Math.abs(x.pub))+'</td>'
+      + '<td class="n '+cls+'">'+note+'</td></tr>');
+  });
+  h.push('</table></div>');
+  // Only venues with real volume can serve as the proof — a venue with one
+  // review matching to within one proves nothing at all.
+  var exact = rows.filter(function(x){ return Math.abs(x.wrote-x.pub) <= 1 && x.wrote >= 10; });
+  if(exact.length){
+    var nm = exact.map(function(x){ return grEsc(x.name); });
+    var joined = nm.length>1 ? nm.slice(0,-1).join(', ')+' and '+nm[nm.length-1] : nm[0];
+    h.push('<div class="gr-note"><b>'+joined
+      + (exact.length>1?' match':' matches')+' almost exactly — that is the check that the count is sound.</b> '
+      + 'Where the two columns disagree, something happened to Google’s page, and it is named above rather than hidden.</div>');
+  }
+  var usRow = rows.find(function(x){ return x.us; });
+  if(usRow && (usRow.wrote - usRow.pub) >= 15){
+    h.push('<div class="gr-race-spike"><b>Worth watching on our own page.</b> '
+      + grNum(usRow.wrote)+' guests wrote about us since '+grDate(start)+'; Google’s published total moved '+grNum(usRow.pub)+'. '
+      + 'Google prunes reviews it judges to be spam — nothing the team did, but it means roughly half of what they earn is not showing on our public number.</div>');
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+// ── How they rated us ─────────────────────────────────────────────────────
+// The other half of the race: not how many wrote, but what they gave. A venue
+// with too few reviews to judge is shown greyed with its count, never ranked
+// away — one 5-star review must never top this chart.
+function grQualityHTML(){
+  var cut = Date.now() - 28*24*3600*1000, agg = {};
+  (GR.seen||[]).forEach(function(r){
+    var t = Date.parse(r.publish_time); if(!t || t < cut) return;
+    if(r.rating==null) return;
+    var a = agg[r.venue_key] = agg[r.venue_key] || { s:0, n:0 };
+    a.s += Number(r.rating); a.n++;
+  });
+  var MIN = 15;
+  var rows = GR_VENUES.map(function(v){
+    var a = agg[v.key];
+    return { key:v.key, name:v.name, us:!!v.us, avg:(a&&a.n?a.s/a.n:null), n:(a?a.n:0) };
+  }).filter(function(x){ return x.avg!=null; });
+  if(!rows.length) return '';
+  // Rankable venues first, best score down. The too-few ones sit BELOW them,
+  // greyed — never above. One 5-star review must not appear to be winning,
+  // which is exactly what sorting on the average alone would show.
+  rows.sort(function(a,b){
+    var ra = a.n >= MIN ? 1 : 0, rb = b.n >= MIN ? 1 : 0;
+    return (rb - ra) || (b.avg - a.avg);
+  });
+  var ranked = rows.filter(function(x){ return x.n >= MIN; });
+  // Scale from 3.0 so the gap between a 4.7 and a 3.9 is visible, not a
+  // near-identical pair of full bars.
+  var lo = 3.0;
+  var h = ['<div class="gr-card">','<div class="gr-race">'];
+  rows.forEach(function(x){
+    var thin = x.n < MIN;
+    var pct = Math.max(4, Math.round(((x.avg-lo)/(5-lo))*100));
+    h.push('<div class="gr-race-row'+(x.us?' gr-race-us':'')+(thin?' gr-race-thin':'')+'">'
+      + '<div class="gr-race-name">'+grEsc(x.name)+'</div>'
+      + '<div class="gr-race-track"><div class="gr-race-bar" style="width:'+pct+'%"></div></div>'
+      + '<div class="gr-race-val">'+x.avg.toFixed(2)+'</div>'
+      + '</div>');
+  });
+  h.push('</div>');
+  var usRow = ranked.find(function(x){ return x.us; });
+  if(usRow && ranked[0] && ranked[0].us){
+    h.push('<div class="gr-note"><b>Of the venues with enough reviews to compare, nobody in DIFC is scoring higher than us on what guests wrote this month.</b> Averaged over '+grNum(usRow.n)+' reviews.</div>');
+  }else if(usRow){
+    h.push('<div class="gr-note">Averaged over '+grNum(usRow.n)+' reviews written in the last four weeks.</div>');
+  }
+  var few = rows.filter(function(x){ return x.n < MIN; });
+  if(few.length){
+    h.push('<div class="gr-note gr-mut-sm">'
+      + few.map(function(x){ return grEsc(x.name)+' ('+x.n+' review'+(x.n===1?'':'s')+')'; }).join(', ')
+      + ' '+(few.length>1?'are':'is')+' in grey — too few to rank fairly.</div>');
+  }
+  h.push('</div>');
+  return h.join('');
 }
 
 // The reading of the board, in plain words. Every sentence is derived from the
@@ -464,18 +680,26 @@ function grBoardNote(board, rank){
       + (bigger.length ? 'more ratings than our ' : 'fewer ratings than our ') + grNum(us.count)+'.');
     if(!bigger.length) bits.push('Among the venues at comparable volume, nobody is rated higher than us.');
   }
-  // Only compare pace once there is real pace to compare.
+  // The "New since" column is the movement in GOOGLE'S PUBLISHED TOTAL, and
+  // 12 Aug 2026 taught us what that is worth on its own: this note used to
+  // read "<venue> has collected N new ratings to our M — they are being
+  // reviewed more often than we are", and on 11 Aug Google added 43 to Zuma
+  // in one night after three weeks of not updating that page. The sentence
+  // was true of the column and false about the world.
+  // So the column stays (it reconciles with Google, always) and the CONCLUSION
+  // is gone. Who is actually being reviewed more often is answered by the
+  // race above, which counts each review on the day its guest wrote it.
   var withDelta = board.filter(function(x){ return x.delta!=null; });
   if(withDelta.length && us.delta!=null){
     var fastest = withDelta.slice().sort(function(a,b){ return (b.delta||0)-(a.delta||0); })[0];
     if(fastest && !fastest.us && fastest.delta > us.delta){
-      bits.push('<b>'+grEsc(fastest.name)+' has collected '+grNum(fastest.delta)+' new ratings since '+grDate(fastest.since)
-        +' to our '+grNum(us.delta)+'</b> — they are being reviewed more often than we are.');
+      bits.push('<b>'+grEsc(fastest.name)+'’s published total has moved '+grNum(fastest.delta)+' since '+grDate(fastest.since)
+        +', against our '+grNum(us.delta)+'.</b> That is Google’s own counter, which it recalculates in its own time — '
+        + 'for who is genuinely being reviewed more often, read the race above.');
     }
   }else{
-    bits.push('New-rating pace is our own daily count and it builds from today onward — that history is ours and is never deleted. '
-      + 'Only Google’s raw totals are removed after 30 days, so the “New since” column can never look back further than that; '
-      + 'the race above keeps the longer story.');
+    bits.push('This column is Google’s published total, which it removes after 30 days — so it can never look back further than that. '
+      + 'The race above counts each review on the day its guest wrote it, and the two are compared side by side further up.');
   }
   return '<div class="gr-note">'+bits.join(' ')+'</div>';
 }
