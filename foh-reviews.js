@@ -250,22 +250,20 @@ function renderReviews(){
     h.push('</div>');
   }
 
-  // The grid opens here UNCONDITIONALLY — if it only opened when rank exists,
-  // the closing tags below would orphan on an empty morning and the whole
-  // page's layout would depend on whether Google answered today.
+  // ── Report grid (Francesco, 12 Aug 2026; retidied same day after "untidy,
+  //    unaligned"). Rules that make it read as ONE designed board and not
+  //    five cards thrown at a wall:
+  //      1. Every cell has the SAME anatomy — gold section label, then card —
+  //         so the tops of a row align to the pixel.
+  //      2. Cards in a row STRETCH to the row's height (CSS .gr-cell/.gr-card
+  //         flex) — no ragged bottoms.
+  //      3. Pairs are matched by height AND by story: the race sits beside
+  //         its own reconciliation (the two explain each other), the quality
+  //         race beside the growth line. The DIFC board takes the full row —
+  //         a 5-column table with tap-to-expand panels would cramp in half.
+  //    The grid opens UNCONDITIONALLY — if it only opened when rank exists,
+  //    the closing tags would orphan on an empty morning.
   h.push('<div class="gr-grid">');
-  h.push('<div class="gr-cell">');
-  h.push(grTrendHTML());
-
-  // ── Report grid (Francesco, 12 Aug 2026): on a laptop the reports sit two
-  //    to a row so the whole page reads without scrolling; on a phone the same
-  //    markup stacks to one column (the every-device rule). Pairing: the race
-  //    beside the growth line, the reconciliation beside the quality race, and
-  //    the DIFC board across the full row — its 5-column table plus tap-to-
-  //    expand panels are the one report that half a row would cramp.
-  //    The growth line was pushed above (grTrendHTML, inside the rank block);
-  //    it opens the grid, so its cell is closed here before the race's opens.
-  h.push('</div>'); // closes .gr-cell opened around the trend card
 
   h.push('<div class="gr-cell">');
   // ── The race ── counts reviews by the guest's own date; see grRaceHTML for
@@ -291,6 +289,12 @@ function renderReviews(){
     h.push(qual);
     h.push('</div>');
   }
+
+  // ── Our own total, morning by morning ──
+  h.push('<div class="gr-cell">');
+  h.push('<div class="gr-sec">Our Google total · morning by morning</div>');
+  h.push(grTrendHTML());
+  h.push('</div>');
 
   // ── Board ── full row, deliberately (see the pairing note above)
   h.push('<div class="gr-cell gr-cell-wide">');
@@ -372,15 +376,18 @@ function grTrendHTML(){
   var rows = (GR.rows||[]).filter(function(x){ return x.venue_key==='robertos' && x.user_rating_count!=null; })
     .sort(function(a,b){ return String(a.snapshot_date).localeCompare(String(b.snapshot_date)); });
   var h = ['<div class="gr-card gr-trend">'];
-  h.push('<div class="gr-trend-head"><div class="gr-trend-t">How our total is growing</div>');
+  // No serif title inside the card any more — the cell's gold section label
+  // ("Our Google total · morning by morning") is the title, same anatomy as
+  // every other report, so the row tops align. The card opens with the
+  // headline figure alone, sized like the race's headline numbers.
   if(rows.length>1){
     var d = Number(rows[rows.length-1].user_rating_count) - Number(rows[0].user_rating_count);
-    h.push('<div class="gr-trend-plus">'+(d<0?'−':'+')+grNum(Math.abs(d))+' since '+grDate(rows[0].snapshot_date)+'</div>');
+    h.push('<div class="gr-trend-head"><div class="gr-trend-plus">'
+      + (d<0?'−':'+')+grNum(Math.abs(d))+' since '+grDate(rows[0].snapshot_date)+'</div></div>');
   }
-  h.push('</div>');
   if(rows.length<2){
     h.push('<div class="gr-note">The growth line draws itself from tomorrow — it needs at least two mornings of totals. '
-      + 'It can only ever show the last 30 days (Google’s rule) — the race below counts the reviews themselves, by the date each guest wrote.</div>');
+      + 'It can only ever show the last 30 days (Google’s rule) — the race counts the reviews themselves, by the date each guest wrote.</div>');
     h.push('</div>');
     return h.join('');
   }
@@ -405,7 +412,7 @@ function grTrendHTML(){
     + '<text x="'+(W-P)+'" y="'+(H-7)+'" font-size="10" fill="#8B7355" text-anchor="end">'
     + grEsc(grDate(rows[rows.length-1].snapshot_date))+' · '+grNum(vals[vals.length-1])+'</text>'
     + '</svg>');
-  h.push('<div class="gr-note">Our official Google total each morning. It can only ever look back 30 days (Google’s rule) — the race below counts the reviews themselves, by the date each guest wrote.</div>');
+  h.push('<div class="gr-note">Our official Google total each morning. It can only ever look back 30 days (Google’s rule) — the race counts the reviews themselves, by the date each guest wrote.</div>');
   h.push('</div>');
   return h.join('');
 }
