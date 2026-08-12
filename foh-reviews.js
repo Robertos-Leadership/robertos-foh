@@ -248,29 +248,52 @@ function renderReviews(){
       withText ? (withText+' with a comment') : 'ratings only, no comments'));
     h.push(grKpi('DIFC rank', rank.label, 'of '+rank.of+' by star rating' + grRankMove(board, rank)));
     h.push('</div>');
-    h.push(grTrendHTML());
   }
 
+  // The grid opens here UNCONDITIONALLY — if it only opened when rank exists,
+  // the closing tags below would orphan on an empty morning and the whole
+  // page's layout would depend on whether Google answered today.
+  h.push('<div class="gr-grid">');
+  h.push('<div class="gr-cell">');
+  h.push(grTrendHTML());
+
+  // ── Report grid (Francesco, 12 Aug 2026): on a laptop the reports sit two
+  //    to a row so the whole page reads without scrolling; on a phone the same
+  //    markup stacks to one column (the every-device rule). Pairing: the race
+  //    beside the growth line, the reconciliation beside the quality race, and
+  //    the DIFC board across the full row — its 5-column table plus tap-to-
+  //    expand panels are the one report that half a row would cramp.
+  //    The growth line was pushed above (grTrendHTML, inside the rank block);
+  //    it opens the grid, so its cell is closed here before the race's opens.
+  h.push('</div>'); // closes .gr-cell opened around the trend card
+
+  h.push('<div class="gr-cell">');
   // ── The race ── counts reviews by the guest's own date; see grRaceHTML for
   //    why this is no longer built on Google's published total.
   h.push('<div class="gr-sec">The race · reviews guests wrote</div>');
   h.push(grRaceHTML());
+  h.push('</div>');
 
   // ── The two numbers side by side, with the gaps named ──
   var recon = grReconHTML();
   if(recon){
+    h.push('<div class="gr-cell">');
     h.push('<div class="gr-sec">Against Google’s published total</div>');
     h.push(recon);
+    h.push('</div>');
   }
 
   // ── Not how many wrote, but what they gave ──
   var qual = grQualityHTML();
   if(qual){
+    h.push('<div class="gr-cell">');
     h.push('<div class="gr-sec">And how they rated us · last 4 weeks</div>');
     h.push(qual);
+    h.push('</div>');
   }
 
-  // ── Board ──
+  // ── Board ── full row, deliberately (see the pairing note above)
+  h.push('<div class="gr-cell gr-cell-wide">');
   h.push('<div class="gr-sec">How DIFC compares · tap any venue</div>');
   h.push('<div class="gr-card">');
   h.push('<table class="gr-table"><tr><th>Restaurant</th><th class="n">Stars</th><th class="n">Ratings</th><th class="n">'+grDeltaHead(board)+'</th><th></th></tr>');
@@ -293,9 +316,12 @@ function renderReviews(){
   h.push('</table>');
   h.push(grBoardNote(board, rank));
   h.push('</div>');
+  h.push('</div>'); // closes the board's .gr-cell-wide
+  h.push('</div>'); // closes .gr-grid
 
   // ── New this week (our stored collection, newest first — the ONLY review
-  //    text on this page; the raw "most relevant" five are never shown) ──
+  //    text on this page; the raw "most relevant" five are never shown).
+  //    Deliberately OUTSIDE the grid: prose reads at full width. ──
   h.push('<div class="gr-sec">New this week at Roberto’s</div>');
   h.push(grWeekHTML('robertos'));
 
