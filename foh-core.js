@@ -694,6 +694,29 @@ var ADMIN_NOTIFY=[
   {k:'roster_kitchen',n:'Kitchen roster to HR'}
 ];
 function admEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// ── Explainer text folds away ───────────────────────────────────────────────
+// The standing rule (4 Aug 2026): prose that explains how something WORKS is
+// read once and then it is furniture — it must sit behind a tap, not on the
+// screen forever. Anything reporting the state of his own work stays visible.
+// Admin was the worst offender left: the Emails tab alone carried five standing
+// paragraphs, so answering "who gets the closing report?" meant scrolling past
+// an essay each time.
+//
+// `key` must be stable — it is what lets an opened panel survive the re-render
+// that every toggle on these screens triggers.
+function admHowto(key, html, label){
+  var open=!!(state.admHowto && state.admHowto[key]);
+  return '<div class="adm-howto">'
+    +'<button class="adm-howto-b'+(open?' open':'')+'" onclick="admHowtoToggle(\''+admEsc(key)+'\')" '
+    +'aria-expanded="'+(open?'true':'false')+'">'+admEsc(label||'What this does')+'<i>&rsaquo;</i></button>'
+    +(open?'<div class="adm-howto-p">'+html+'</div>':'')
+    +'</div>';
+}
+function admHowtoToggle(k){
+  state.admHowto=state.admHowto||{};
+  state.admHowto[k]=!state.admHowto[k];
+  renderMain();
+}
 function loadAdminUsers(){
   // The Admin "control centre" reads BOTH databases: app_users + foh_staff from this
   // (FOH) project, and the kitchen staff list from the kitchen project via sbKitchen.
@@ -722,7 +745,7 @@ function loadAdminUsers(){
       console.error('Admin data load error:', res[0].error||res[1].error||res[2].error);
       toast('Could not load some admin lists — showing what loaded.', true);
     }
-    if(state.currentTab==='admin'){ renderMain(); if((state.adminView||'people')==='people') setTimeout(function(){ try{admApplyFilter();}catch(e){} },0); }
+    if(state.currentTab==='admin'){ renderMain(); if((state.adminView||'overview')==='people') setTimeout(function(){ try{admApplyFilter();}catch(e){} },0); }
   });
 }
 function adminFind(email){ return (state.adminUsers||[]).find(function(u){return u.email===email;}); }
@@ -802,6 +825,120 @@ function adminOpenSupabase(){ window.open(SUPA_USERS_URL,'_blank','noopener'); }
 // than the screen. Every tab was affected (the topbar's own buttons ran off the
 // right edge too), which is why it read as "the app is broken on my phone".
 var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
+  // ── Overview ────────────────────────────────────────────────────────────
+  // The "needs you" band is the first thing on the screen and is allowed to be
+  // the loudest thing on it. Three tints, and they mean three different things:
+  // amber-red = already wrong or already costing money, amber = work waiting on
+  // him, green = genuinely nothing. A band with no colour at all would read as
+  // decoration and get skipped, which is what the old five-pill row did.
+  +'.ov-att{background:#fff;border:1px solid #EADFCF;border-left:4px solid #C9A84C;'
+    +'border-radius:12px;padding:15px 18px;margin:6px 0 18px;}'
+  +'.ov-att-warn{border-left-color:#B3402F;}'
+  +'.ov-att-clear{border-left-color:#5C9463;}'
+  +'.ov-att-h{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9c8a72;margin-bottom:10px;}'
+  +'.ov-att-h span{color:#b09a7d;letter-spacing:0;}'
+  +'.ov-att-none{font-size:13px;color:#4a3b2a;line-height:1.55;}'
+  +'.ov-att-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap;'
+    +'padding:10px 0;border-top:1px solid #F4EDE2;}'
+  +'.ov-att-row:first-of-type{border-top:0;padding-top:0;}'
+  +'.ov-att-t{flex:1;min-width:200px;font-size:13.5px;color:#4a3b2a;line-height:1.5;}'
+  +'.ov-att-t b{color:#400207;}'
+  // The action is a button, not a link: it is the whole point of the row, and on
+  // a phone a text link is a 14px tap target.
+  +'.ov-att-b{flex:none;font-size:12px;padding:7px 13px;min-height:36px;border-radius:8px;'
+    +'border:1px solid #d8cbb6;background:#fff;color:#6B1F2A;cursor:pointer;font-family:inherit;white-space:nowrap;}'
+  +'.ov-att-b:hover{border-color:#6B1F2A;background:#faf5ec;}'
+  +'.ov-dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block;}'
+  +'.ov-dot-warn{background:#B3402F;}'
+  +'.ov-dot-note{background:#C9A84C;}'
+  // Tiles: two-up on a phone, five-up on a laptop. The minimum is 150px, not the
+  // 165px this first shipped with, and the 15px matters: a 390px phone leaves the
+  // grid 330px, and two 165px columns plus the 11px gap need 341. It missed by
+  // eleven pixels and every tile stacked. Measured, not guessed.
+  +'.ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;}'
+  +'.ov-tile{text-align:left;background:#fff;border:1px solid #EADFCF;border-radius:12px;'
+    +'padding:14px 15px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:5px;'
+    +'transition:border-color .12s,background .12s;}'
+  +'.ov-tile:hover{border-color:#C9A84C;background:#fdfbf6;}'
+  +'.ov-tile.flag-note{border-color:#E9D2A6;background:#FFFDF8;}'
+  +'.ov-tile.flag-warn{border-color:#EFCFC5;background:#FFFCFB;}'
+  // Latest activity — a glance, so it is quieter than everything above it.
+  +'.ov-act{background:#fff;border:1px solid #EADFCF;border-radius:12px;padding:14px 18px 6px;margin-top:14px;}'
+  +'.ov-act-h{display:flex;align-items:center;justify-content:space-between;gap:12px;'
+    +'font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9c8a72;margin-bottom:4px;}'
+  +'.ov-act-all{font-size:11px;letter-spacing:0;text-transform:none;padding:5px 10px;min-height:32px;'
+    +'border:1px solid #e3d5c2;background:#fff;border-radius:7px;color:#6B1F2A;cursor:pointer;font-family:inherit;}'
+  +'.ov-act-all:hover{border-color:#6B1F2A;background:#faf5ec;}'
+  +'.ov-act-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;'
+    +'border-bottom:1px solid #F4EDE2;font-size:13px;color:#4a3b2a;}'
+  +'.ov-act-row:last-child{border-bottom:0;}'
+  +'.ov-act-row b{color:#400207;font-weight:600;}'
+  +'.ov-act-ago{color:#9c8a72;white-space:nowrap;flex:none;}'
+  // ── The fold-away explainer ─────────────────────────────────────────────
+  // Small, quiet, and clearly a control rather than a heading — it has to be
+  // ignorable, because the whole point is that it is read once.
+  +'.adm-howto{margin:2px 0 14px;}'
+  +'.adm-howto-b{display:inline-flex;align-items:center;gap:6px;font-family:inherit;'
+    +'font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9c8a72;'
+    +'background:none;border:0;padding:6px 2px;min-height:32px;cursor:pointer;}'
+  +'.adm-howto-b:hover{color:#6B1F2A;}'
+  +'.adm-howto-b i{font-style:normal;font-size:14px;display:inline-block;transition:transform .14s;}'
+  +'.adm-howto-b.open i{transform:rotate(90deg);}'
+  +'.adm-howto-p{font-size:12.5px;color:#6B5B4A;line-height:1.6;max-width:70ch;'
+    +'background:#FBF7F1;border:1px solid #EFE6D8;border-radius:10px;padding:12px 14px;margin-top:2px;}'
+  // Inside a card the control sits between the card's own title and its list,
+  // both of which bring their own spacing — the page-level margin would stack
+  // on top of theirs and open a gap where nothing is.
+  +'.adm-card .adm-howto{margin:0;}'
+  // The empty-list warning is the last thing in its card and runs full-bleed to
+  // the card's edges. Without a matching bottom it ended in a hard square corner
+  // against the card's rounded one, which reads as the card being clipped.
+  +'.adm-card>.adm-set-warn:last-child{padding-bottom:12px;margin-bottom:-18px;border-radius:0 0 11px 11px;}'
+  // ── Usage ───────────────────────────────────────────────────────────────
+  +'.us-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin:6px 0 14px;}'
+  +'.us-stat{background:#fff;border:1px solid #EADFCF;border-radius:12px;padding:13px 15px;'
+    +'display:flex;flex-direction:column;gap:3px;}'
+  +'.us-stat.flag{border-color:#E9D2A6;background:#FFFDF8;}'
+  +'.us-stat b{font-family:Georgia,serif;font-size:26px;line-height:1.1;color:#400207;font-weight:normal;}'
+  +'.us-stat span{font-size:12.5px;color:#4a3b2a;}'
+  +'.us-stat em{font-style:normal;font-size:11.5px;color:#9c8a72;}'
+  +'.us-h{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#9c8a72;margin-bottom:8px;}'
+  +'.us-h span{letter-spacing:0;text-transform:none;color:#b09a7d;}'
+  +'.us-quiet{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;'
+    +'padding:9px 0;border-bottom:1px solid #F4EDE2;font-size:13px;color:#8a7a62;}'
+  +'.us-quiet:last-child{border-bottom:0;}'
+  +'.us-quiet b{color:#2c1810;font-weight:600;margin-right:7px;}'
+  +'.us-tag{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:#7a6a52;'
+    +'background:#F3EBDF;border:1px solid #E3D5C2;border-radius:10px;padding:2px 9px;white-space:nowrap;flex:none;}'
+  +'.us-tag-warn{color:#8A5A12;background:#FBF1DF;border-color:#E9D2A6;}'
+  // One row per person. The figures are fixed-width columns on a laptop and fold
+  // under the name on a phone rather than squeezing — the same rule the inbox
+  // rows already follow.
+  +'.us-row{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;'
+    +'padding:11px 0;border-bottom:1px solid #F4EDE2;}'
+  +'.us-row:last-child{border-bottom:0;}'
+  +'.us-who{min-width:170px;flex:1;min-width:0;}'
+  +'.us-who b{display:block;font-weight:600;color:#2c1810;font-size:14.5px;}'
+  +'.us-who span{display:block;font-size:11.5px;color:#9c8a72;word-break:break-all;}'
+  +'.us-fig{min-width:104px;flex:none;font-size:12.5px;color:#6b5a44;}'
+  +'.us-fig em{display:block;font-style:normal;font-size:11px;color:#9c8a72;}'
+  +'.us-fig b{color:#400207;}'
+  +'.us-mods{flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;}'
+  +'.us-mod{font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;}'
+  +'.us-none{font-size:12px;color:#9c8a72;}'
+  +'@media(max-width:640px){.us-fig{min-width:0;flex:1 1 46%;}.us-mods{flex:1 1 100%;}}'
+  +'.ov-tile-n{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9c8a72;'
+    +'display:flex;align-items:center;gap:7px;}'
+  +'.ov-tile-n .ov-dot{width:7px;height:7px;}'
+  // Georgia for the number: the rest of Admin already uses it for headings, and a
+  // figure this size in the body face reads as a form field rather than a fact.
+  +'.ov-tile-big{font-family:Georgia,serif;font-size:27px;line-height:1.1;color:#400207;}'
+  +'.ov-tile-big em{font-style:normal;font-family:inherit;font-size:12.5px;color:#8a7a62;}'
+  +'.ov-tile-sub{font-size:12px;color:#7a6a52;line-height:1.45;}'
+  // The nav chip's own marker, so "something is waiting in Emails" is visible
+  // from any section without opening it.
+  +'.adm-tabdot{width:6px;height:6px;border-radius:50%;background:#C9A84C;display:inline-block;margin-left:7px;vertical-align:middle;}'
+  +'.adm-toggle button.on .adm-tabdot{background:#E8D9C7;}'
   // ── Inbox rows on a phone ──
   // On a laptop a message is one line: kind, what they wrote, who, which app,
   // where it has got to. On a phone those fixed columns cannot all fit, and as
@@ -879,6 +1016,15 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.fb-split>*{min-width:0;}'
   +'.adm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;}'
   +'.adm-head h2{font-family:Georgia,serif;color:#400207;margin:0;font-size:22px;}'
+  // On a phone the title and its buttons cannot share a line. As a single
+  // space-between row the four People buttons wrapped AROUND the heading —
+  // "Refresh / Paste codes" above it, "+ Add login" beside it, "+ Add person"
+  // below — which read as broken rather than tight. Stacking gives the title its
+  // own line and the buttons a row of their own that wraps predictably.
+  +'@media(max-width:640px){'
+  +  '.adm-head{flex-direction:column;align-items:stretch;gap:10px;}'
+  +  '.adm-head>div{flex-wrap:wrap;}'
+  +'}'
   +'.adm-note{font-size:13px;color:#6b5a44;line-height:1.5;margin:6px 0 14px;}'
   +'.adm-add{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}'
   +'.adm-add input{flex:1;min-width:160px;padding:9px 11px;border:1px solid #d8cbb6;border-radius:8px;font-size:14px;}'
@@ -1094,29 +1240,290 @@ async function admRemove(src,id){
   adminRefresh();
 }
 
+/* ===================================================================
+   ADMIN → OVERVIEW — the screen Admin now opens on.
+   ------------------------------------------------------------------
+   Admin used to open on People: a 25-row list, with the four other
+   sections behind identical unlabelled pills. Everything was reachable
+   and nothing was VISIBLE — to find out whether an email list had been
+   emptied, or whether the team were waiting on something, you had to
+   open all five and read them.
+
+   So this screen answers one question before any other: is anything
+   waiting on me? Two parts, in this order.
+
+     1. What needs you. Only rows that are genuinely actionable, each one
+        a tap to the exact place that fixes it. If nothing is wrong the
+        band says so in a sentence — an empty list would read as broken.
+     2. The five sections, each carrying its own headline number, so the
+        state of the whole app is legible without opening anything.
+
+   The counts come from the SAME functions the sections themselves use
+   (admBuildPeople, admFbBuild, admNotifyList) — never a second sum, so
+   this screen and the section it points at can never disagree.
+   =================================================================== */
+
+// How long a login may go unused before it is worth mentioning. A month is
+// deliberately generous: this is "nobody is using what you gave them", not
+// an attendance check, and a fortnight would fire on anyone who took leave.
+var ADM_STALE_DAYS = 30;
+
+function admDaysSince(ts){
+  if(!ts) return null;
+  var d=new Date(ts); if(isNaN(d)) return null;
+  return Math.floor((Date.now()-d.getTime())/86400000);
+}
+// Someone who can actually sign in. A receive-only row (no modules, not an
+// admin) holds notify ticks and nothing else, so counting it as an unused
+// login would report HR as a problem every single day.
+function admCanSignIn(u){ return !!u && (((u.modules||[]).length>0) || !!u.is_admin); }
+
+// ── what needs him ──────────────────────────────────────────────────────
+// Each item: {sev:'warn'|'note', text, cta, go}. 'warn' is something that is
+// already wrong or already costing money; 'note' is work waiting on him.
+// Anything whose data has not loaded yet is simply OMITTED rather than
+// reported as zero — "nothing is waiting" must never be a loading state.
+function admAttention(){
+  var out=[];
+
+  // People without an employee ID cannot sign a checklist or a closing report,
+  // and cannot be matched to an attendance punch — so this is a real block.
+  var people=admBuildPeople();
+  var noCode=people.filter(function(p){ return !p.emp_id && p.src!=='office'; });
+  if(noCode.length) out.push({ sev:'warn', go:'people',
+    text:'<b>'+noCode.length+'</b> '+(noCode.length===1?'person has':'people have')+' no employee ID &mdash; '
+       + (noCode.length===1?'they cannot':'they cannot')+' sign a checklist or be matched to a clock-in.',
+    cta:'Show them' , act:'admGoMissingCode()'});
+
+  // An empty notify list does NOT stop the email — it silently falls back to a
+  // list written in code, which is the whole reason this screen exists.
+  var empty=ADMIN_NOTIFY.filter(function(nt){ return !admNotifyList(nt.k).length; });
+  if(empty.length) out.push({ sev:'warn', go:'emails',
+    text: empty.length===1
+      ? 'Nobody is on <b>&ldquo;'+admEsc(empty[0].n)+'&rdquo;</b> &mdash; that email is still going out, to a list written in code.'
+      : '<b>'+empty.length+'</b> email lists have nobody on them &mdash; those emails are still going out, to lists written in code.',
+    cta:'Set the recipients' });
+
+  // Feedback: only counted once the rounds have loaded (admFbBuild returns null
+  // until then), so this row appears when it is true, not before.
+  var B=admFbBuild();
+  if(B){
+    var n=admFbBar(B.items).n, waiting=(n.open||0)+(n.prog||0);
+    if(waiting) out.push({ sev:'note', go:'feedback',
+      text:'<b>'+waiting+'</b> thing'+(waiting===1?'':'s')+' the team asked for '+(waiting===1?'is':'are')+' still waiting on you.',
+      cta:'Open the list' });
+  }
+  if(state.fbInbox){
+    var ib=admFbInboxOpenCount();
+    if(ib) out.push({ sev:'note', go:'feedback',
+      text:'<b>'+ib+'</b> message'+(ib===1?'':'s')+' sent through &ldquo;Tell us&rdquo; '+(ib===1?'has':'have')+' had no reply.',
+      cta:'Open the inbox', act:'admGoInbox()' });
+  }
+
+  // Access granted and never used is the quiet failure this app has had before:
+  // nobody complains, the module just goes unopened.
+  if(state.usageSummary){
+    var seen={};
+    state.usageSummary.forEach(function(u){ seen[String(u.user_email||'').toLowerCase()]=u.last_seen; });
+    var never=0, stale=0;
+    (state.adminUsers||[]).filter(admCanSignIn).forEach(function(u){
+      var ls=seen[String(u.email||'').toLowerCase()];
+      if(!ls){ never++; return; }
+      var d=admDaysSince(ls);
+      if(d!==null && d>=ADM_STALE_DAYS) stale++;
+    });
+    if(never) out.push({ sev:'note', go:'usage',
+      text:'<b>'+never+'</b> '+(never===1?'person has':'people have')+' access but '+(never===1?'has':'have')+' never opened the app.',
+      cta:'See who' });
+    if(stale) out.push({ sev:'note', go:'usage',
+      text:'<b>'+stale+'</b> '+(stale===1?'person has':'people have')+' not opened the app in over a month.',
+      cta:'See who' });
+  }
+
+  // Settings that are costing money or are not switched on at all.
+  if(state.admVipCfg===null) out.push({ sev:'note', go:'settings',
+    text:'Flagging public figures in Reservations is <b>not set up</b> &mdash; it needs its table creating once.',
+    cta:'Read what to run' });
+  var days=(state.admRevCfg && Number(state.admRevCfg.days)>=1) ? Math.round(Number(state.admRevCfg.days)) : 7;
+  var cost=admCadenceCost(days);
+  if(cost>250) out.push({ sev:'warn', go:'settings',
+    text:'Collecting competitors&rsquo; reviews this often costs about <b>'+cost+'</b> of the 250 searches included &mdash; it would stop part-way through the month.',
+    cta:'Change how often' });
+  else if(cost>200) out.push({ sev:'warn', go:'settings',
+    text:'Competitors&rsquo; reviews are set to use about <b>'+cost+'</b> of the 250 searches included &mdash; only '+(250-cost)+' spare, which one repeat collection would use up.',
+    cta:'Change how often' });
+
+  // Already-wrong before merely-waiting, always. The order these were pushed in
+  // happens to be right today, but it is an accident of how this function reads
+  // and a new check added in the middle would quietly bury a live problem.
+  out.sort(function(a,b){ return (a.sev==='warn'?0:1)-(b.sev==='warn'?0:1); });
+  return out;
+}
+
+// Jump straight to the thing, with the section's own filter already applied —
+// "Show them" that lands you on an unfiltered 25-row list has not shown you
+// anything. These set the destination screen's state BEFORE switching to it.
+function admGoMissingCode(){ state.adminWhere='missing'; state.adminPick=null; admSetView('people'); }
+function admGoInbox(){ state.fbLane='inbox'; admSetView('feedback'); }
+
+// ── the five section tiles ──────────────────────────────────────────────
+// Each carries the one number that says how that section is doing, plus a
+// sub-line. `flag` puts an amber dot on the tile and its nav chip.
+function admSections(){
+  var people=admBuildPeople();
+  var logins=(state.adminUsers||[]).filter(admCanSignIn).length;
+  var noCode=people.filter(function(p){ return !p.emp_id && p.src!=='office'; }).length;
+
+  var active7=null, usageSub='Not loaded yet';
+  if(state.usageErr) usageSub='Could not be read';
+  else if(state.usageSummary){
+    active7=state.usageSummary.filter(function(u){ var d=admDaysSince(u.last_seen); return d!==null && d<7; }).length;
+    usageSub='opened the app this week, of '+logins+' with access';
+  }
+
+  var fbN=null, fbSub='Not loaded yet';
+  var B=admFbBuild();
+  if(state.fbErr) fbSub='Could not be read';
+  else if(B){
+    var n=admFbBar(B.items).n;
+    fbN=(n.open||0)+(n.prog||0);
+    fbSub=fbN ? 'asked for and not done yet' : 'nothing waiting &mdash; all '+B.items.length+' done';
+  }
+
+  var emptyLists=ADMIN_NOTIFY.filter(function(nt){ return !admNotifyList(nt.k).length; }).length;
+  var recips={};
+  ADMIN_NOTIFY.forEach(function(nt){ admNotifyList(nt.k).forEach(function(u){ recips[u.email]=1; }); });
+
+  var vipOn=!!(state.admVipCfg && state.admVipCfg.enabled), vipMissing=(state.admVipCfg===null);
+  var days=(state.admRevCfg && Number(state.admRevCfg.days)>=1) ? Math.round(Number(state.admRevCfg.days)) : 7;
+  var cadLabel=(ADM_CADENCE.filter(function(o){ return o.d===days; })[0]||{label:'every '+days+' days'}).label;
+
+  // `flag` marks a section as needing something; `sev` says how badly, and must
+  // agree with admAttention's own severity for the same fact — a red dot on the
+  // tile over an amber row in the band is the screen contradicting itself.
+  return [
+    { k:'people', name:'People', big:String(people.length), unit:people.length===1?'person':'people',
+      sub:logins+' can sign in &middot; '+noCode+' with no employee ID', flag:noCode>0, sev:'warn' },
+    { k:'usage', name:'Usage', big:(active7===null?'&mdash;':String(active7)), unit:'active',
+      sub:usageSub, flag:false, sev:'note' },
+    { k:'feedback', name:'Feedback', big:(fbN===null?'&mdash;':String(fbN)), unit:fbN===1?'item':'items',
+      sub:fbSub, flag:!!fbN, sev:'note' },
+    { k:'emails', name:'Emails', big:String(ADMIN_NOTIFY.length), unit:'automatic emails',
+      sub:(emptyLists?emptyLists+' with nobody on '+(emptyLists===1?'it':'them'):Object.keys(recips).length+' people receive them'), flag:emptyLists>0, sev:'warn' },
+    { k:'settings', name:'Settings', big:(vipMissing?'1':(vipOn?'2':'1')), unit:'of 2 on',
+      sub:(vipMissing?'Public-figure flagging is not set up':'Competitors&rsquo; reviews: '+cadLabel.toLowerCase()), flag:vipMissing, sev:'note' }
+  ];
+}
+
+function admOverviewHTML(){
+  var att=admAttention();
+  var secs=admSections();
+  var warn=att.filter(function(a){ return a.sev==='warn'; }).length;
+
+  var h=['<div class="adm-wrap">'];
+
+  // The button group is wrapped, exactly like every other adm-head on these
+  // screens. Left bare it becomes the flex child that the phone rule stretches,
+  // so Refresh spanned the whole width and read as a section banner.
+  h.push('<div class="adm-head"><h2>Admin</h2><div style="display:flex;gap:8px;">'
+    +'<button class="btn btn-sm" onclick="admOverviewRefresh()">Refresh</button></div></div>');
+
+  // ── what needs you ──
+  h.push('<div class="ov-att'+(warn?' ov-att-warn':(att.length?'':' ov-att-clear'))+'">');
+  h.push('<div class="ov-att-h">'+(att.length
+    ? 'Needs you <span>&middot; '+att.length+'</span>'
+    : 'Nothing needs you')+'</div>');
+  if(!att.length){
+    h.push('<div class="ov-att-none">Every email has recipients, everyone has an employee ID, and nothing the team asked for is outstanding.</div>');
+  } else {
+    att.forEach(function(a){
+      h.push('<div class="ov-att-row">'
+        +'<span class="ov-dot ov-dot-'+a.sev+'"></span>'
+        +'<span class="ov-att-t">'+a.text+'</span>'
+        +'<button class="ov-att-b" onclick="'+(a.act||('admSetView(\''+a.go+'\')'))+'">'+admEsc(a.cta)+' &rarr;</button>'
+        +'</div>');
+    });
+  }
+  h.push('</div>');
+
+  // ── the five sections ──
+  h.push('<div class="ov-grid">');
+  secs.forEach(function(s){
+    h.push('<button class="ov-tile'+(s.flag?' flag flag-'+s.sev:'')+'" onclick="admSetView(\''+s.k+'\')">'
+      +'<span class="ov-tile-n">'+admEsc(s.name)+(s.flag?'<i class="ov-dot ov-dot-'+s.sev+'"></i>':'')+'</span>'
+      +'<span class="ov-tile-big">'+s.big+' <em>'+s.unit+'</em></span>'
+      +'<span class="ov-tile-sub">'+s.sub+'</span></button>');
+  });
+  h.push('</div>');
+
+  // ── what has just happened ──
+  // The usage rows are already loaded for the counts above, so showing the last
+  // few costs nothing and answers the other question an admin screen is opened
+  // with: is anyone actually in here right now. Deliberately six lines and no
+  // more — the full list is one tap away and this is a glance, not a log.
+  var recent=(state.usageRecent||[]).slice(0,6);
+  if(recent.length){
+    h.push('<div class="ov-act"><div class="ov-act-h">Latest activity'
+      +'<button class="ov-act-all" onclick="admSetView(\'usage\')">See all &rarr;</button></div>');
+    recent.forEach(function(r){
+      var what = r.action==='login' ? 'signed in'
+        : 'opened <b>'+admEsc(admUsageModName(r.module))+'</b>';
+      h.push('<div class="ov-act-row"><span>'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span>'
+        +'<span class="ov-act-ago">'+admEsc(admUsageAgo(r.created_at))+'</span></div>');
+    });
+    h.push('</div>');
+  }
+
+  h.push('</div>');
+  return h.join('');
+}
+// Pull everything the overview reads, so one button re-checks the whole screen
+// rather than making him visit three sections to refresh three numbers.
+function admOverviewRefresh(){
+  adminRefresh();
+  admUsageLoad();
+  admFbLoad();
+}
+
 // ONE control centre — the People grid is the hub; access + signing live inside each
 // person's expand panel (admDetailHTML). No more separate toggled screens.
+var ADM_VIEWS=[
+  {k:'overview',n:'Overview'},
+  {k:'people',  n:'People'},
+  {k:'usage',   n:'Usage'},
+  {k:'feedback',n:'Feedback'},
+  {k:'emails',  n:'Emails'},
+  {k:'settings',n:'Settings'}
+];
 function renderAdmin(){
   if(!state.adminLoaded){ loadAdminUsers(); return '<div class="loading">Loading…</div>'; }
   window.__admWide = window.innerWidth>=760;
-  var v=(state.adminView||'people');
+  var v=(state.adminView||'overview');
+  // Which sections have something waiting, so the nav itself says where the work
+  // is. Without this the chips are six identical words and the only way to find
+  // an empty email list is to open every one of them.
+  var flag={};
+  try{ admSections().forEach(function(s){ if(s.flag) flag[s.k]=1; }); }catch(e){}
   var tabs='<div class="adm-wrap" style="padding-bottom:0;"><div class="adm-toggle">'
-    +'<button class="'+(v==='people'?'on':'')+'" onclick="admSetView(\'people\')">People</button>'
-    +'<button class="'+(v==='usage'?'on':'')+'" onclick="admSetView(\'usage\')">Usage</button>'
-    +'<button class="'+(v==='feedback'?'on':'')+'" onclick="admSetView(\'feedback\')">Feedback</button>'
-    +'<button class="'+(v==='emails'?'on':'')+'" onclick="admSetView(\'emails\')">Emails</button>'
-    +'<button class="'+(v==='settings'?'on':'')+'" onclick="admSetView(\'settings\')">Settings</button>'
+    + ADM_VIEWS.map(function(t){
+        return '<button class="'+(v===t.k?'on':'')+'" onclick="admSetView(\''+t.k+'\')">'
+          + admEsc(t.n) + (flag[t.k]?'<i class="adm-tabdot"></i>':'') + '</button>';
+      }).join('')
     +'</div></div>';
-  var body = v==='usage' ? admUsageHTML()
+  var body = v==='overview' ? admOverviewHTML()
+    : (v==='usage' ? admUsageHTML()
     : (v==='feedback' ? admFbHTML()
     : (v==='emails' ? admEmailsHTML()
-    : (v==='settings' ? admSettingsHTML() : admControlCentre())));
+    : (v==='settings' ? admSettingsHTML() : admControlCentre()))));
   return '<style>'+ADM_CSS+'</style>'+tabs+body;
 }
 function admSetView(v){
   state.adminView=v;
-  if(v==='usage' && !state.usageSummary && !state.usageErr) admUsageLoad();
-  if(v==='feedback' && !state.fbRows && !state.fbErr) admFbLoad();
+  // The overview READS usage and feedback, so it has to pull them itself. It is
+  // the landing screen, so this is also what makes the other tabs feel instant.
+  var wantUsage = (v==='usage'||v==='overview'), wantFb = (v==='feedback'||v==='overview');
+  if(wantUsage && !state.usageSummary && !state.usageErr) admUsageLoad();
+  if(wantFb && !state.fbRows && !state.fbErr) admFbLoad();
   renderMain();
   if(v==='people') admAfterRender(function(){ try{admApplyFilter();}catch(e){} });
 }
@@ -1186,10 +1593,11 @@ var ADM_MAIL_ABOUT={
 };
 function admEmailsHTML(){
   var h=['<div class="adm-wrap">'];
-  h.push('<div class="adm-card"><div class="adm-set-note">Add or remove anyone from any of these emails. '
+  h.push('<div class="adm-head"><h2>Emails</h2></div>');
+  h.push(admHowto('emails','Add or remove anyone from any of these emails. '
     +'A change saves straight away and applies to the <b>next</b> send — nothing to deploy. '
     +'Someone who only needs to receive an email does <b>not</b> need a login: add them here and they '
-    +'get the email without being able to sign in.</div></div>');
+    +'get the email without being able to sign in.','How these lists work'));
 
   ADMIN_NOTIFY.forEach(function(nt){
     var about=ADM_MAIL_ABOUT[nt.k]||{when:'',note:''};
@@ -1197,7 +1605,11 @@ function admEmailsHTML(){
     h.push('<div class="adm-card">');
     h.push('<div class="adm-set-row"><div class="adm-set-txt">');
     h.push('<div class="adm-set-t">'+admEsc(nt.n)+'</div>');
-    h.push('<div class="adm-set-d">'+admEsc(about.when)+' '+admEsc(about.note)+'</div>');
+    // When it fires stays on screen — it is one short line and it is the thing
+    // you check before adding someone. The paragraph explaining the list's
+    // behaviour folds: it is the same words every time you open this tab.
+    h.push('<div class="adm-set-d">'+admEsc(about.when)+'</div>');
+    h.push(admHowto('mail-'+nt.k, admEsc(about.note), 'More about this list'));
     h.push('</div>');
     h.push('<button class="px-mini" onclick="admMailAddOpen(\''+admEsc(nt.k)+'\')">+ Add someone</button>');
     h.push('</div>');
@@ -1460,7 +1872,7 @@ function admUsageAgo(ts){
 // the actual intent rather than an accident.
 async function admUsageLoad(){
   state.usageSummary=null; state.usageRecent=null; state.usageReports=null; state.usageErr=null;
-  if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
+  if(state.currentTab==='admin' && (state.adminView==='usage'||state.adminView==='overview')) renderMain();
   try{
     var s=await sb.from('app_activity_summary').select('user_email,last_seen,events,logins7,mods').order('last_seen',{ascending:false});
     if(s.error) throw s.error;
@@ -1478,7 +1890,7 @@ async function admUsageLoad(){
     var rr=await sb.from('app_activity').select('user_email,action,created_at').eq('module','resreports').like('action','%:%').order('created_at',{ascending:false}).limit(1000);
     if(!rr.error) state.usageReports=rr.data||[];
   }catch(err){ state.usageErr=(err&&err.message)||'Could not load usage data.'; }
-  if(state.currentTab==='admin' && state.adminView==='usage') renderMain();
+  if(state.currentTab==='admin' && (state.adminView==='usage'||state.adminView==='overview')) renderMain();
 }
 // The report breakdown lives behind a button, not inline — Francesco asked
 // (12 Aug 2026): the who-ran-what lists only ever grow, and after a few months
@@ -1486,28 +1898,69 @@ async function admUsageLoad(){
 function admUsageReportsToggle(){ state.usageRepView=!state.usageRepView; renderMain(); }
 function admUsageHTML(){
   var inRep=!!state.usageRepView;
-  var head='<div class="adm-head"><h2>Usage — who&rsquo;s using the app</h2><div style="display:flex;gap:8px;">'
+  var head='<div class="adm-head"><h2>Usage</h2><div style="display:flex;gap:8px;">'
     +'<button class="btn btn-sm" onclick="admUsageReportsToggle()">'+(inRep?'&larr; Back to usage':'Reservation reports')+'</button>'
     +'<button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div></div>'
-    +'<div class="ppl-sum">'+(inRep
-      ? 'Which reservation report gets used, by whom. Built = worked out on screen, downloaded = took the Excel.'
-      : 'Every sign-in and module open, recorded automatically from this build on. Read-only — nothing here changes anyone&rsquo;s access.')+'</div>';
+    + (inRep ? '<div class="ppl-sum">Which reservation report gets used, by whom. Built = worked out on screen, downloaded = took the Excel.</div>'
+             : admHowto('usage','Every sign-in and every module open is recorded automatically. This screen is read-only &mdash; nothing here changes anyone&rsquo;s access, and removing a person from it is not possible because it is a record of what happened.','What this screen is'));
   if(inRep) return admUsageReportsHTML(head);
   if(state.usageErr) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Couldn&rsquo;t load the usage data — '+admEsc(state.usageErr)+'<br><br>If this is the first time, run <b>foh-app-activity.sql</b> once in Supabase, then tap Refresh.</div></div>';
   if(!state.usageSummary) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
   var people=state.usageSummary;
   if(!people.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Nothing recorded yet — usage starts counting from this build. Check back after the team has used the app.</div></div>';
+
+  // ── the three numbers this screen exists to answer ──────────────────────
+  // "Who is using the app" is not a list, it is a comparison: of the people you
+  // gave access to, how many actually turned up. The list underneath could only
+  // ever show the ones who DID — the people who never came are missing from it
+  // by definition, which is exactly the group worth knowing about.
+  var seen={};
+  people.forEach(function(u){ seen[String(u.user_email||'').toLowerCase()]=u.last_seen; });
+  var withAccess=(state.adminUsers||[]).filter(admCanSignIn);
+  var active=0, stale=[], never=[];
+  people.forEach(function(u){ var d=admDaysSince(u.last_seen); if(d!==null && d<7) active++; });
+  withAccess.forEach(function(u){
+    var ls=seen[String(u.email||'').toLowerCase()];
+    if(!ls){ never.push(u); return; }
+    var d=admDaysSince(ls);
+    if(d!==null && d>=ADM_STALE_DAYS) stale.push(u);
+  });
+  var strip='<div class="us-strip">'
+    + admUsStat(active, 'opened it this week', withAccess.length?('of '+withAccess.length+' with access'):'', false)
+    + admUsStat(never.length, never.length===1?'has never opened it':'have never opened it', 'access granted, never used', never.length>0)
+    + admUsStat(stale.length, 'not in over a month', 'last opened '+ADM_STALE_DAYS+'+ days ago', stale.length>0)
+    +'</div>';
+
+  // ── who has not been in ──
+  // Named, not just counted: "2 people have never opened the app" is a fact he
+  // can do nothing with until he knows which two.
+  var quiet='';
+  if(never.length || stale.length){
+    quiet='<div class="adm-card"><div class="us-h">Not using it</div>';
+    never.forEach(function(u){
+      quiet+='<div class="us-quiet"><span><b>'+admEsc(u.name||u.email)+'</b> '+admEsc(u.email)+'</span>'
+        +'<span class="us-tag us-tag-warn">never opened it</span></div>';
+    });
+    stale.forEach(function(u){
+      var ls=seen[String(u.email||'').toLowerCase()];
+      quiet+='<div class="us-quiet"><span><b>'+admEsc(u.name||u.email)+'</b> '+admEsc(u.email)+'</span>'
+        +'<span class="us-tag">last in '+admEsc(admUsageAgo(ls))+'</span></div>';
+    });
+    quiet+='</div>';
+  }
+
   // ── per-user summary (counted in SQL, complete for all time — see admUsageLoad) ──
-  var cards=people.map(function(u){
+  var rows=people.map(function(u){
     var mods=u.mods||{};
     var top=Object.keys(mods).sort(function(a,b){ return mods[b]-mods[a]; }).slice(0,3)
-      .map(function(m){ return '<span style="font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;">'+admEsc(admUsageModName(m))+' &middot; '+mods[m]+'</span>'; }).join(' ');
-    return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
-      +'<div style="min-width:170px;flex:1;"><div style="font-weight:600;color:#2c1810;font-size:14.5px;">'+admEsc(admUsageWho(u.user_email))+'</div><div style="font-size:11.5px;color:#9c8a72;">'+admEsc(u.user_email)+'</div></div>'
-      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last seen<br><b style="color:#400207;">'+admEsc(admUsageAgo(u.last_seen))+'</b></div>'
-      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Sign-ins, 7 days<br><b style="color:#400207;">'+(u.logins7||0)+'</b></div>'
-      +'<div style="flex:2;min-width:160px;display:flex;gap:5px;flex-wrap:wrap;">'+(top||'<span style="font-size:12px;color:#9c8a72;">no modules opened yet</span>')+'</div></div>';
+      .map(function(m){ return '<span class="us-mod">'+admEsc(admUsageModName(m))+' &middot; '+mods[m]+'</span>'; }).join('');
+    return '<div class="us-row">'
+      +'<div class="us-who"><b>'+admEsc(admUsageWho(u.user_email))+'</b><span>'+admEsc(u.user_email)+'</span></div>'
+      +'<div class="us-fig"><em>Last seen</em><b>'+admEsc(admUsageAgo(u.last_seen))+'</b></div>'
+      +'<div class="us-fig"><em>Sign-ins, 7 days</em><b>'+(u.logins7||0)+'</b></div>'
+      +'<div class="us-mods">'+(top||'<span class="us-none">no modules opened yet</span>')+'</div></div>';
   }).join('');
+
   // ── short recent-activity list ──
   var recent=(state.usageRecent||[]).map(function(r){
     var what;
@@ -1515,15 +1968,20 @@ function admUsageHTML(){
     else if(r.action.indexOf('report:')===0 || r.action.indexOf('excel:')===0){
       var rid=r.action.slice(r.action.indexOf(':')+1);
       var rp=(typeof rrReport==='function')?rrReport(rid):null;
-      what=(r.action.indexOf('excel:')===0?'downloaded':'built')+' <b style="color:#400207;">'+admEsc(rp?rp.name:rid)+'</b>';
+      what=(r.action.indexOf('excel:')===0?'downloaded':'built')+' <b>'+admEsc(rp?rp.name:rid)+'</b>';
     }
-    else what='opened <b style="color:#400207;">'+admEsc(admUsageModName(r.module))+'</b>';
-    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
+    else what='opened <b>'+admEsc(admUsageModName(r.module))+'</b>';
+    return '<div class="ov-act-row"><span>'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span>'
+      +'<span class="ov-act-ago">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
   }).join('');
   var totalEvents=people.reduce(function(a,u){ return a+(u.events||0); },0);
-  return '<div class="adm-wrap">'+head
-    +'<div class="ppl-grp">By person <span>&middot; '+people.length+' people, '+totalEvents+' records all-time</span></div>'+cards
-    +'<div class="ppl-grp" style="margin-top:26px;">Recent activity</div>'+recent+'</div>';
+  return '<div class="adm-wrap">'+head+strip+quiet
+    +'<div class="adm-card"><div class="us-h">By person <span>&middot; '+people.length+' people, '+totalEvents+' records all-time</span></div>'+rows+'</div>'
+    +'<div class="adm-card"><div class="us-h">Recent activity</div>'+recent+'</div></div>';
+}
+function admUsStat(n, label, sub, flag){
+  return '<div class="us-stat'+(flag?' flag':'')+'"><b>'+n+'</b><span>'+label+'</span>'
+    + (sub?'<em>'+sub+'</em>':'') +'</div>';
 }
 // ── Reservation reports — its own page behind the button above (see
 //    admUsageLoad for why this one tally lives in the browser) ──
@@ -1784,7 +2242,7 @@ async function admFbInboxFetchAll(){
 }
 async function admFbLoad(){
   state.fbRows=null; state.fbErr=null;
-  if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
+  if(state.currentTab==='admin' && (state.adminView==='feedback'||state.adminView==='overview')) renderMain();
   try{
     var r=await admFbFetchAll();
     if(r.error) throw r.error;
@@ -1811,7 +2269,7 @@ async function admFbLoad(){
     if(s.error) throw s.error;
     state.fbSent=s.data||[];
   }catch(err){ state.fbActionsErr=(err&&err.message)||'not available'; }
-  if(state.currentTab==='admin' && state.adminView==='feedback') renderMain();
+  if(state.currentTab==='admin' && (state.adminView==='feedback'||state.adminView==='overview')) renderMain();
 }
 function admFbDoneKey(t,q){ return t+'|'+q; }
 function admFbWorkOf(t,q){
@@ -2782,16 +3240,13 @@ function admInboxRow(id){
   return out;
 }
 
-function admFbHTML(){
-  if(admFbLane()==='inbox') return admInboxHTML();
-  var head='<div class="ppl-sum" style="margin:0;"></div>';
-  // The lane toggle comes BEFORE the failure, not after it: rounds being broken
-  // is no reason to lock him out of the inbox, which is a different table.
-  if(state.fbErr) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2><button class="btn btn-sm" onclick="admFbLoad()">Refresh</button></div>'
-    +'<div style="margin-bottom:12px;">'+admFbLaneHTML()+'</div>'
-    +'<div class="ppl-empty">Couldn&rsquo;t load the replies &mdash; '+admEsc(state.fbErr)+'<br><br>If this is the first time, run <b>foh-app-feedback.sql</b> once in Supabase, then tap Refresh.</div></div>';
-  if(!state.fbRows) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2></div><div class="loading">Loading&hellip;</div></div>';
-
+// Every item anyone asked us to act on, flattened across every round, plus the
+// per-round bookkeeping the cards need. Lifted out of admFbHTML so the Overview
+// can COUNT what is waiting without rendering the whole Feedback screen — two
+// screens deciding "waiting on you" from two different sums is exactly how they
+// would drift apart. Returns null when the rounds have not loaded yet.
+function admFbBuild(){
+  if(!state.fbRows) return null;
   var sentRows=state.fbSent||[];
   var byTopic={}, order=[];
   state.fbRows.forEach(function(r){
@@ -2800,8 +3255,6 @@ function admFbHTML(){
   });
   sentRows.forEach(function(s){ if(!byTopic[s.topic]){ byTopic[s.topic]=[]; order.push(s.topic); } });
 
-  // Every item anyone asked us to act on, across every round — flattened, so the
-  // one line of truth at the top can be true across the whole screen.
   var items=[], perTopic={};
   order.forEach(function(t){
     var marked=admFbLatest(byTopic[t]), counted=marked.filter(function(m){ return m.latest; });
@@ -2826,6 +3279,20 @@ function admFbHTML(){
       });
     perTopic[t]={ marked:marked, counted:counted, dupes:marked.length-counted.length };
   });
+  return { items:items, perTopic:perTopic, byTopic:byTopic, order:order, sentRows:sentRows };
+}
+function admFbHTML(){
+  if(admFbLane()==='inbox') return admInboxHTML();
+  var head='<div class="ppl-sum" style="margin:0;"></div>';
+  // The lane toggle comes BEFORE the failure, not after it: rounds being broken
+  // is no reason to lock him out of the inbox, which is a different table.
+  if(state.fbErr) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2><button class="btn btn-sm" onclick="admFbLoad()">Refresh</button></div>'
+    +'<div style="margin-bottom:12px;">'+admFbLaneHTML()+'</div>'
+    +'<div class="ppl-empty">Couldn&rsquo;t load the replies &mdash; '+admEsc(state.fbErr)+'<br><br>If this is the first time, run <b>foh-app-feedback.sql</b> once in Supabase, then tap Refresh.</div></div>';
+  if(!state.fbRows) return '<div class="adm-wrap"><div class="adm-head"><h2>Feedback</h2></div><div class="loading">Loading&hellip;</div></div>';
+
+  var B=admFbBuild();
+  var sentRows=B.sentRows, byTopic=B.byTopic, order=B.order, items=B.items, perTopic=B.perTopic;
 
   var bar=admFbBar(items), n=bar.n, total=items.length;
   // Open on what needs him. Landing on "Everything" when nothing is waiting
@@ -3069,8 +3536,13 @@ function admBarHTML(){
   var where=state.adminWhere||'all';
   var chipsDef=[['all','All · '+all.length],['Kitchen','Kitchen'],['FOH','FOH'],['Office','Office'],['missing','Missing code · '+miss],['login','Has login · '+logins]];
   var chipHTML=chipsDef.map(function(c){ return '<button class="ppl-chip'+(where===c[0]?' on':'')+'" data-w="'+c[0]+'" onclick="admSetWhere(\''+c[0]+'\')">'+admEsc(c[1])+'</button>'; }).join('');
-  return '<div class="adm-head"><h2>People — control centre</h2><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="adminRefresh()">Refresh</button><button class="btn btn-sm" onclick="admPasteOpen()">Paste codes</button><button class="btn btn-sm" onclick="admAddLoginOpen(\'\')">+ Add login</button><button class="btn btn-gold" onclick="admAddOpen()">+ Add person</button></div></div>'
-    +'<div class="ppl-sum">Everyone who touches either app, in one place — <b>'+all.length+' people</b>. Tap a person to set their employee ID, app access and signing. A code is optional — blank is fine for office &amp; freelance.</div>'
+  return '<div class="adm-head"><h2>People</h2><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="adminRefresh()">Refresh</button><button class="btn btn-sm" onclick="admPasteOpen()">Paste codes</button><button class="btn btn-sm" onclick="admAddLoginOpen(\'\')">+ Add login</button><button class="btn btn-gold" onclick="admAddOpen()">+ Add person</button></div></div>'
+    // The count is state and stays; the instructions are the same every visit
+    // and fold away.
+    +'<div class="ppl-sum">Everyone who touches either app, in one place — <b>'+all.length+' people</b>.</div>'
+    +admHowto('people','Tap a person to set their employee ID, app access and signing. '
+      +'A code is optional — blank is fine for office &amp; freelance. Kitchen and FOH staff are read from '
+      +'each app&rsquo;s own staff list; office people are logins with no staff record.','How this list works')
     +'<div class="px-bar"><input id="ppl-search" class="ppl-search" placeholder="Search name, code or role…" value="'+admEsc(state.adminQuery||'')+'" oninput="admApplyFilter()"></div>'
     +'<div class="ppl-chips">'+chipHTML+'</div>';
 }
@@ -3130,7 +3602,8 @@ function admDetailFull(p){
     var sched_which=(p.src==='kitchen'?'Kitchen':'FOH');
     schedSec='<div class="px-psec"><div class="px-pslbl">'+sched_which+' weekly schedule (roster)</div>'
       +'<button class="px-pill'+(inSch?' on':'')+'" onclick="admScheduleToggle(\''+ek+'\')">'+(inSch?'✓ Shows in the schedule':'Hidden from the schedule')+'</button>'
-      +'<div class="px-dhint" style="margin-top:6px;">Turn off for people who shouldn’t appear on the weekly roster (office, freelance, on leave) — they stay in this list and keep their records.</div></div>';
+      +admHowto('sched','Turn this off for people who shouldn’t appear on the weekly roster (office, freelance, on leave) — they stay in this list and keep their records.','What this does')
+      +'</div>';
   }
   var loginSec='';
   if(p.login){

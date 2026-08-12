@@ -1624,6 +1624,27 @@
     .finance-row-header { display: none; }
     .topbar { padding: 0 14px; }
     .main { padding: 16px 14px; }
+
+    /* -- TOPBAR ON A PHONE --------------------------------------------------
+       The topbar is one non-wrapping flex row: the logo group on the left and
+       four buttons on the right. Measured on a real 390px viewport it laid out
+       at 526px, so every screen in the manager area could be dragged sideways
+       and "Sign out" sat off the right edge. It reads as the app being broken,
+       and it was every module, not one.
+
+       Nothing is removed — all four buttons still work. The section label goes
+       (the screen underneath already titles itself, so it was saying it twice)
+       and the buttons lose the desktop's generous tracking and margins. The bar
+       keeps its 52px height, which other sticky offsets in this file measure
+       themselves against. */
+    .topbar-section { display: none; }
+    .topbar-left { gap: 10px; }
+    .topbar-signout {
+      font-size: 9.5px;
+      letter-spacing: 0.04em;
+      padding: 5px 8px;
+      margin-left: 6px;
+    }
   }
 
   /* -- WEEK SCOPE TOGGLE -- */
