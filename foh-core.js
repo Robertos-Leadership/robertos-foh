@@ -927,6 +927,88 @@ var ADM_CSS='.adm-wrap{max-width:1100px;margin:0 auto;padding:18px 16px 90px;}'
   +'.us-mod{font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;}'
   +'.us-none{font-size:12px;color:#9c8a72;}'
   +'@media(max-width:640px){.us-fig{min-width:0;flex:1 1 46%;}.us-mods{flex:1 1 100%;}}'
+  // ── Reservation reports ─────────────────────────────────────────────────
+  +'.rp-row{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;'
+    +'padding:12px 0;border-bottom:1px solid #F4EDE2;}'
+  +'.rp-row:last-child{border-bottom:0;}'
+  +'.rp-name{flex:1 1 230px;min-width:0;}'
+  +'.rp-name b{display:block;font-weight:600;color:#2c1810;font-size:14px;line-height:1.35;}'
+  +'.rp-name span{display:block;font-size:11.5px;color:#9c8a72;line-height:1.45;margin-top:2px;}'
+  // The bar carries the comparison; the numbers beside it carry the detail.
+  +'.rp-bar{flex:0 0 96px;height:7px;border-radius:4px;background:#F0E7DA;overflow:hidden;}'
+  +'.rp-bar i{display:block;height:100%;background:#6B1F2A;border-radius:4px;}'
+  +'.rp-figs{display:flex;gap:14px;flex:none;}'
+  +'.rp-figs span{font-size:12.5px;color:#6b5a44;min-width:56px;}'
+  +'.rp-figs em{display:block;font-style:normal;font-size:10.5px;letter-spacing:.04em;'
+    +'text-transform:uppercase;color:#9c8a72;}'
+  +'.rp-figs b{color:#400207;}'
+  +'.rp-whos{flex:1 1 150px;display:flex;gap:5px;flex-wrap:wrap;}'
+  +'.rp-who{font-size:11px;background:#E8D9C7;color:#400207;border-radius:10px;padding:2px 9px;white-space:nowrap;}'
+  // Never-run reports are shown, but quietly — they are a list to act on, not
+  // a failure to shout about.
+  +'.rp-dead{padding:9px 0;border-bottom:1px solid #F4EDE2;}'
+  +'.rp-dead:last-child{border-bottom:0;}'
+  +'.rp-dead b{font-weight:600;color:#8a7a62;font-size:13.5px;}'
+  +'.rp-dead span{display:block;font-size:11.5px;color:#b09a7d;margin-top:2px;}'
+  +'@media(max-width:640px){.rp-bar{flex:1 1 100%;order:3;}.rp-figs{order:2;gap:12px;}.rp-whos{order:4;}}'
+  // ── Emails: the who-gets-what grid ──────────────────────────────────────
+  // Hidden below 900px rather than made to scroll sideways: five columns in a
+  // 390px viewport is a scroller nobody reads, and the per-list cards below
+  // already do the whole job on a phone.
+  +'.ml-gridcard{display:none;}'
+  +'@media(min-width:900px){.ml-gridcard{display:block;}.ml-listonly{display:none;}}'
+  +'.ml-grid{display:grid;gap:1px;background:#F0E7DA;border:1px solid #F0E7DA;border-radius:10px;overflow:hidden;}'
+  +'.ml-cnr{background:#fff;}'
+  +'.ml-head{background:#FBF7F0;padding:9px 8px;text-align:center;display:flex;flex-direction:column;gap:3px;justify-content:flex-end;}'
+  +'.ml-head-t{font-size:11px;color:#6b5a44;line-height:1.3;}'
+  +'.ml-head-n{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9c8a72;}'
+  // A column with nobody on it is the failure this screen exists to catch, so
+  // the header says so before you read a single row.
+  +'.ml-head.empty{background:#FBEDE9;}'
+  +'.ml-head.empty .ml-head-n{color:#8A2A12;font-weight:700;}'
+  +'.ml-who{background:#fff;padding:9px 11px;display:flex;flex-direction:column;gap:2px;justify-content:center;}'
+  +'.ml-who b{font-size:13px;font-weight:600;color:#2c1810;}'
+  +'.ml-only{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#8a7a62;}'
+  // The cell is the control. 38px keeps a finger-sized target even though this
+  // grid only ever shows on a laptop.
+  +'.ml-cell{background:#fff;border:0;min-height:38px;cursor:pointer;font-family:inherit;'
+    +'font-size:14px;color:#fff;padding:0;transition:background .12s;}'
+  +'.ml-cell:hover{background:#FAF5EC;}'
+  +'.ml-cell.on{background:#6B1F2A;}'
+  +'.ml-cell.on:hover{background:#8a2b38;}'
+  +'.ml-cell:focus-visible{outline:2px solid #C9A84C;outline-offset:-2px;}'
+  // ── People → the access panel ───────────────────────────────────────────
+  +'.px-sum{font-size:12.5px;color:#6b5a44;margin:-2px 0 10px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}'
+  +'.px-sum b{color:#400207;font-weight:700;}'
+  +'.px-sum-sep{color:#cdbca4;}'
+  +'.px-sum-adm{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;'
+    +'background:#6B1F2A;color:#fff;border-radius:10px;padding:2px 9px;}'
+  // Two fixed columns, so a module is in the same place on every person's
+  // panel. The pill row it replaces reflowed with the name length.
+  +'.px-accgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:6px;}'
+  +'.px-acc{display:flex;align-items:center;gap:9px;text-align:left;font-family:inherit;'
+    +'font-size:12.5px;color:#6b5a44;background:#fff;border:1px solid #e0d4bf;border-radius:8px;'
+    +'padding:8px 11px;min-height:38px;cursor:pointer;transition:border-color .12s,background .12s;}'
+  +'.px-acc:hover{border-color:#6B1F2A;}'
+  +'.px-acc i{font-style:normal;flex:none;width:17px;height:17px;border-radius:5px;'
+    +'border:1px solid #d8cbb6;background:#fff;color:#fff;font-size:11px;line-height:15px;text-align:center;}'
+  +'.px-acc.on{background:#FBF7F1;border-color:#6B1F2A;color:#400207;font-weight:600;}'
+  +'.px-acc.on i{background:#6B1F2A;border-color:#6B1F2A;}'
+  +'.px-pow{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;font-family:inherit;'
+    +'background:#fff;border:1px solid #e0d4bf;border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer;}'
+  +'.px-pow:hover{border-color:#6B1F2A;}'
+  +'.px-pow i{font-style:normal;flex:none;width:17px;height:17px;border-radius:5px;margin-top:1px;'
+    +'border:1px solid #d8cbb6;background:#fff;color:#fff;font-size:11px;line-height:15px;text-align:center;}'
+  +'.px-pow>span{flex:1;min-width:0;}'
+  +'.px-pow b{display:block;font-size:13px;color:#2c1810;font-weight:600;}'
+  +'.px-pow em{display:block;font-style:normal;font-size:11.5px;color:#8a7a62;line-height:1.45;margin-top:2px;}'
+  // The state is spelled out, not left to the tick alone — the disabled-button
+  // lesson: never make someone infer a state from styling.
+  +'.px-pow-st{flex:none;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9c8a72;}'
+  +'.px-pow.on{background:#FBF7F1;border-color:#6B1F2A;}'
+  +'.px-pow.on i{background:#6B1F2A;border-color:#6B1F2A;}'
+  +'.px-pow.on .px-pow-st{color:#6B1F2A;font-weight:700;}'
+  +'.px-danger{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid #F0E7DA;}'
   +'.ov-tile-n{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9c8a72;'
     +'display:flex;align-items:center;gap:7px;}'
   +'.ov-tile-n .ov-dot{width:7px;height:7px;}'
@@ -1591,13 +1673,99 @@ var ADM_MAIL_ABOUT={
     note:'HR (hr@robertos.ae) is always the addressee. Everyone here is copied in.'
   }
 };
+/* ── Admin → Emails: the grid ────────────────────────────────────────────
+   Five separate lists could only ever answer one direction of the question.
+   "Who gets the closing report?" was easy; "what does Justin actually
+   receive?" meant reading all five cards and holding it in your head — and
+   that is the question you ask before adding someone, or when a person leaves.
+
+   So the grid is now the main control: everyone down the side, the five emails
+   across the top, one tap per cell. It also makes the empty column visible as a
+   column of nothing, which is the failure that matters most here (an empty list
+   does not stop the email — it falls back to recipients written in code).
+
+   The per-list cards stay underneath. They hold "+ Add someone", the words
+   explaining each list, and the empty-list warning in full. Below 900px the
+   grid would need a horizontal scroll to show five columns, so it is dropped
+   and the cards carry the whole job exactly as they did before.
+   ------------------------------------------------------------------------ */
+function admMailGridHTML(){
+  // Everyone worth a row: on at least one list, or able to sign in (so someone
+  // who should be receiving but is not appears as an empty row rather than
+  // being missing from the screen entirely).
+  var rows=(state.adminUsers||[]).filter(function(u){
+    return ((u.notify||[]).length>0) || admCanSignIn(u);
+  }).sort(function(a,b){
+    var an=(a.notify||[]).length, bn=(b.notify||[]).length;
+    if(an!==bn) return bn-an;                       // the most-subscribed first
+    return String(a.name||a.email).localeCompare(String(b.name||b.email));
+  });
+  if(!rows.length) return '';
+
+  var h=['<div class="adm-card ml-gridcard"><div class="us-h">Who gets what <span>&middot; tap a cell to change it</span></div>'];
+  h.push('<div class="ml-grid" style="grid-template-columns:minmax(150px,1.6fr) repeat('+ADMIN_NOTIFY.length+',minmax(0,1fr));">');
+
+  // header
+  h.push('<div class="ml-cnr"></div>');
+  ADMIN_NOTIFY.forEach(function(nt){
+    var n=admNotifyList(nt.k).length;
+    h.push('<div class="ml-head'+(n?'':' empty')+'">'
+      +'<span class="ml-head-t">'+admEsc(nt.n)+'</span>'
+      +'<span class="ml-head-n">'+(n?n:'none')+'</span></div>');
+  });
+
+  rows.forEach(function(u){
+    var em=String(u.email||'');
+    h.push('<div class="ml-who"><b>'+admEsc(u.name||em)+'</b>'
+      +(admIsMailOnly(u)?'<span class="ml-only">receives only</span>':'')+'</div>');
+    ADMIN_NOTIFY.forEach(function(nt){
+      var on=(u.notify||[]).indexOf(nt.k)!==-1;
+      // Ticking is instant; unticking goes through admMailRemove so it keeps
+      // the confirm AND the cleanup of a receive-only row that has nothing
+      // left to receive. Same path the Remove button below already uses.
+      var act=on ? 'admMailRemove(\''+admEsc(nt.k)+'\',\''+admEsc(em)+'\')'
+                 : 'admMailAdd(\''+admEsc(nt.k)+'\',\''+admEsc(em)+'\')';
+      h.push('<button class="ml-cell'+(on?' on':'')+'" onclick="'+act+'" '
+        +'title="'+admEsc((on?'Stop sending ':'Send ')+nt.n+' to '+(u.name||em))+'" '
+        +'aria-label="'+admEsc((u.name||em)+' — '+nt.n+' — '+(on?'on':'off'))+'">'
+        +(on?'&#10003;':'')+'</button>');
+    });
+  });
+
+  h.push('</div></div>');
+  return h.join('');
+}
+// Tick a cell on. Adding is harmless and instantly undone by tapping again, so
+// unlike removal it does not stop to confirm.
+async function admMailAdd(key, email){
+  var u=adminFind(email); if(!u) return;
+  if((u.notify||[]).indexOf(key)!==-1) return;
+  u.notify=(u.notify||[]).concat([key]);
+  renderMain();
+  var ok=await adminSave(u);
+  if(!ok){ u.notify=(u.notify||[]).filter(function(k){ return k!==key; }); renderMain(); return; }
+  var nt=ADMIN_NOTIFY.filter(function(x){ return x.k===key; })[0];
+  toast((u.name||email)+' now gets “'+(nt?nt.n:key)+'” ✓ — from the next send');
+}
 function admEmailsHTML(){
   var h=['<div class="adm-wrap">'];
+  var empty=ADMIN_NOTIFY.filter(function(nt){ return !admNotifyList(nt.k).length; }).length;
+  var recips={};
+  ADMIN_NOTIFY.forEach(function(nt){ admNotifyList(nt.k).forEach(function(u){ recips[u.email]=1; }); });
+
   h.push('<div class="adm-head"><h2>Emails</h2></div>');
+  h.push('<div class="us-strip">'
+    + admUsStat(ADMIN_NOTIFY.length,'automatic emails','the app sends these on its own',false)
+    + admUsStat(Object.keys(recips).length,'people receive them','across all five lists',false)
+    + admUsStat(empty, empty===1?'list with nobody on it':'lists with nobody on them',
+        empty?'still sending, to a list in code':'every list has recipients', empty>0)
+    +'</div>');
   h.push(admHowto('emails','Add or remove anyone from any of these emails. '
     +'A change saves straight away and applies to the <b>next</b> send — nothing to deploy. '
     +'Someone who only needs to receive an email does <b>not</b> need a login: add them here and they '
     +'get the email without being able to sign in.','How these lists work'));
+
+  h.push(admMailGridHTML());
 
   ADMIN_NOTIFY.forEach(function(nt){
     var about=ADM_MAIL_ABOUT[nt.k]||{when:'',note:''};
@@ -1619,6 +1787,11 @@ function admEmailsHTML(){
         +'with an empty list the send falls back to its original built-in recipients. '
         +'Add the people you want so this screen shows the truth.</div>');
     } else {
+      // Wrapped in .ml-listonly: once the grid above is on screen (900px+) it
+      // already shows exactly these names and exactly this count, and printing
+      // them again turned this tab into five screens of scrolling. Below 900px
+      // the grid is hidden, so these rows come back and carry the whole job.
+      h.push('<div class="ml-listonly">');
       h.push('<div class="adm-mail-list">');
       people.forEach(function(u){
         var em=String(u.email||'');
@@ -1632,6 +1805,7 @@ function admEmailsHTML(){
       });
       h.push('</div>');
       h.push('<div class="adm-set-note">'+people.length+' '+(people.length===1?'person':'people')+' on this list.</div>');
+      h.push('</div>');
     }
     h.push('</div>');
   });
@@ -1901,7 +2075,9 @@ function admUsageHTML(){
   var head='<div class="adm-head"><h2>Usage</h2><div style="display:flex;gap:8px;">'
     +'<button class="btn btn-sm" onclick="admUsageReportsToggle()">'+(inRep?'&larr; Back to usage':'Reservation reports')+'</button>'
     +'<button class="btn btn-sm" onclick="admUsageLoad()">Refresh</button></div></div>'
-    + (inRep ? '<div class="ppl-sum">Which reservation report gets used, by whom. Built = worked out on screen, downloaded = took the Excel.</div>'
+    + (inRep ? admHowto('reports','Which reservation report gets used, and by whom. '
+        +'<b>Built</b> = worked out on screen. <b>Excel</b> = took the spreadsheet away. '
+        +'A report counted here was run at least once; the ones underneath have never been opened by anybody.','How to read this')
              : admHowto('usage','Every sign-in and every module open is recorded automatically. This screen is read-only &mdash; nothing here changes anyone&rsquo;s access, and removing a person from it is not possible because it is a record of what happened.','What this screen is'));
   if(inRep) return admUsageReportsHTML(head);
   if(state.usageErr) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">Couldn&rsquo;t load the usage data — '+admEsc(state.usageErr)+'<br><br>If this is the first time, run <b>foh-app-activity.sql</b> once in Supabase, then tap Refresh.</div></div>';
@@ -1987,9 +2163,10 @@ function admUsStat(n, label, sub, flag){
 //    admUsageLoad for why this one tally lives in the browser) ──
 function admUsageReportsHTML(head){
   if(!state.usageReports) return '<div class="adm-wrap">'+head+'<div class="loading">Loading…</div></div>';
-  if(!state.usageReports.length) return '<div class="adm-wrap">'+head+'<div class="ppl-empty">No reports run yet — counting started 12 Aug 2026. Check back after Nicole or the team has built one.</div></div>';
+
+  // Tally what was actually run.
   var byRep={};
-  state.usageReports.forEach(function(r){
+  (state.usageReports||[]).forEach(function(r){
     var i=r.action.indexOf(':'), kind=r.action.slice(0,i), id=r.action.slice(i+1);
     if(kind!=='report' && kind!=='excel') return;
     var g=byRep[id]||(byRep[id]={runs:0,dl:0,who:{},last:r.created_at});
@@ -1997,29 +2174,75 @@ function admUsageReportsHTML(head){
     g.who[r.user_email]=(g.who[r.user_email]||0)+1;
     if(r.created_at>g.last) g.last=r.created_at;
   });
-  var rows=Object.keys(byRep).sort(function(a,b){ return (byRep[b].runs+byRep[b].dl)-(byRep[a].runs+byRep[a].dl); }).map(function(id){
-    var g=byRep[id];
-    var rep=(typeof rrReport==='function')?rrReport(id):null;
-    var who=Object.keys(g.who).sort(function(a,b){ return g.who[b]-g.who[a]; })
-      .map(function(e){ return admEsc(admUsageWho(e))+' &middot; '+g.who[e]; }).join(', ');
-    return '<div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 4px;border-bottom:1px solid #f1e9da;">'
-      +'<div style="min-width:200px;flex:1.4;font-weight:600;color:#2c1810;font-size:14px;">'+admEsc(rep?rep.name:id)+'</div>'
-      +'<div style="min-width:80px;font-size:12.5px;color:#6b5a44;">Built<br><b style="color:#400207;">'+g.runs+'</b></div>'
-      +'<div style="min-width:100px;font-size:12.5px;color:#6b5a44;">Downloaded<br><b style="color:#400207;">'+g.dl+'</b></div>'
-      +'<div style="min-width:110px;font-size:12.5px;color:#6b5a44;">Last used<br><b style="color:#400207;">'+admEsc(admUsageAgo(g.last))+'</b></div>'
-      +'<div style="flex:2;min-width:160px;font-size:12px;color:#6b5a44;">'+who+'</div></div>';
+
+  // ── Start from the ELEVEN reports that exist, not from the rows in the table.
+  // The old screen listed only reports somebody had already run, so a report
+  // nobody has ever opened was invisible — and that is the one fact worth
+  // having. Nicole picked these from a menu ([[reservations-reporting-nicole]]);
+  // which of her picks went unused is the answer to "was it worth building".
+  // Same defect class as the Usage list, which could only show people who came.
+  var all=(typeof RR_REPORTS!=='undefined' && RR_REPORTS.length)
+    ? RR_REPORTS.map(function(r){ return {id:r.id, name:r.name, blurb:r.blurb||''}; })
+    // No registry loaded (foh-resreports.js absent) — fall back to what was run,
+    // rather than claiming there are no reports.
+    : Object.keys(byRep).map(function(id){ return {id:id, name:id, blurb:''}; });
+  all.forEach(function(r){ var g=byRep[r.id]; r.runs=g?g.runs:0; r.dl=g?g.dl:0; r.who=g?g.who:{}; r.last=g?g.last:null; r.total=r.runs+r.dl; });
+
+  var used=all.filter(function(r){ return r.total>0; }).sort(function(a,b){ return b.total-a.total; });
+  var unused=all.filter(function(r){ return !r.total; });
+  var peak=used.length?used[0].total:0;
+
+  var strip='<div class="us-strip">'
+    + admUsStat(used.length, 'of '+all.length+' ever used', (used.length?'the rest have never been opened':''), false)
+    + admUsStat(unused.length, unused.length===1?'never run':'never run', 'built but not used', unused.length>0)
+    + admUsStat(Object.keys((function(){var w={};all.forEach(function(r){Object.keys(r.who).forEach(function(e){w[e]=1;});});return w;})()).length,
+        'people run them', 'across all reports', false)
+    +'</div>';
+
+  // A bar per report, scaled to the most-used one. The point of the bar is the
+  // gap between the top report and the rest — a column of numbers hides it.
+  var rows=used.map(function(r){
+    var who=Object.keys(r.who).sort(function(a,b){ return r.who[b]-r.who[a]; })
+      .map(function(e){ return '<span class="rp-who">'+admEsc(admUsageWho(e))+' &middot; '+r.who[e]+'</span>'; }).join('');
+    return '<div class="rp-row">'
+      +'<div class="rp-name"><b>'+admEsc(r.name)+'</b>'+(r.blurb?'<span>'+admEsc(r.blurb)+'</span>':'')+'</div>'
+      +'<div class="rp-bar"><i style="width:'+(peak?Math.max(4,Math.round(r.total/peak*100)):0)+'%;"></i></div>'
+      +'<div class="rp-figs">'
+        +'<span><em>Built</em><b>'+r.runs+'</b></span>'
+        +'<span><em>Excel</em><b>'+r.dl+'</b></span>'
+        +'<span><em>Last used</em><b>'+admEsc(admUsageAgo(r.last))+'</b></span>'
+      +'</div>'
+      +'<div class="rp-whos">'+who+'</div></div>';
   }).join('');
-  // Report runs only, newest first — bounded by the same 30-row read the main
-  // page's ticker uses, so this list cannot grow past a screen.
-  var recent=(state.usageReports||[]).slice(0,30).map(function(r){
+
+  var unusedHTML='';
+  if(unused.length){
+    unusedHTML='<div class="adm-card"><div class="us-h">Never run <span>&middot; '+unused.length+' of '+all.length+'</span></div>'
+      + unused.map(function(r){
+          return '<div class="rp-dead"><b>'+admEsc(r.name)+'</b>'+(r.blurb?'<span>'+admEsc(r.blurb)+'</span>':'')+'</div>';
+        }).join('')
+      +'</div>';
+  }
+
+  // Ten, not thirty. The per-report table above already carries every total, so
+  // this is only here to show the last few runs — at thirty rows it was longer
+  // than the rest of the screen put together and buried the never-run list,
+  // which is the part worth reading.
+  var recent=(state.usageReports||[]).slice(0,10).map(function(r){
     var rid=r.action.slice(r.action.indexOf(':')+1);
     var rp=(typeof rrReport==='function')?rrReport(rid):null;
-    var what=(r.action.indexOf('excel:')===0?'downloaded':'built')+' <b style="color:#400207;">'+admEsc(rp?rp.name:rid)+'</b>';
-    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid #f1e9da;font-size:13px;color:#4a3b2a;"><span style="min-width:0;">'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span><span style="color:#9c8a72;white-space:nowrap;">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
+    var what=(r.action.indexOf('excel:')===0?'took the Excel of':'built')+' <b>'+admEsc(rp?rp.name:rid)+'</b>';
+    return '<div class="ov-act-row"><span>'+admEsc(admUsageWho(r.user_email))+' &middot; '+what+'</span>'
+      +'<span class="ov-act-ago">'+admEsc(admUsageAgo(r.created_at))+'</span></div>';
   }).join('');
-  return '<div class="adm-wrap">'+head
-    +'<div class="ppl-grp">By report</div>'+rows
-    +'<div class="ppl-grp" style="margin-top:26px;">Recent report activity</div>'+recent+'</div>';
+
+  return '<div class="adm-wrap">'+head+strip
+    + (used.length
+        ? '<div class="adm-card"><div class="us-h">Used <span>&middot; most-run first</span></div>'+rows+'</div>'
+        : '<div class="adm-card"><div class="ppl-empty">No report has been run yet — counting started 12 Aug 2026. All '+all.length+' are listed below.</div></div>')
+    + unusedHTML
+    + (recent?'<div class="adm-card"><div class="us-h">Recent report activity</div>'+recent+'</div>':'')
+    +'</div>';
 }
 
 /* ===================================================================
@@ -3583,6 +3806,14 @@ function admCard(p){
     +'<span class="px-rb">'+admBadges(p)+'</span></button>';
 }
 function admPill(label,on,onclick){ return '<button class="px-pill'+(on?' on':'')+'" onclick="'+onclick+'">'+(on?'✓ ':'')+admEsc(label)+'</button>'; }
+// A permission is not a module — it needs a sentence, because "Admin" on its
+// own does not tell you it hands over everyone else's access too.
+function admPowerRow(name, what, on, onclick){
+  return '<button class="px-pow'+(on?' on':'')+'" onclick="'+onclick+'">'
+    +'<i>'+(on?'&#10003;':'')+'</i>'
+    +'<span><b>'+name+'</b><em>'+what+'</em></span>'
+    +'<span class="px-pow-st">'+(on?'On':'Off')+'</span></button>';
+}
 function admDetailFull(p){
   if(!p) return '<div class="px-dempty">Select a person.</div>';
   var off=p.src==='office', key=admKey(p), ek=admEsc(key);
@@ -3608,21 +3839,75 @@ function admDetailFull(p){
   var loginSec='';
   if(p.login){
     var email=p.login.email, ee=admEsc(email);
-    var acc=ADMIN_MODULES.map(function(m){ return admPill(m.n,(p.login.modules||[]).indexOf(m.k)>-1,'adminToggle(\''+ee+'\',\''+m.k+'\')'); }).join('');
-    acc+=admPill('Events: create & send',admIsEventsEditor(p.login),'adminToggleEventsEdit(\''+ee+'\')');
-    acc+=admPill('Admin',p.login.is_admin,'adminToggleAdmin(\''+ee+'\')');
-    var notif=ADMIN_NOTIFY.map(function(nt){ return admPill(nt.n,(p.login.notify||[]).indexOf(nt.k)>-1,'adminToggleNotify(\''+ee+'\',\''+nt.k+'\')'); }).join('');
-    loginSec='<div class="px-psec"><div class="px-pslbl">App access · '+ee+'</div><div>'+acc+'</div><div class="px-pslbl" style="margin-top:11px;">Email alerts</div><div>'+notif+'</div><div style="margin-top:11px;"><button class="px-prm" onclick="adminDeleteUser(\''+ee+'\')">Remove login</button></div></div>';
+    var mods=p.login.modules||[], notifs=p.login.notify||[];
+    var nMod=ADMIN_MODULES.filter(function(m){ return mods.indexOf(m.k)>-1; }).length;
+
+    // ── What this person actually has, in one line ──────────────────────
+    // The panel used to open with nine identical pills for modules, then two
+    // more for powers, then five for emails — sixteen chips in a row, and the
+    // only way to read someone's access was to look at which were filled in.
+    // The summary states it; the controls below stay for changing it.
+    var sum=[];
+    if(p.login.is_admin) sum.push('<span class="px-sum-adm">Admin</span>');
+    sum.push('<b>'+nMod+'</b> of '+ADMIN_MODULES.length+' module'+(ADMIN_MODULES.length===1?'':'s'));
+    if(admIsEventsEditor(p.login)) sum.push('can create &amp; send events');
+    sum.push('<b>'+notifs.length+'</b> email'+(notifs.length===1?'':'s'));
+
+    // Modules as a labelled grid rather than a pill wall: every module is on
+    // the same line every time, so "does she have Revenue?" is a glance at a
+    // fixed position instead of a scan of a reflowing row.
+    var acc=ADMIN_MODULES.map(function(m){
+      var on=mods.indexOf(m.k)>-1;
+      return '<button class="px-acc'+(on?' on':'')+'" onclick="adminToggle(\''+ee+'\',\''+m.k+'\')">'
+        +'<i>'+(on?'&#10003;':'')+'</i><span>'+admEsc(m.n)+'</span></button>';
+    }).join('');
+
+    // The two POWERS are not modules and never belonged in the same row as
+    // them: one grants the whole admin area, the other lets someone send to a
+    // guest. Each says what it means, because "Admin" alone does not.
+    var powers=''
+      +admPowerRow('Admin', 'Can open this Admin area and change anyone&rsquo;s access.',
+          p.login.is_admin, 'adminToggleAdmin(\''+ee+'\')')
+      +admPowerRow('Events: create &amp; send', 'Can build a private event and send proposals to guests, not just read them.',
+          admIsEventsEditor(p.login), 'adminToggleEventsEdit(\''+ee+'\')');
+
+    var notif=ADMIN_NOTIFY.map(function(nt){
+      var on=notifs.indexOf(nt.k)>-1;
+      return '<button class="px-acc'+(on?' on':'')+'" onclick="adminToggleNotify(\''+ee+'\',\''+nt.k+'\')">'
+        +'<i>'+(on?'&#10003;':'')+'</i><span>'+admEsc(nt.n)+'</span></button>';
+    }).join('');
+
+    loginSec='<div class="px-psec">'
+      +'<div class="px-pslbl">App access &middot; '+ee+'</div>'
+      +'<div class="px-sum">'+sum.join('<span class="px-sum-sep">&middot;</span>')+'</div>'
+      +'<div class="px-accgrid">'+acc+'</div>'
+      +'<div class="px-pslbl" style="margin-top:14px;">Permissions</div>'+powers
+      +'<div class="px-pslbl" style="margin-top:14px;">Email alerts</div><div class="px-accgrid">'+notif+'</div>'
+      +'</div>';
   } else if(!off){
     loginSec='<div class="px-psec"><div class="px-pslbl">App login</div><div class="px-dhint">No login — this person doesn’t sign in to the manager area. Add one only if they need access.</div><button class="px-pill" onclick="admAddLoginOpen(\''+ek+'\')">+ Add a login</button></div>';
   }
   var signSec='';
   if(p.src==='foh'){
+    // Same control as the modules above it, for the same reason: this was the
+    // last row of loose pills in the panel, and two different-looking things
+    // that both mean "on/off" read as two different kinds of setting.
     var sg=state.adminSigners||{}, ACTS=[['closing_report','Closing report'],['roster','Roster to HR']];
-    var st=ACTS.map(function(a){ return admPill(a[1],(sg[a[0]]||[]).indexOf(p.id)>-1,'admSignerToggle(\''+a[0]+'\',\''+admEsc(String(p.id))+'\')'); }).join('');
-    signSec='<div class="px-psec"><div class="px-pslbl">Can tap-sign</div><div>'+st+'</div></div>';
+    var st=ACTS.map(function(a){
+      var on=(sg[a[0]]||[]).indexOf(p.id)>-1;
+      return '<button class="px-acc'+(on?' on':'')+'" onclick="admSignerToggle(\''+a[0]+'\',\''+admEsc(String(p.id))+'\')">'
+        +'<i>'+(on?'&#10003;':'')+'</i><span>'+admEsc(a[1])+'</span></button>';
+    }).join('');
+    signSec='<div class="px-psec"><div class="px-pslbl">Can tap-sign</div><div class="px-accgrid">'+st+'</div></div>';
   }
-  var removeSec=off?'':'<div class="px-psec"><button class="px-prm" onclick="admRemove(\''+p.src+'\',\''+admEsc(String(p.id))+'\')">Remove from '+(p.src==='kitchen'?'Kitchen':'FOH')+' staff</button></div>';
+  // Both destructive actions together at the foot, behind a rule. "Remove login"
+  // used to sit between Email alerts and Can tap-sign — a button that deletes
+  // someone's access, placed mid-panel among toggles, one row from where the
+  // thumb lands.
+  var danger=[];
+  if(p.login) danger.push('<button class="px-prm" onclick="adminDeleteUser(\''+admEsc(p.login.email)+'\')">Remove login</button>');
+  if(!off) danger.push('<button class="px-prm" onclick="admRemove(\''+p.src+'\',\''+admEsc(String(p.id))+'\')">Remove from '+(p.src==='kitchen'?'Kitchen':'FOH')+' staff</button>');
+  var removeSec=danger.length?'<div class="px-danger">'+danger.join('')+'</div>':'';
   return '<div class="px-panel"><div class="px-phead"><span class="px-av lg">'+admEsc(admIni(p.name))+'</span><div style="min-width:0;"><div class="px-pname">'+admEsc(p.name)+'</div><div class="px-prole">'+admEsc(p.role||(off?'Office / HQ':''))+' · '+admEsc(p.where)+'</div><div class="px-rb">'+admBadges(p)+'</div></div></div>'
     +'<div class="px-flds">'+nameFld+codeFld+roleFld+venueFld+emailFld+sectionFld+'</div>'
     +schedSec+loginSec+signSec+removeSec+'</div>';
