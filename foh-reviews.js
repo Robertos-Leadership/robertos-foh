@@ -459,17 +459,20 @@ function grRaceHTML(){
   if(!rows.some(function(x){ return x.n; })){
     return '<div class="gr-card"><div class="gr-note">Nothing collected in this period yet. Reviews are gathered every night and filed under the day the guest wrote them, so the first bars appear as soon as one arrives.</div></div>';
   }
-  var oldest = null;
-  (GR.seen||[]).forEach(function(r){ var t=String(r.publish_time).slice(0,10); if(!oldest || t<oldest) oldest=t; });
   var max = 1;
   rows.forEach(function(x){ if(x.n > max) max = x.n; });
   var spikes = grSpikes();
 
   var h = ['<div class="gr-card">'];
+  // The long view is labelled "Last 30 days", NOT "Since <date>": the store
+  // purges at 30 days (Google's licence), so its oldest review slides forward
+  // every morning. Francesco read "Since 12 Jul" as a fixed start and rightly
+  // asked why it disagreed with the other dates on the page — a sliding date
+  // must never be dressed as an anchor.
   h.push('<div class="gr-race-tabs">'
     + '<button class="gr-race-tab'+(v==='7'?' on':'')+'" onclick="grRaceSwitch(\'7\')">Last 7 days</button>'
     + '<button class="gr-race-tab'+(v==='28'?' on':'')+'" onclick="grRaceSwitch(\'28\')">Last 4 weeks</button>'
-    + '<button class="gr-race-tab'+(v==='all'?' on':'')+'" onclick="grRaceSwitch(\'all\')">Since '+grDate(oldest)+'</button>'
+    + '<button class="gr-race-tab'+(v==='all'?' on':'')+'" onclick="grRaceSwitch(\'all\')">Last 30 days</button>'
     + '</div>');
   h.push('<div class="gr-race-basis">Every review counted once, on the day the guest wrote it</div>');
   h.push('<div class="gr-race">');
@@ -542,14 +545,26 @@ function grRaceSwitch(v){
 function grReconHTML(){
   var pace = GR.pace||[];
   if(!pace.length || !(GR.seen||[]).length) return '';
-  var start = String(pace[0].day).slice(0,10);
+  // The window must be one BOTH witnesses fully cover, or the comparison
+  // quietly rots: pace history is kept forever, but the stored reviews purge
+  // at 30 days (Google's licence). Anchoring on pace's first day alone meant
+  // that from ~16 Aug the "guests wrote" column would silently shrink as
+  // mid-July reviews aged out while the published column kept growing. So the
+  // start is whichever is LATER: pace's first day, or the oldest review we
+  // still hold — and the pace sums are cut to the same start, like for like.
+  var oldestSeen = null;
+  (GR.seen||[]).forEach(function(r){ var t=String(r.publish_time).slice(0,10); if(!oldestSeen || t<oldestSeen) oldestSeen=t; });
+  var paceStart = String(pace[0].day).slice(0,10);
+  var start = (oldestSeen && oldestSeen > paceStart) ? oldestSeen : paceStart;
   var startMs = Date.parse(start+'T00:00:00');
   var wrote = {}, pub = {};
   (GR.seen||[]).forEach(function(r){
     var t = Date.parse(r.publish_time);
     if(t && t >= startMs) wrote[r.venue_key] = (wrote[r.venue_key]||0)+1;
   });
-  pace.forEach(function(p){ pub[p.venue_key] = (pub[p.venue_key]||0) + Number(p.gained||0); });
+  pace.forEach(function(p){
+    if(String(p.day).slice(0,10) >= start) pub[p.venue_key] = (pub[p.venue_key]||0) + Number(p.gained||0);
+  });
   var spikes = grSpikes();
   var rows = GR_VENUES.map(function(v){
     return { key:v.key, name:v.name, us:!!v.us, wrote:(wrote[v.key]||0), pub:(pub[v.key]!=null?pub[v.key]:null) };
