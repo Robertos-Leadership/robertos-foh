@@ -1385,6 +1385,9 @@ async function rrRun(show){
       shape: rrPullShape(pulled.nights),
       failed: pulled.failed, built: new Date()
     };
+    // Usage tracker — WHICH report was built (Admin → Usage). Fire-and-forget,
+    // same contract as logAppUsage itself: must never break the report.
+    try{ if(typeof logAppUsage==='function') logAppUsage('report:'+rep.id, 'resreports'); }catch(e2){}
     if(show){ RR.open = false; }
     else { await rrExcel(); RR.open = false; }
   }catch(e){
@@ -1609,6 +1612,8 @@ async function rrExcel(){
     a.download = "Roberto's " + R.out.title + ' ' + R.from + ' to ' + R.to + '.xlsx';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+    // Usage tracker — WHICH report was downloaded as Excel (Admin → Usage).
+    try{ if(R.rep && typeof logAppUsage==='function') logAppUsage('excel:'+R.rep.id, 'resreports'); }catch(e2){}
   }catch(e){
     console.warn('[resreports] excel failed', e);
     toast('Could not build the Excel file: ' + ((e && e.message) ? e.message : e), true);
