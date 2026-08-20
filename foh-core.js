@@ -3208,11 +3208,26 @@ function admFbPanelHTML(){
     // is a door, and a delete you can hit while scanning is a delete you will hit
     // by accident. The confirm names who sent it, because the moment it is not
     // one of his own tests, this is somebody's message.
+    // ── Their status link ──
+    // The check line we write is worth nothing if the person who asked cannot
+    // reach it — and until now they could not. The only "Copy their status link"
+    // button lived in the ROUNDS lane, beside someone who had answered a round.
+    // Anyone who pressed "Tell us" never appears there, so every inbox sender
+    // — the people most likely to ask again — had a status page with no door.
+    // Found on 20 Aug when Jins asked for Reda on the closing report: the fix was
+    // recorded with a check line he had no way of ever seeing.
+    // Same function, same token, same link that stays current; only the door was
+    // missing. Hidden when they sent it without a name, because then there is
+    // nobody to give it to — which the line just above already says.
+    var link = ib.who ? ('<div style="border-top:1px solid #f1e9da;margin-top:13px;padding-top:11px;">'
+      +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'" onclick="admFbStatusLink(\''+admEsc(ib.who)+'\')">Copy '+admEsc(String(ib.who).trim().split(/\s+/)[0])+'&rsquo;s status link</button>'
+      +'<div style="'+hint+'">Their own page, no login needed. It shows what changed and how to check it, and it keeps itself current — send it once.</div>'
+      +'</div>') : '';
     var del='<div style="border-top:1px solid #f1e9da;margin-top:13px;padding-top:11px;">'
       +'<button class="btn btn-sm" style="'+FB_NOSHOUT+'background:transparent;border:1px solid #E0C4BE;color:#8A2A1A;border-radius:8px;" onclick="admInboxDelete(\''+admEsc(ib.id)+'\')">Delete this message</button>'
       +'<div style="'+hint+'">For your own test messages. It cannot be undone, and if someone sent it, it goes from their status page too.</div>'
       +'</div>';
-    return hi + admFbStateFormHTML(s, f, lbl, inp, hint, del);
+    return hi + admFbStateFormHTML(s, f, lbl, inp, hint, link + del);
   }
 
   var h='<div style="background:#fbf7f1;border:1px solid #e3d5c2;border-radius:12px;padding:16px;align-self:start;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow-y:auto;">'
