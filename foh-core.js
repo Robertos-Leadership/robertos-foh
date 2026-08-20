@@ -4620,7 +4620,7 @@ async function renderFohHome(){
   // Fetch covers
   try{
     const t=RC.dubaiBusinessDate(new Date()), td=new Date(t+'T12:00:00'); td.setDate(td.getDate()+1); const tm=localISO(td);
-    const {data,error}=await sbKitchen.from('covers').select('service_date,night_covers').in('service_date',[t,tm]);
+    const {data,error}=await sbKitchen.from('covers').select('service_date,night_covers,updated_at').in('service_date',[t,tm]);
     if(error) throw error;
     const tr=(data||[]).find(r=>String(r.service_date).slice(0,10)===t);
     const tmr=(data||[]).find(r=>String(r.service_date).slice(0,10)===tm);
@@ -4629,7 +4629,29 @@ async function renderFohHome(){
     const syncEl=document.getElementById('foh-tn-sync');
     if(tnEl) tnEl.textContent=tr?(tr.night_covers??'—'):'—';
     if(tmEl) tmEl.textContent=tmr?(tmr.night_covers??'—'):'—';
-    if(syncEl) syncEl.textContent='Live · SevenRooms';
+    // The `covers` table is a CACHE, written by the last laptop sync — it is not live, and
+    // captioning it "Live · SevenRooms" is what let this screen read 52 on 20 Aug while the
+    // Management landing and the Reservations book both read 58. Ask SevenRooms directly for
+    // tonight (counts only, the same ?upcoming= read the landing strip already makes), and if
+    // that cannot be reached, show the cached number with the DAY it was taken — never "Live".
+    if(syncEl) syncEl.textContent = 'Checking SevenRooms…';
+    let liveBooked = null;
+    try{
+      const r = await fetch(KITCHEN_URL+'/functions/v1/sevenrooms-sync?upcoming='+t, { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+KITCHEN_KEY, 'x-proxy-secret':KITCHEN_PROXY_SECRET } });
+      if(r.ok){ const j = await r.json(); if(j && j.ok && j.booked!=null) liveBooked = j.booked; }
+    }catch(_){ /* offline or the function is down — the cached figure below still stands */ }
+    if(liveBooked !== null){
+      if(tnEl) tnEl.textContent = liveBooked;
+      if(syncEl) syncEl.textContent = 'Live · SevenRooms';
+    } else if(tr && tr.updated_at){
+      const d = new Date(tr.updated_at);
+      const hm = d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      const sameDay = localISO(d) === localISO(new Date());
+      if(syncEl) syncEl.textContent = 'Last synced '+(sameDay ? hm : d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+hm)+' · not live';
+    } else {
+      if(syncEl) syncEl.textContent = 'Not synced';
+    }
   }catch(e){
     const s=document.getElementById('foh-tn-sync');if(s)s.textContent='Could not load';
   }
