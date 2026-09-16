@@ -579,8 +579,9 @@ var LT_GROSS_TO_NET = 1.225;
 // it is added to the bill (approved price list, Aung / Justin). A SevenRooms check
 // SUBTOTAL is the menu-price total, so from that night it nets at ÷ 1.155 (10%
 // service + 5% VAT), not ÷ 1.225. The check TOTAL used by the live strip above
-// still carries the fee and still nets at ÷ 1.225. Shipped only after the 16 Sep
-// checks were measured: median check total ÷ subtotal moved from 1.000 to ~1.061.
+// still carries the fee and still nets at ÷ 1.225. Shipped 16 Sep 14:10 Dubai BEFORE any
+// real SevenRooms check had closed, on the Simphony test check (110.00 + fee 6.67 =
+// 116.67, total ÷ subtotal 1.061); the 16:30 and 17 Sep 08:30 measurements confirm it.
 var FOH_FEE_FROM = '2026-09-16';
 function fohSubtotalToNetDiv(dateISO){
   var d = dateISO ? String(dateISO).slice(0,10) : '';
