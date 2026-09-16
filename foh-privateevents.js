@@ -2577,6 +2577,8 @@ function peSrRevenueOffer(id){
     }
     var html = cands.map(function(x, i){
       var r = x.r, amt = Math.round(Number(r.gross));
+      // From 16 Sep 2026 the check subtotal is at menu prices; the 7% DIFC fee sits on top.
+      if(date >= PE_FEE_FROM) amt = Math.round(amt * PE_GROSS / PE_MENU_DIV);
       var meta = [r.area, r.time, (r.pax!=null?r.pax+' guest'+(r.pax===1?'':'s'):null)].filter(Boolean).join(' · ');
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(107,31,42,.10)">'+
         '<div style="flex:1;min-width:0">'+
