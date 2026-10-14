@@ -73,7 +73,13 @@ var FB_A = {
   // A design round: we propose how each part works and he either takes it or
   // tells us his way. "Not yet" and "leave it" do not fit a proposal.
   LIKE: 'Yes, like this',
-  OTHER:'My way — see my note'
+  OTHER:'My way — see my note',
+  // ── Added for the Roberto's Mare review round (mare-review) ──────────────
+  // A test round: he has just USED the screen, so the question is not "is this
+  // a problem for you?" but "after trying it — keep, change, or add?".
+  WORKS:'Works well',
+  CHANGE:'Change something',
+  ADDS: 'Add something'
 };
 
 // The three answers a round offers. A round picks one set via `ask:`.
@@ -93,7 +99,9 @@ var FB_ASK = {
   BUILD:    [FB_A.BUILD, FB_A.SKIP],
   CANT:     [FB_A.OKNP,  FB_A.SOLVE],
   // DESIGN — "here is how we would build it — like this, or your way?"
-  DESIGN:   [FB_A.LIKE,  FB_A.OTHER]
+  DESIGN:   [FB_A.LIKE,  FB_A.OTHER],
+  // TRY — "you tried it: keep it, change it, or add to it?"
+  TRY:      [FB_A.WORKS, FB_A.CHANGE, FB_A.ADDS]
 };
 
 // How the phone page words each answer on its button.
@@ -110,11 +118,14 @@ FB_ASK_LABEL[FB_A.OKNP]  = 'OK, no problem';
 FB_ASK_LABEL[FB_A.SOLVE] = 'This is important — try to find a solution';
 FB_ASK_LABEL[FB_A.LIKE]  = 'Yes, like this';
 FB_ASK_LABEL[FB_A.OTHER] = 'I want it differently — see my note';
+FB_ASK_LABEL[FB_A.WORKS] = 'Works well — keep it';
+FB_ASK_LABEL[FB_A.CHANGE] = 'Change something — see my note';
+FB_ASK_LABEL[FB_A.ADDS]  = 'Add something — see my note';
 
 // Display order in Admin: loudest first. Every answer any round can produce must
 // be here or it renders no pill at all (the pills filter THIS list).
-var FB_ANSWER_ORDER = [FB_A.FIX, FB_A.PROB, FB_A.SOLVE, FB_A.OTHER, FB_A.GO, FB_A.BUILD, FB_A.LIKE,
-                       FB_A.NICE, FB_A.WAIT, FB_A.FINE, FB_A.OKNP, FB_A.NEVER, FB_A.LEAVE, FB_A.SKIP];
+var FB_ANSWER_ORDER = [FB_A.FIX, FB_A.PROB, FB_A.SOLVE, FB_A.CHANGE, FB_A.ADDS, FB_A.OTHER, FB_A.GO, FB_A.BUILD, FB_A.LIKE,
+                       FB_A.NICE, FB_A.WAIT, FB_A.FINE, FB_A.WORKS, FB_A.OKNP, FB_A.NEVER, FB_A.LEAVE, FB_A.SKIP];
 
 // Which answers mean "he is asking us to DO something". An EXPLICIT set: this was
 // once inferred from position (indexOf(v) > 1), which quietly made any answer
@@ -131,9 +142,105 @@ FB_WORK_ANSWERS[FB_A.BUILD] = 1;
 FB_WORK_ANSWERS[FB_A.SOLVE] = 1;
 FB_WORK_ANSWERS[FB_A.LIKE] = 1;
 FB_WORK_ANSWERS[FB_A.OTHER] = 1;
+FB_WORK_ANSWERS[FB_A.CHANGE] = 1;
+FB_WORK_ANSWERS[FB_A.ADDS] = 1;
 
 // ── The rounds. Newest first. ───────────────────────────────────────────────
 var FB_ROUNDS = {
+  // ── Roberto's Mare Ordering — for Milica (14 Oct 2026) ───────────────────
+  // Her request: the kitchen and bar article lists with suppliers and prices in the app, prices
+  // updated by uploading the stock list, kitchen and bar ordering from the app. Built on FOH DEV
+  // with her two real files (224 kitchen + 268 bar articles, no suppliers yet). Each item says how
+  // we built it; she answers "like this" or "my way". The Order screen is NOT switched on for the
+  // team: she does that herself (Admin → what each team's phone shows → Order). SEND FROM THE DEV ADMIN.
+  'mare-ordering': {
+    name: 'Roberto\'s Mare — ordering, suppliers and prices (Milica)',
+    email: {
+      subject: 'Roberto\'s Mare — ordering, suppliers and prices are in the app',
+      body: ['The ordering you asked for is now in the Mare app, the one you installed. Open the menu: <b>Kitchen &amp; cost → Ordering</b>.',
+             '<b>How it works</b><br>'
+             + '• <b>Articles:</b> your two stock lists are in, 224 kitchen and 268 bar articles, with the price from your files. No supplier is set yet.<br>'
+             + '• <b>Suppliers:</b> add each supplier with phone, Viber and email, and any other field you want. Then give the articles their supplier: tick several and set it in one go.<br>'
+             + '• <b>Prices:</b> export the same stock list (Lager artikala) and upload it in <b>Price upload</b>. You see every change before it is saved.<br>'
+             + '• <b>Orders:</b> the kitchen and the bar order on their phone, and every order comes to you first. You check it and send it to the supplier on Viber, WhatsApp or email.<br>'
+             + '• The team does not see it yet. You switch it on in <b>Admin</b> when you are ready.',
+             '<b>What we still need from you</b><br>'
+             + '• Are the prices with or without PDV?<br>'
+             + '• Is the average price from the stock list the right one, or do you want the supplier\'s price list?<br>'
+             + '• Should the bar order in bottles and boxes instead of litres?<br>'
+             + '• Who should be able to order, in the kitchen and in the bar?<br>'
+             + '• Should the order to the supplier be written in Montenegrin or English?<br>'
+             + '• Does <b>Send on Viber</b> open Viber on your phone and your Mac with the order already written?',
+             'The button below takes you through it in 13 short steps. On each one tap <b>Yes, like this</b> or <b>I want it differently</b> and write your way in the note.',
+             'Thanks,<br>Francesco'],
+      cta: 'Try the ordering',
+      wa: 'The ordering you asked for is in the Mare app (Kitchen & cost → Ordering): your 224 kitchen and 268 bar articles with prices, suppliers you add yourself, price upload, and orders that come to you first. The team does not see it until you switch it on. The link walks you through it in 13 short steps and asks what we still need: PDV, which price, bottles or litres, who orders, Viber.'
+    },
+    title: 'Ordering, suppliers and prices',
+    ask: FB_ASK.DESIGN,
+    intro: [
+      '<b>What you asked for.</b> The ingredient list and the suppliers with the prices Roberto\'s Mare pays today, prices you can update yourself by uploading a file, and the kitchen and the bar ordering from the app.',
+      '<b>Where it is.</b> Open the <a href="https://robertos-leadership.github.io/robertos-foh/mare.html#ordering/articles">Mare app</a> (the one you installed) and sign in with your email and password. In the menu on the left: <b>Kitchen &amp; cost → Ordering</b>. Five tabs: <b>Orders</b>, <b>New order</b>, <b>Articles</b>, <b>Suppliers</b>, <b>Price upload</b>. <b>EN | ME</b> at the bottom of the menu switches the language.',
+      '<b>Press anything.</b> The suppliers you add are real and stay: start with the ones you use most. Make an order and send it to yourself to see how it works, then cancel it (or tell Francesco and we remove the test orders).',
+      '<b>The rule we followed:</b> every order comes to you first. You decide later, supplier by supplier, if one can receive orders directly.'
+    ],
+    howto: 'Tap <b>Yes, like this</b> if it is right, or <b>I want it differently</b> and write how in the note. The note is the most useful part.<br><br>Your answers are kept on this phone as you go, so you can stop and come back. Tap <b>Send my answers</b> when you are done.',
+    lastQ: 'What is missing? For example: checking the delivery against the order, a minimum stock that suggests what to order, a weekly order day per supplier, the orders feeding Sales vs purchase. Anything you need to run ordering at Mare.',
+    items: [
+      { id:'o-list',
+        said: 'Your article list',
+        today: 'Ordering → <b>Articles</b>. Your two files are in: <b>224 kitchen</b> and <b>268 bar</b> articles, with code (šifra), unit and price. The buttons on top filter: Kitchen, Bar, <b>No supplier yet</b>, <b>No price</b> (40 articles have price 0 in your files), Off the list. Tap an article to change it. Is this the list you want to order from?',
+        label: 'Article list' },
+      { id:'o-names',
+        said: 'Names in English and Montenegrin',
+        today: 'The names come from your stock list. <b>146 of the 492</b> already have both languages (“krastavac / cucumber local”): the app splits them, so each language shows its own name. The other 346 show the same name in both, until someone types the second name in the article. We did <b>not</b> machine-translate them, because a wrong name on an order costs money. Is that right, or do you want us to fill them and you check?',
+        label: 'Two languages' },
+      { id:'o-supplier',
+        said: 'The supplier page',
+        today: 'Ordering → <b>Suppliers → New supplier</b>. Name, how they take orders (Viber, WhatsApp, email, phone), contact, phone, Viber, WhatsApp, email, delivery days, order before, notes. <b>+ Add a field</b> adds any field you want (minimum order, PIB, bank account…), and it appears on every supplier. Which fields do you want?',
+        label: 'Supplier page' },
+      { id:'o-assign',
+        said: 'Giving the articles their supplier',
+        today: 'Articles → <b>No supplier yet</b>: tick several (or <b>Tick all shown</b> after a search) and <b>Set supplier</b> once. Or tap <b>+ Choose supplier</b> on one article. An article without a supplier can still be ordered: you choose the supplier when the order reaches you. Would you rather send us an Excel with a supplier column, and we load it for you?',
+        label: 'Set suppliers' },
+      { id:'o-upload',
+        said: 'Updating the prices',
+        today: 'Ordering → <b>Price upload</b>. Export the same file you sent us (<i>Lager artikala</i>) for the kitchen or the bar and upload it. The app matches each line on the <b>šifra</b>, never the name, and first <b>shows you</b> every price that changed (old, new, %), the new articles and the ones missing from the file. Nothing is saved until you press <b>Update the prices</b>; nothing is ever deleted. Every price change is kept in the article’s <b>Price history</b>. How often would you upload?',
+        label: 'Price upload' },
+      { id:'o-price',
+        said: 'Which price is it?',
+        today: 'The price is the column <b>Sr.nab.cij.</b> of your file: the <b>average purchase price</b> per kg, litre or piece, separately for kitchen and bar (carrots are €0.83 in the kitchen file and €1.10 in the bar file). Is this the price you want to see when ordering, or the supplier’s current price list? And is it <b>with or without PDV</b>?',
+        label: 'Price & PDV' },
+      { id:'o-units',
+        said: 'Bottles, boxes and litres',
+        today: 'In the bar file <b>128 articles are in litres</b> (spirits, wine), but the bar orders bottles. Each article has a box <b>How it is bought</b> (e.g. “box of 6 bottles”). Should the order be in bottles and boxes instead of litres? Tell us how the bar orders today.',
+        label: 'Units' },
+      { id:'o-new',
+        said: 'Making an order',
+        today: 'Ordering → <b>New order</b>: Kitchen or Bar, search, + / − or type the quantity, delivery day, a note. <b>Create the order</b> splits it by supplier by itself. The chefs and the bar get the same screen on their phone (a big <b>Order</b> button on the home page).',
+        label: 'New order' },
+      { id:'o-approve',
+        said: 'Every order comes to you first',
+        today: 'Ordering → <b>Orders</b>: what waits for you, oldest first, with the total. You can change a quantity, choose the supplier when there is none (and give those articles that supplier from now on), cancel, or send.',
+        label: 'Your check' },
+      { id:'o-send',
+        said: 'Sending to the supplier: Viber, WhatsApp, email',
+        today: '<b>Send on Viber</b> opens Viber on your phone or laptop with the order already written (number, delivery day, every line, the note); you choose the supplier and press send. WhatsApp and email open the same way when the supplier has them. <b>Copy the order</b> works for anything else. Then <b>Yes, mark as sent</b>. The app never sends to a supplier by itself. Should the message be in Montenegrin or English?',
+        label: 'Viber & co.' },
+      { id:'o-direct',
+        said: 'Orders straight to a supplier (later)',
+        today: 'On each supplier: <b>Send orders straight to this supplier</b>. Off for all of them. Only you can switch it on: then the person who orders sends it on Viber from their own phone, and you still see it in Orders. Articles without a supplier always come to you. Do you want this, and for which suppliers?',
+        label: 'Direct suppliers' },
+      { id:'o-team',
+        said: 'Switching it on for the kitchen and the bar',
+        today: 'It is <b>not on</b> for the team yet. When you are happy: Menu → <b>Admin</b> → what each team’s phone shows → tick <b>Order</b> for Kitchen and/or Bar. Today only the five kitchen chefs are in the app; the bar has nobody yet. Who should be able to order?',
+        label: 'Who orders' },
+      { id:'o-lang',
+        said: 'The words',
+        today: 'Every new screen is in English and Montenegrin. The Montenegrin was written by us: tell us any word that reads wrong.',
+        label: 'Montenegrin' }
+    ]
+  },
   // ── FOH Learning section, for Alessandro Longhi (Restaurant Manager) ──────
   // Born from his "Tell us" idea of 7 Oct 2026 (inbox 0f27d406): a Learning
   // section in the FOH app "same as the BOH" — Food Bible, wine bible by the
@@ -275,6 +382,103 @@ var FB_ROUNDS = {
     ]
   },
 
+  // ── Roberto's Mare app — try it and tell us (6 Oct 2026) ────────────────
+  // Rewritten for the Concierge design. Andrea FALCONE tries it first (chef's
+  // eye), then Andrea SACCHI once Falcone's changes are in — same round, the
+  // link carries each name. Demo team, code 1234. SEND FROM THE DEV ADMIN.
+  'mare-review': {
+    name: 'Roberto\'s Mare app — try it and tell us',
+    email: {
+      subject: 'Roberto\'s Mare app — please try it first',
+      body: ['Before Roberto\'s Mare starts using its new app, Francesco would like you to try it and tell us what to change.',
+             '<b>What it is for:</b> the Mare team in Porto Montenegro has no email, no employee ID and no clock-in. The app gives them a <b>tablet at the staff entrance</b> (clock in with a 4-digit code, the daily briefing, checklists, recipes) and gives Milica <b>one place to run the restaurant</b>: rota, attendance, closing report, costing, meetings. English and Montenegrin.',
+             'It is filled with a <b>demo team</b> (every code is <b>1234</b>), so press anything. The link below explains how it works and how to move around, one step at a time. On each step tap <b>Works well</b>, <b>Change something</b> or <b>Add something</b> and write how in the note.',
+             'Nothing reaches the Mare team until your changes are done.'],
+      cta: 'Try the Mare app',
+      wa: 'Before Roberto\'s Mare starts using its new app, Francesco would like you to try it first. It is filled with a demo team (every code is 1234). The link explains how it works step by step: tap Works well, Change something or Add something, and tell us how in the note.'
+    },
+    title: 'Roberto\'s Mare app — try it and tell us',
+    ask: FB_ASK.TRY,
+    intro: [
+      '<b>Why this app.</b> The Mare team in Porto Montenegro has no email, no employee ID and no clock-in. Two screens solve it: <b>the staff tablet</b> by the staff entrance, where everyone clocks in with their name and a 4-digit code (a photo is taken, so codes cannot be shared), reads the briefing and ticks the checklists; and <b>the management app</b> for Milica and the managers, where the restaurant is run day to day. Every staff member also gets a <b>phone link</b> to see their own hours and shifts.',
+      '<b>Where to open it.</b> Use the two buttons in your email: <b>Open the Mare app</b> signs you in by itself, no password, and <b>Open the staff tablet</b> opens a demo tablet that is already switched on. Both work on a laptop, a tablet or a phone.',
+      '<b>How to move around.</b> Every module is in the <b>menu on the left</b>; on a phone tap <b>☰</b> at the top left. <b>Today</b> is the home page: what needs you, tonight, who is in and the month so far. Inside a module the tabs are under the title. <b>EN | ME</b> at the bottom of the menu switches English / Montenegrin.',
+      '<b>It is all demo.</b> On the tablet, tap any name (Rahul, Arjun, Petar, Ana, Jelena, Nikola, Luka, Ivana, all marked demo) and type <b>1234</b>: that is the code of every demo person. Press anything: the demo is removed before the real team starts.',
+      '<b>Your feedback.</b> Each step says what to try. Then tap <b>Works well</b>, <b>Change something</b> or <b>Add something</b> and write how in the note: the note is what we use to adjust it. At the end there is a box for anything missing. Tap <b>Send my answers</b> and it comes straight to Francesco.'
+    ],
+    howto: 'Tap <b>Works well</b> if it is right as it is, or <b>Change something</b> / <b>Add something</b> and write what in the note. The note is the most useful part.<br><br>Your answers are kept on this phone as you go, so you can stop and come back. Tap <b>Send my answers</b> when you are done.',
+    lastQ: 'What is missing for Roberto\'s Mare that is not in the app at all? As a chef: what would the Mare kitchen need that we have not thought of, and what will Milica or the team struggle with?',
+    items: [
+      { id:'m-home',
+        said: 'Today, and finding your way',
+        today: 'Open <a href="https://robertos-foh-dev.pages.dev/mare.html">mare.html</a> and sign in. <b>Today</b> shows what needs a manager, tonight’s covers, who is in, and the month so far. Open the <b>menu on the left</b> (☰ on a phone): Daily service, Team, Kitchen & cost, Set-up. Is it clear where everything is?',
+        label: 'Today & menu' },
+      { id:'m-viewas',
+        said: 'View as: see it through someone else’s eyes',
+        today: 'Menu → <b>Set-up → View as</b>. Open the app as Milica, as a chef, as the floor, or as the staff tablet: read only, a banner takes you back. The ticks below choose which modules each manager and each team can open.',
+        label: 'View as' },
+      { id:'m-tablet',
+        said: 'Setting up a new tablet',
+        today: 'Your demo tablet is already on (the button in your email). For a real one, Milica goes to Menu → <b>Set-up → Tablet</b>, makes a tablet code and types it once on the new tablet. Is that simple enough?',
+        label: 'Tablet set-up' },
+      { id:'m-clock',
+        said: 'Clock in and out on the tablet',
+        today: 'On the tablet tap <b>Ana (demo)</b>, type <b>1234</b>: she is clocked in, with a photo if the camera is allowed. Tap her again to clock out. It works without internet too and sends later.',
+        label: 'Clock in / out' },
+      { id:'m-att',
+        said: 'Attendance',
+        today: 'Menu → <b>Attendance</b>. <b>Needs you</b>: a forgotten clock-out and a late arrival to fix or accept. <b>Week</b>: hours, overtime and an Excel for payroll. <b>Check faces</b>: the clock-in photos, so a shared code stands out.',
+        label: 'Attendance' },
+      { id:'m-sched',
+        said: 'Schedule (the rota)',
+        today: 'Menu → <b>Schedule</b>. Tap a day to set a shift or a day off. <b>Kitchen on duty</b> turns red when fewer than 3 cooks are on. Try <b>Copy last week</b> and <b>Excel</b>. Does it work for a kitchen rota?',
+        label: 'Rota' },
+      { id:'m-brief',
+        said: 'Daily briefing, written or spoken',
+        today: 'Menu → <b>Daily briefing</b>. Covers, specials, 86, allergies, VIPs, notes for kitchen and floor. Try <b>Record</b>: say the briefing out loud, press <b>Stop</b>, then <b>Fill the briefing from this</b>: the lines fill themselves, you check and <b>Save</b>. On the tablet the team reads it (or plays your voice note) and taps <b>I have read it</b>.',
+        label: 'Briefing' },
+      { id:'m-check',
+        said: 'Opening and closing checklists',
+        today: 'On the tablet, <b>Checklists</b>: tick a line with a name and 1234; lines marked PHOTO open the camera. In the app, <b>Checklists → Edit the lists</b>: change the kitchen and floor lines, drag to reorder, set the time they must be done by. Are the kitchen lines right?',
+        label: 'Checklists' },
+      { id:'m-recipes',
+        said: 'Recipes: the Mare book and the Dubai cards',
+        today: 'Menu → <b>Recipes</b>. The <b>Mare book</b>: Mare’s own recipes with a photo. <b>From Dubai</b>: our Dubai cards, read only, under the same sections as our A la carte. It shows only the dishes you tick <b>MARE</b> on in the Kitchen recipe book, so tick a couple of finished ones there first, then look here. Is this how the Mare kitchen should learn our standard?',
+        label: 'Recipes' },
+      { id:'m-cost',
+        said: 'Sales vs purchase (as the Dubai sheet)',
+        today: 'Menu → <b>Sales vs purchase</b>, <b>Food</b> or <b>Beverage</b>. One line a day: purchase, sales (from the closing report) and cost %, then the month total. Add an invoice at the top; tap a day to see its invoices. Under <b>Staff meal and targets</b> set the monthly staff meal: it is spread over the days, as in Dubai. Below, the <b>closing stock</b> of each month. Is it the same as our sheet?',
+        label: 'Sales vs purchase' },
+      { id:'m-stock',
+        said: 'Breakage',
+        today: 'On the tablet, <b>Breakage</b>: report a broken glass or plate with a reason and a photo. In the app, <b>Breakage</b>: write in the cost and tick Checked.',
+        label: 'Breakage' },
+      { id:'m-closing',
+        said: 'Closing report',
+        today: 'Menu → <b>Closing report</b>: fill in a day. Sales, covers, card and cash; it checks that card + cash match the sales. <b>The month</b> shows every day, with an Excel.',
+        label: 'Closing report' },
+      { id:'m-meet',
+        said: 'Weekly meeting and its minutes',
+        today: 'Menu → <b>Weekly meetings</b> → <b>New meeting</b>. Press <b>Record the meeting</b> and talk for a minute (choose the language first), press <b>Stop</b>, then <b>Write the minutes</b>: summary, decisions and actions, in English and Montenegrin. <b>Add these actions to the list</b> turns them into tasks with who and by when.',
+        label: 'Meetings' },
+      { id:'m-leave',
+        said: 'Leave',
+        today: 'Menu → <b>Leave</b>: a demo request is waiting. It shows whether the kitchen stays at 3. Approve it and the days go into the rota by themselves. Days left per person are below.',
+        label: 'Leave' },
+      { id:'m-speak',
+        said: 'Speak up',
+        today: 'On the tablet, <b>Speak up</b>: send a message with no name. In the app, <b>Speak up</b>: read it, mark it Seen or Dealt with.',
+        label: 'Speak up' },
+      { id:'m-people',
+        said: 'People and their phone link',
+        today: 'Menu → <b>People</b>: add a person, start times, contract hours, leave days, reset a code. Open <b>Phone link</b> under a demo person on your phone and type 1234: their next shift, hours, briefing, rota, recipes and leave. Phones cannot clock in.',
+        label: 'People & phone' },
+      { id:'m-lang',
+        said: 'English / Montenegrin',
+        today: '<b>EN | ME</b> at the bottom of the menu, and at the top of the tablet. The Montenegrin was written by us; Milica will check the words. Tell us anything that reads wrong.',
+        label: 'Language' },
+    ]
+  },
   // ── Learning section, for Andrea Falcone (Executive Development Chef) ─────
   // Born from his "Tell us" idea of 21 Sep 2026 (inbox 7047ca62): a page to read
   // and a short scored test, inside the Kitchen app. Nothing is built yet. Each
