@@ -15,7 +15,7 @@
    controllerchange reload), a fresh deploy reaches every screen with no manual
    tap. To force a clean cache rebuild, bump the CACHE version string below. */
 
-const CACHE = 'robertos-foh-v20260930lockmc-20261006marelink-eqx-learnfoh-maint-bizlunch2-frame-20261007bl3-noframe-fc-fc-moda-fold-nofc-moda2-look-fcclean-moda3-swap-fbwine-bible1212-biblelight-mncomp-mnitems-t611-mnchecks-blsim-blcomp-bltodate-blweeks3-fbsend-brief1012-maint30-mare1013-mareA-eqopen-order1014-ap20261016ap-ap20261018ap6-visits2-apB5-apM1-st1019dup-apM2-apM3-apM4-norecon-leads-firstever-20261022apadm-mgroom-mytasks-mytasks2-gap12-blroom-gap12b';
+const CACHE = 'robertos-foh-v20260930lockmc-20261006marelink-eqx-learnfoh-maint-bizlunch2-frame-20261007bl3-noframe-fc-fc-moda-fold-nofc-moda2-look-fcclean-moda3-swap-fbwine-bible1212-biblelight-mncomp-mnitems-t611-mnchecks-blsim-blcomp-bltodate-blweeks3-fbsend-brief1012-maint30-mare1013-mareA-eqopen-order1014-ap20261016ap-ap20261018ap6-visits2-apB5-apM1-st1019dup-apM2-apM3-apM4-norecon-leads-firstever-20261022apadm-mgroom-mytasks-mytasks2-gap12-blroom-gap12b-audits4';
 
 // Best-effort warm cache. The bare paths are precached on install; the real
 // runtime requests (some carry a ?v= cache-buster) are cached on the fly by the
@@ -56,6 +56,7 @@ const ASSETS = [
   './foh-resreports.js',
   './foh-modanight.js',   // Moda Night, read from the checks (7 Oct 2026)
   './foh-bizlunch.js',
+  './foh-audits.js',       // Audits (22 Oct 2026)
   './foh-actionplan.js',   // Roberto's 3.0 Action Plan (16 Oct 2026)   // Business Lunch (took the Activations slot, 7 Oct 2026)
   './site.webmanifest',
   './apple-touch-icon.png',
@@ -121,7 +122,8 @@ self.addEventListener('fetch', e => {
   // other link-only page must still be added here by hand.
   // Roberto's Mare pages (mare.html, mare-clock.html) are their own app for
   // another restaurant: never let the FOH worker answer them with index.html.
-  if (/\/(client-[a-z0-9-]+|foh-feedback(-[a-z0-9-]+)?|print-brief|mare(-[a-z0-9-]+)?)(\.html)?$/i.test(url.pathname)) return;
+  // audit.html (22 Oct 2026) is the audit link we send to staff and guests: same trap.
+  if (/\/(client-[a-z0-9-]+|foh-feedback(-[a-z0-9-]+)?|print-brief|mare(-[a-z0-9-]+)?|audit)(\.html)?$/i.test(url.pathname)) return;
 
   e.respondWith(
     fetch(e.request, { cache: 'no-store' })
