@@ -4,6 +4,12 @@
    Words kept the same everywhere: DOLAZAK/ODLAZAK (clock in/out), šifra (code),
    smjena (shift), raspored (rota), brifing, kontrolna lista (checklist). */
 window.MARE_ME = {
+"Cutlery & small items": "Escajg i sitan inventar",
+"Restaurant": "Restoran",
+"Pieces on the list": "Komada na listi",
+"Zeljko 5 Nov · Milica 9 Nov 2026": "Zeljko 5. nov · Milica 9. nov 2026",
+"Milica's list, 9 Nov 2026": "Miličina lista, 9. nov 2026",
+"Big and Small kitchen numbers are from Zeljko's inventory list of 5 Nov 2026 (where he left 2026 empty, the last year that has a number is shown). Cutlery & small items, Bar, Storeroom and Restaurant are from Milica's list of 9 Nov 2026. Count in the Count tab.": "Brojevi za Veliku i Malu kuhinju su iz Zeljkove inventarne liste od 5. novembra 2026 (gdje je 2026 ostavio prazno, prikazana je posljednja godina koja ima broj). Escajg i sitan inventar, Šank, Magacin i Restoran su iz Miličine liste od 9. novembra 2026. Brojite u kartici Popis.",
 "This link no longer works.": "Ovaj link više ne radi.",
 "The link in the email works one time only, to choose your password.": "Link iz emaila radi samo jednom, da izaberete lozinku.",
 "Already chose your password? Sign in below with your email and that password.": "Već ste izabrali lozinku? Prijavite se ispod emailom i tom lozinkom.",
