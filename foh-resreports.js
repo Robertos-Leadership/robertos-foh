@@ -448,6 +448,22 @@ async function rrProfiles(ids, venue, onProgress){
   var want = ids.filter(function(id){ return id && !RESH.got[id] && !RESH.failed[id]; });
   var uniq = [], seen = {};
   want.forEach(function(id){ if(!seen[id]){ seen[id]=1; uniq.push(id); } });
+  // 24 Nov 2026: figures read in the last 24 hours are saved (rr_profiles) and
+  // reused, so a report over 3,800 guests does not wait 8 minutes on SevenRooms.
+  // Lifetime visits and spend move by at most a day; anything older is re-read.
+  var total0 = uniq.length;
+  if(uniq.length && typeof sb !== 'undefined'){
+    var since = new Date(Date.now() - 24 * 3600e3).toISOString();
+    for(var s0 = 0; s0 < uniq.length; s0 += 150){
+      try{
+        var res = await sb.from('rr_profiles').select('client_id,p').in('client_id', uniq.slice(s0, s0 + 150)).gte('read_at', since);
+        if(res.error) throw res.error;
+        (res.data || []).forEach(function(r){ if(r.p && r.p.scope === 'venue') RESH.got[r.client_id] = r.p; });
+      }catch(e){ console.warn('[resreports] saved guest figures not read', e); break; }
+      if(onProgress) onProgress(Math.min(s0 + 150, total0), total0);
+    }
+    uniq = uniq.filter(function(id){ return !RESH.got[id]; });
+  }
   for(var i=0; i<uniq.length; i+=60){
     var slice = uniq.slice(i, i+60);
     try{
@@ -461,6 +477,12 @@ async function rrProfiles(ids, venue, onProgress){
       if(!j || !j.ok) throw new Error((j && j.error) || 'no data');
       var map = j.guests || {};
       slice.forEach(function(id){ if(map[id]) RESH.got[id] = map[id]; else RESH.failed[id] = 1; });
+      try{
+        var keep = slice.filter(function(id){ return map[id] && map[id].scope === 'venue'; })
+          .map(function(id){ return { client_id: id, p: map[id], read_at: new Date().toISOString() }; });
+        if(keep.length && typeof sb !== 'undefined') sb.from('rr_profiles').upsert(keep, { onConflict: 'client_id' })
+          .then(function(r){ if(r && r.error) console.warn('[resreports] guest figures not saved', r.error); });
+      }catch(e2){}
     }catch(e){
       console.warn('[resreports] profiles failed', e);
       // NOT marked failed — a network blip must not permanently blank a column.
