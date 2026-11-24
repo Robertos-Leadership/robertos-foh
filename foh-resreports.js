@@ -1324,6 +1324,7 @@ function rrRepNoShowRate(pull, opt){
 // A month that has not had the whole window yet says "not yet", never a low
 // number that is only the calendar.
 function rrDaysBetween(a, b){ return Math.round((Date.parse(b+'T12:00:00') - Date.parse(a+'T12:00:00')) / 864e5); }
+function rrShortDate(iso){ try{ return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }catch(e){ return iso; } }
 function rrThreeRuleText(rule, w){
   return rule === 'first'
     ? '2nd and 3rd visit both within ' + w + ' days of the first'
@@ -1511,10 +1512,15 @@ function rrRepThreeVisits(pull, opt){
     });
     tot.n += n; if(secondReady) tot.s += s2; else tot.sOk = false; if(thirdReady) tot.t += s3; else tot.tOk = false;
     tot.before += before; tot.unchecked += unchecked; tot.again += again;
+    // 24 Nov 2026, Francesco: show the 2nd and 3rd visits counted so far, even
+    // before the window closes. A month still counting carries "so far" and the
+    // day its figure becomes final, so it can never be read as the final number.
+    var final2 = rrAddDays(mEnd, W + 1), final3 = rrAddDays(mEnd, (rule === 'prev' ? 2 * W : W) + 1);
+    var soFar = function(pct, fin){ return (pct == null ? '—' : pct + '%') + ' so far · final ' + rrShortDate(fin); };
     rows.push([rrMonthLabel(ym, pull.from, pull.to), n, again,
-      secondReady ? s2 : null, secondReady ? rrPct(s2, n) : 'not yet',
-      thirdReady ? s3 : null, thirdReady ? rrPct(s3, n) : 'not yet',
-      thirdReady && secondReady ? rrPct(s3, s2) : 'not yet', unchecked]);
+      s2, secondReady ? rrPct(s2, n) : soFar(rrPct(s2, n), final2),
+      s3, thirdReady ? rrPct(s3, n) : soFar(rrPct(s3, n), final3),
+      thirdReady && secondReady ? rrPct(s3, s2) : soFar(rrPct(s3, s2), final3), unchecked]);
   });
   // The "could not check" column only appears when there is something in it --
   // but when there is, it is never folded away: those months are SHORT.
@@ -1529,7 +1535,7 @@ function rrRepThreeVisits(pull, opt){
       { name: 'By month',
         head: head, widths: widths, num: num, pct:[4,6,7],
         rows: rows,
-        note: '"not yet" means that month has not had the full window yet (' + (rule === 'prev' ? 2 * W : W) + ' days after its last day for the 3rd visit). It is not a zero.'
+        note: '"So far" means that month has not had the full window yet (' + W + ' days after its last day for the 2nd visit, ' + (rule === 'prev' ? 2 * W : W) + ' for the 3rd): the count is real up to ' + resDateLabel(readTo) + ' and can only go up until the final date shown.'
           + (tot.unchecked ? ' "Could not check" are guests whose SevenRooms history would not load; they are left out, so those months are short, never inflated.' : '') },
       { name: 'Made all three visits',
         head: ['Guest','1st visit','2nd visit','3rd visit','Month of first visit'],
